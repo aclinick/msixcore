@@ -76,9 +76,10 @@ public static class BundleManifestParser
         string versionText = identity.AttributeValue("Version")
             ?? throw new InvalidDataException("Bundle Identity is missing the required 'Version' attribute.");
 
-        if (!Version.TryParse(versionText, out Version? version))
+        if (!ManifestVersion.TryParse(versionText, out Version version))
         {
-            throw new InvalidDataException($"Bundle Identity has an invalid Version '{versionText}'.");
+            throw new InvalidDataException(
+                $"Bundle Identity has an invalid MSIX version '{versionText}'. Expected four components, each 0-65535.");
         }
 
         return new PackageIdentity
@@ -92,34 +93,29 @@ public static class BundleManifestParser
 
     private static List<BundlePackageEntry> ParsePackages(XElement root)
     {
-        XElement? packages = root.ElementByLocalName("Packages");
-        if (packages is null)
-        {
-            return [];
-        }
+        XElement packages = root.ElementByLocalName("Packages")
+            ?? throw new InvalidDataException("The bundle manifest is missing the required 'Packages' element.");
 
         var result = new List<BundlePackageEntry>();
         foreach (XElement package in packages.ElementsByLocalName("Package"))
         {
-            string? fileName = package.AttributeValue("FileName");
-            string? versionText = package.AttributeValue("Version");
-            if (string.IsNullOrEmpty(fileName) || !Version.TryParse(versionText, out Version? version))
-            {
-                // Skip malformed entries rather than failing the whole bundle.
-                continue;
-            }
+            string fileName = package.AttributeValue("FileName")
+                ?? throw new InvalidDataException("A bundle 'Package' is missing the required 'FileName' attribute.");
+            Version version = ManifestVersion.Parse(
+                package.AttributeValue("Version"), $"Bundle package '{fileName}' Version");
 
-            BundlePackageType type = string.Equals(
-                package.AttributeValue("Type"), "resource", StringComparison.OrdinalIgnoreCase)
-                ? BundlePackageType.Resource
-                : BundlePackageType.Application;
+            BundlePackageType type = ParsePackageType(package.AttributeValue("Type"), fileName);
 
-            var resources = package
+            List<BundleResource> resources = package
                 .ElementByLocalName("Resources")?
                 .ElementsByLocalName("Resource")
-                .Select(r => r.AttributeValue("Language") ?? r.AttributeValue("Scale") ?? r.AttributeValue("DXFeatureLevel"))
-                .Where(v => !string.IsNullOrEmpty(v))
-                .Select(v => v!)
+                .Select(r => new BundleResource
+                {
+                    Language = r.AttributeValue("Language"),
+                    Scale = r.AttributeValue("Scale"),
+                    DXFeatureLevel = r.AttributeValue("DXFeatureLevel"),
+                })
+                .Where(r => r.Language is not null || r.Scale is not null || r.DXFeatureLevel is not null)
                 .ToList() ?? [];
 
             result.Add(new BundlePackageEntry
@@ -133,6 +129,27 @@ public static class BundleManifestParser
             });
         }
 
+        if (result.Count == 0)
+        {
+            throw new InvalidDataException("The bundle manifest declares no packages.");
+        }
+
         return result;
+    }
+
+    private static BundlePackageType ParsePackageType(string? value, string fileName)
+    {
+        // The bundle schema defaults an omitted Type to 'resource'.
+        if (string.IsNullOrEmpty(value) || string.Equals(value, "resource", StringComparison.OrdinalIgnoreCase))
+        {
+            return BundlePackageType.Resource;
+        }
+
+        if (string.Equals(value, "application", StringComparison.OrdinalIgnoreCase))
+        {
+            return BundlePackageType.Application;
+        }
+
+        throw new InvalidDataException($"Bundle package '{fileName}' has an invalid Type '{value}'.");
     }
 }

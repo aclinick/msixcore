@@ -71,10 +71,7 @@ public static class AppxManifestParser
             PublisherDisplayName = properties?.ElementByLocalName("PublisherDisplayName")?.Value.Trim() ?? string.Empty,
             Description = properties?.ElementByLocalName("Description")?.Value.Trim(),
             Logo = NullIfEmpty(properties?.ElementByLocalName("Logo")?.Value.Trim()),
-            IsFramework = string.Equals(
-                properties?.ElementByLocalName("Framework")?.Value.Trim(),
-                "true",
-                StringComparison.OrdinalIgnoreCase),
+            IsFramework = ParseFrameworkFlag(properties?.ElementByLocalName("Framework")?.Value),
             Capabilities = ParseCapabilities(root),
             Applications = ParseApplications(root),
             TargetDeviceFamilies = ParseTargetDeviceFamilies(root),
@@ -93,9 +90,10 @@ public static class AppxManifestParser
         string versionText = identity.AttributeValue("Version")
             ?? throw new InvalidDataException("Identity is missing the required 'Version' attribute.");
 
-        if (!Version.TryParse(versionText, out Version? version))
+        if (!ManifestVersion.TryParse(versionText, out Version version))
         {
-            throw new InvalidDataException($"Identity has an invalid Version '{versionText}'.");
+            throw new InvalidDataException(
+                $"Identity has an invalid MSIX version '{versionText}'. Expected four components, each 0-65535.");
         }
 
         return new PackageIdentity
@@ -199,17 +197,12 @@ public static class AppxManifestParser
         var result = new List<TargetDeviceFamily>();
         foreach (XElement tdf in dependencies.ElementsByLocalName("TargetDeviceFamily"))
         {
-            string? name = tdf.AttributeValue("Name");
-            string? minVersionText = tdf.AttributeValue("MinVersion");
-            if (string.IsNullOrEmpty(name) || !Version.TryParse(minVersionText, out Version? minVersion))
-            {
-                // Skip malformed dependency entries rather than failing the whole manifest.
-                continue;
-            }
-
-            Version? maxTested = Version.TryParse(tdf.AttributeValue("MaxVersionTested"), out Version? mvt)
-                ? mvt
-                : null;
+            string name = tdf.AttributeValue("Name")
+                ?? throw new InvalidDataException("A 'TargetDeviceFamily' is missing the required 'Name' attribute.");
+            Version minVersion = ManifestVersion.Parse(
+                tdf.AttributeValue("MinVersion"), $"TargetDeviceFamily '{name}' MinVersion");
+            Version maxTested = ManifestVersion.Parse(
+                tdf.AttributeValue("MaxVersionTested"), $"TargetDeviceFamily '{name}' MaxVersionTested");
 
             result.Add(new TargetDeviceFamily
             {
@@ -220,6 +213,24 @@ public static class AppxManifestParser
         }
 
         return result;
+    }
+
+    private static bool ParseFrameworkFlag(string? value)
+    {
+        string? trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return false;
+        }
+
+        try
+        {
+            return XmlConvert.ToBoolean(trimmed);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException($"Properties/Framework has an invalid boolean value '{value}'.", ex);
+        }
     }
 
     private static string? NullIfEmpty(string? value) =>

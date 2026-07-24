@@ -124,6 +124,52 @@ public class AppxManifestParserTests
         Assert.Throws<InvalidDataException>(() => AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
+    [Theory]
+    [InlineData("1.2")]
+    [InlineData("1.2.3")]
+    [InlineData("65536.0.0.0")]
+    [InlineData("1.2.3.4.5")]
+    [InlineData("1.-2.3.4")]
+    public void Parse_NonQuadVersion_Throws(string version)
+    {
+        string xml =
+            $"""
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+              <Identity Name="a" Publisher="CN=a" Version="{version}" />
+            </Package>
+            """;
+        Assert.Throws<InvalidDataException>(() => AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
+    }
+
+    [Fact]
+    public void Parse_FrameworkNumericBoolean_IsHonored()
+    {
+        const string xml =
+            """
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+              <Identity Name="a" Publisher="CN=a" Version="1.0.0.0" />
+              <Properties><Framework>1</Framework></Properties>
+            </Package>
+            """;
+        AppxManifest manifest = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)));
+        Assert.True(manifest.IsFramework);
+    }
+
+    [Fact]
+    public void Parse_TargetDeviceFamilyMissingMaxVersionTested_Throws()
+    {
+        const string xml =
+            """
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+              <Identity Name="a" Publisher="CN=a" Version="1.0.0.0" />
+              <Dependencies>
+                <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.16299.0" />
+              </Dependencies>
+            </Package>
+            """;
+        Assert.Throws<InvalidDataException>(() => AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
+    }
+
     [Fact]
     public void Parse_WrongRoot_Throws()
     {

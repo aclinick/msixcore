@@ -12,6 +12,6 @@ public sealed record TargetDeviceFamily
     /// <summary>The minimum required OS version.</summary>
     public required Version MinVersion { get; init; }
 
-    /// <summary>The maximum OS version the package was tested against, if declared.</summary>
-    public Version? MaxVersionTested { get; init; }
+    /// <summary>The maximum OS version the package was tested against.</summary>
+    public required Version MaxVersionTested { get; init; }
 }

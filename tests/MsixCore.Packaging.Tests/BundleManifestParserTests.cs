@@ -19,7 +19,11 @@ public class BundleManifestParserTests
                 <Resource Language="en-US" />
               </Resources>
             </Package>
-            <Package Version="not-a-version" FileName="broken.msix" />
+            <Package Version="1.2.3.4" FileName="MyApp_scale-200.msix">
+              <Resources>
+                <Resource Scale="200" />
+              </Resources>
+            </Package>
           </Packages>
         </Bundle>
         """;
@@ -38,11 +42,19 @@ public class BundleManifestParserTests
     }
 
     [Fact]
-    public void Parse_SkipsMalformedPackageEntries()
+    public void Parse_ReadsAllPackages()
     {
         BundleManifest bundle = ParseSample();
 
-        Assert.Equal(3, bundle.Packages.Count);
+        Assert.Equal(4, bundle.Packages.Count);
+    }
+
+    [Fact]
+    public void Parse_OmittedType_DefaultsToResource()
+    {
+        BundleManifest bundle = ParseSample();
+
+        Assert.Equal(BundlePackageType.Resource, bundle.Packages[3].Type);
     }
 
     [Fact]
@@ -64,7 +76,60 @@ public class BundleManifestParserTests
         BundlePackageEntry resource = bundle.Packages[2];
         Assert.Equal(BundlePackageType.Resource, resource.Type);
         Assert.Equal("en-us", resource.ResourceId);
-        Assert.Equal(["en-US"], resource.Resources);
+        BundleResource qualifier = Assert.Single(resource.Resources);
+        Assert.Equal("en-US", qualifier.Language);
+        Assert.Null(qualifier.Scale);
+    }
+
+    [Fact]
+    public void Parse_ReadsScaleResourceQualifier()
+    {
+        BundleManifest bundle = ParseSample();
+
+        BundleResource qualifier = Assert.Single(bundle.Packages[3].Resources);
+        Assert.Equal("200", qualifier.Scale);
+        Assert.Null(qualifier.Language);
+    }
+
+    [Fact]
+    public void Parse_InvalidPackageVersion_Throws()
+    {
+        const string xml =
+            """
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle">
+              <Identity Name="a" Publisher="CN=a" Version="1.0.0.0" />
+              <Packages>
+                <Package Type="application" Version="1.2.3" FileName="a.msix" />
+              </Packages>
+            </Bundle>
+            """;
+        Assert.Throws<InvalidDataException>(
+            () => BundleManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
+    }
+
+    [Fact]
+    public void Parse_UnknownPackageType_Throws()
+    {
+        const string xml =
+            """
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle">
+              <Identity Name="a" Publisher="CN=a" Version="1.0.0.0" />
+              <Packages>
+                <Package Type="bogus" Version="1.0.0.0" FileName="a.msix" />
+              </Packages>
+            </Bundle>
+            """;
+        Assert.Throws<InvalidDataException>(
+            () => BundleManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
+    }
+
+    [Fact]
+    public void Parse_MissingPackages_Throws()
+    {
+        const string xml =
+            """<Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle"><Identity Name="a" Publisher="CN=a" Version="1.0.0.0" /></Bundle>""";
+        Assert.Throws<InvalidDataException>(
+            () => BundleManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
     [Fact]
