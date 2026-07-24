@@ -1,0 +1,30 @@
+# .NET build artifacts
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.user
+*.suo
+
+# Rider / VS
+.idea/
+.vs/
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+coverage/
+*.coverage
+*.cobertura.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Local settings
+launchSettings.json
