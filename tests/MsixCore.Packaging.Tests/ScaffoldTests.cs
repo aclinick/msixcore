@@ -41,11 +41,4 @@ public class ScaffoldTests
         Assert.Equal(ProcessorArchitecture.Neutral, identity.Architecture);
         Assert.Equal(string.Empty, identity.ResourceId);
     }
-
-    [Fact]
-    public void MsixPackage_Open_NotYetImplemented_InPhase0()
-    {
-        // Contract guard: flips to real behavior in Phase 1.
-        Assert.Throws<NotImplementedException>(() => MsixPackage.Open("nonexistent.msix"));
-    }
 }

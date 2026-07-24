@@ -27,17 +27,37 @@ public sealed record PackageIdentity
     public string ResourceId { get; init; } = string.Empty;
 
     /// <summary>
-    /// The package family name: <c>{Name}_{publisherHash}</c> where the publisher hash is the
-    /// Base32 (Crockford-style, MSIX variant) encoding of the first 8 bytes of the SHA-256 of the
-    /// UTF-16LE publisher string. Computed in Phase 1.
+    /// The package family name: <c>{Name}_{publisherHash}</c>, where the publisher hash is computed
+    /// by <see cref="PublisherHash.Compute(string)"/>.
     /// </summary>
-    public string PackageFamilyName =>
-        throw new NotImplementedException("PackageFamilyName is implemented in Phase 1.");
+    public string PackageFamilyName => $"{Name}_{PublisherHash.Compute(Publisher)}";
 
     /// <summary>
     /// The package full name:
-    /// <c>{Name}_{Version}_{Architecture}_{ResourceId}_{publisherHash}</c>. Computed in Phase 1.
+    /// <c>{Name}_{Version}_{Architecture}_{ResourceId}_{publisherHash}</c>. The <c>ResourceId</c>
+    /// segment is empty for the main package, producing the customary double underscore.
     /// </summary>
     public string PackageFullName =>
-        throw new NotImplementedException("PackageFullName is implemented in Phase 1.");
+        $"{Name}_{FormatVersion(Version)}_{ArchitectureMoniker(Architecture)}_{ResourceId}_{PublisherHash.Compute(Publisher)}";
+
+    /// <summary>The lowercase architecture moniker used in the package full name (e.g. <c>x64</c>, <c>neutral</c>).</summary>
+    public static string ArchitectureMoniker(ProcessorArchitecture architecture) => architecture switch
+    {
+        ProcessorArchitecture.X86 => "x86",
+        ProcessorArchitecture.X64 => "x64",
+        ProcessorArchitecture.Arm => "arm",
+        ProcessorArchitecture.Arm64 => "arm64",
+        ProcessorArchitecture.X86OnArm64 => "x86a64",
+        ProcessorArchitecture.Neutral => "neutral",
+        _ => "unknown",
+    };
+
+    private static string FormatVersion(Version version)
+    {
+        int major = Math.Max(version.Major, 0);
+        int minor = Math.Max(version.Minor, 0);
+        int build = Math.Max(version.Build, 0);
+        int revision = Math.Max(version.Revision, 0);
+        return $"{major}.{minor}.{build}.{revision}";
+    }
 }
