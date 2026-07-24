@@ -6,13 +6,15 @@ namespace MsixCore.Packaging.Tests;
 public class ScaffoldTests
 {
     [Fact]
-    public void ProcessorArchitecture_HasExpectedMembers()
+    public void ProcessorArchitecture_MatchesNativeAppxValues()
     {
-        Assert.Equal(0, (int)ProcessorArchitecture.Neutral);
-        Assert.Equal(1, (int)ProcessorArchitecture.X86);
-        Assert.Equal(2, (int)ProcessorArchitecture.X64);
-        Assert.Equal(3, (int)ProcessorArchitecture.Arm);
-        Assert.Equal(4, (int)ProcessorArchitecture.Arm64);
+        Assert.Equal(0, (int)ProcessorArchitecture.X86);
+        Assert.Equal(5, (int)ProcessorArchitecture.Arm);
+        Assert.Equal(9, (int)ProcessorArchitecture.X64);
+        Assert.Equal(11, (int)ProcessorArchitecture.Neutral);
+        Assert.Equal(12, (int)ProcessorArchitecture.Arm64);
+        Assert.Equal(14, (int)ProcessorArchitecture.X86OnArm64);
+        Assert.Equal(0xFFFF, (int)ProcessorArchitecture.Unknown);
     }
 
     [Fact]

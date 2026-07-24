@@ -7,8 +7,10 @@ namespace MsixCore.Packaging;
 /// <remarks>
 /// This is the C# analogue of the native <c>MsixCoreLib::IPackage</c> interface, reshaped to
 /// idiomatic .NET (properties instead of getter methods, exceptions instead of <c>HRESULT</c>).
+/// A package may own an underlying OPC/ZIP reader (file handle or stream), so it is
+/// <see cref="IDisposable"/>; callers should dispose it (e.g. with <c>using</c>).
 /// </remarks>
-public interface IPackage
+public interface IPackage : IDisposable
 {
     /// <summary>The package identity (name, publisher, version, architecture).</summary>
     PackageIdentity Identity { get; }

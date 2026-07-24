@@ -12,14 +12,14 @@ namespace MsixCore.Deployment;
 public sealed class PackageManager : IPackageManager
 {
     /// <inheritdoc/>
-    public Task<IMsixResponse> AddPackageAsync(
+    public IMsixResponse AddPackage(
         string packageFilePath,
         DeploymentOptions options = DeploymentOptions.None,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException("Implemented in Phase 5 (deployment engine).");
 
     /// <inheritdoc/>
-    public Task<IMsixResponse> RemovePackageAsync(
+    public IMsixResponse RemovePackage(
         string packageFullName,
         CancellationToken cancellationToken = default) =>
         throw new NotImplementedException("Implemented in Phase 5 (deployment engine).");

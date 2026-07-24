@@ -9,7 +9,7 @@ namespace MsixCore.Packaging;
 /// Phase 0 defines the public surface only; the concrete reader (OPC container, manifest binding,
 /// identity computation) is implemented in Phase 1 and Phase 2.
 /// </remarks>
-public sealed class MsixPackage : IPackage, IDisposable
+public sealed class MsixPackage : IPackage
 {
     private MsixPackage()
     {

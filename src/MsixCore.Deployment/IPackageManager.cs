@@ -13,8 +13,13 @@ public interface IPackageManager
     /// <param name="packageFilePath">Path to the <c>.msix</c>/<c>.appx</c> package.</param>
     /// <param name="options">Deployment options.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A response describing the operation's progress and final result.</returns>
-    Task<IMsixResponse> AddPackageAsync(
+    /// <returns>
+    /// A response handle, returned immediately, whose <see cref="IMsixResponse.Completion"/> task
+    /// completes when the operation finishes. Progress is observable via
+    /// <see cref="IMsixResponse.ProgressChanged"/> and the operation can be cancelled via
+    /// <see cref="IMsixResponse.Cancel"/> while it runs.
+    /// </returns>
+    IMsixResponse AddPackage(
         string packageFilePath,
         DeploymentOptions options = DeploymentOptions.None,
         CancellationToken cancellationToken = default);
@@ -22,8 +27,11 @@ public interface IPackageManager
     /// <summary>Removes (uninstalls) a package by its full name.</summary>
     /// <param name="packageFullName">The package full name to remove.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A response describing the operation's progress and final result.</returns>
-    Task<IMsixResponse> RemovePackageAsync(
+    /// <returns>
+    /// A response handle, returned immediately, whose <see cref="IMsixResponse.Completion"/> task
+    /// completes when the operation finishes.
+    /// </returns>
+    IMsixResponse RemovePackage(
         string packageFullName,
         CancellationToken cancellationToken = default);
 
