@@ -1,3 +1,4 @@
+using MsixCore.Packaging.Manifest;
 using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Packaging;
@@ -6,15 +7,20 @@ namespace MsixCore.Packaging;
 /// The primary entry point for reading an MSIX/APPX package from disk or a stream.
 /// </summary>
 /// <remarks>
-/// Phase 1 opens the underlying OPC/ZIP container (exposed via <see cref="Opc"/>). Manifest-derived
-/// members (<see cref="Identity"/>, <see cref="DisplayName"/>, etc.) are implemented in Phase 2.
+/// The underlying OPC/ZIP container is exposed via <see cref="Opc"/>; the parsed
+/// <c>AppxManifest.xml</c> is exposed via <see cref="Manifest"/> and read lazily on first access.
 /// </remarks>
 public sealed class MsixPackage : IPackage
 {
     private readonly OpcPackage _opc;
+    private readonly Lazy<AppxManifest> _manifest;
     private bool _disposed;
 
-    private MsixPackage(OpcPackage opc) => _opc = opc;
+    private MsixPackage(OpcPackage opc)
+    {
+        _opc = opc;
+        _manifest = new Lazy<AppxManifest>(ReadManifest);
+    }
 
     /// <summary>The underlying OPC/ZIP container.</summary>
     public IOpcPackage Opc
@@ -26,21 +32,28 @@ public sealed class MsixPackage : IPackage
         }
     }
 
-    /// <inheritdoc/>
-    public PackageIdentity Identity =>
-        throw new NotImplementedException("Implemented in Phase 2 (manifest parsing).");
+    /// <summary>The parsed <c>AppxManifest.xml</c>.</summary>
+    /// <exception cref="InvalidDataException">The package has no manifest or it is malformed.</exception>
+    public AppxManifest Manifest
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _manifest.Value;
+        }
+    }
 
     /// <inheritdoc/>
-    public string DisplayName =>
-        throw new NotImplementedException("Implemented in Phase 2 (manifest parsing).");
+    public PackageIdentity Identity => Manifest.Identity;
 
     /// <inheritdoc/>
-    public string PublisherDisplayName =>
-        throw new NotImplementedException("Implemented in Phase 2 (manifest parsing).");
+    public string DisplayName => Manifest.DisplayName;
 
     /// <inheritdoc/>
-    public IReadOnlyList<string> Capabilities =>
-        throw new NotImplementedException("Implemented in Phase 2 (manifest parsing).");
+    public string PublisherDisplayName => Manifest.PublisherDisplayName;
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> Capabilities => Manifest.Capabilities;
 
     /// <summary>Opens an MSIX/APPX package from a file path.</summary>
     /// <param name="path">Path to a <c>.msix</c>/<c>.appx</c> (or bundle) file.</param>
@@ -55,8 +68,18 @@ public sealed class MsixPackage : IPackage
         new(OpcPackage.Open(stream, leaveOpen));
 
     /// <inheritdoc/>
-    public Stream? OpenLogo() =>
-        throw new NotImplementedException("Implemented in Phase 2 (manifest parsing).");
+    public Stream? OpenLogo()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        string? logo = Manifest.Logo;
+        if (string.IsNullOrEmpty(logo) || !_opc.ContainsPart(logo))
+        {
+            return null;
+        }
+
+        return _opc.OpenPart(logo);
+    }
 
     /// <inheritdoc/>
     public void Dispose()
@@ -68,5 +91,17 @@ public sealed class MsixPackage : IPackage
 
         _disposed = true;
         _opc.Dispose();
+    }
+
+    private AppxManifest ReadManifest()
+    {
+        if (!_opc.ContainsPart(OpcPartNames.AppxManifest))
+        {
+            throw new InvalidDataException(
+                $"The package does not contain '{OpcPartNames.AppxManifest}'.");
+        }
+
+        using Stream manifestStream = _opc.OpenPart(OpcPartNames.AppxManifest);
+        return AppxManifestParser.Parse(manifestStream);
     }
 }
