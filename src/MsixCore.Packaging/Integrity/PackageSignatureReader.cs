@@ -76,17 +76,18 @@ public static class PackageSignatureReader
             Thumbprint = certificate.Thumbprint,
             NotBefore = certificate.NotBefore,
             NotAfter = certificate.NotAfter,
-            IsSignatureValid = signatureValid,
+            IsCmsIntegrityValid = signatureValid,
         };
     }
 
     private static ReadOnlyMemory<byte> StripMagic(byte[] signatureBytes)
     {
-        if (signatureBytes.Length >= P7xMagic.Length && signatureBytes.AsSpan(0, P7xMagic.Length).SequenceEqual(P7xMagic))
+        if (signatureBytes.Length < P7xMagic.Length || !signatureBytes.AsSpan(0, P7xMagic.Length).SequenceEqual(P7xMagic))
         {
-            return signatureBytes.AsMemory(P7xMagic.Length);
+            throw new InvalidDataException(
+                "The signature is missing the required 'PKCX' file identifier of an AppxSignature.p7x part.");
         }
 
-        return signatureBytes;
+        return signatureBytes.AsMemory(P7xMagic.Length);
     }
 }

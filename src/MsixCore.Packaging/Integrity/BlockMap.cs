@@ -6,7 +6,7 @@ public enum BlockMapHashMethod
     /// <summary>SHA-256 (<c>http://www.w3.org/2001/04/xmlenc#sha256</c>). The MSIX default.</summary>
     Sha256 = 0,
 
-    /// <summary>SHA-384 (<c>http://www.w3.org/2001/04/xmlenc#sha384</c>).</summary>
+    /// <summary>SHA-384 (<c>http://www.w3.org/2001/04/xmldsig-more#sha384</c>).</summary>
     Sha384 = 1,
 
     /// <summary>SHA-512 (<c>http://www.w3.org/2001/04/xmlenc#sha512</c>).</summary>

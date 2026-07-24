@@ -70,15 +70,14 @@ public class BlockMapParserTests
     }
 
     [Fact]
-    public void Parse_DefaultHashMethod_IsSha256()
+    public void Parse_MissingHashMethod_Throws()
     {
         const string xml = """<BlockMap xmlns="http://schemas.microsoft.com/appx/2010/blockmap" />""";
-        BlockMap map = BlockMapParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml)));
-        Assert.Equal(BlockMapHashMethod.Sha256, map.HashMethod);
+        Assert.Throws<InvalidDataException>(() => BlockMapParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
     [Theory]
-    [InlineData("http://www.w3.org/2001/04/xmlenc#sha384", BlockMapHashMethod.Sha384)]
+    [InlineData("http://www.w3.org/2001/04/xmldsig-more#sha384", BlockMapHashMethod.Sha384)]
     [InlineData("http://www.w3.org/2001/04/xmlenc#sha512", BlockMapHashMethod.Sha512)]
     public void ParseHashMethod_MapsSupportedAlgorithms(string uri, BlockMapHashMethod expected)
     {
@@ -95,21 +94,21 @@ public class BlockMapParserTests
     [Fact]
     public void Parse_FileMissingName_Throws()
     {
-        const string xml = """<BlockMap><File Size="1"><Block Hash="AA" /></File></BlockMap>""";
+        const string xml = """<BlockMap HashMethod="http://www.w3.org/2001/04/xmlenc#sha256"><File Size="1"><Block Hash="AA" /></File></BlockMap>""";
         Assert.Throws<InvalidDataException>(() => BlockMapParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
     [Fact]
     public void Parse_BlockMissingHash_Throws()
     {
-        const string xml = """<BlockMap><File Name="a" Size="1"><Block /></File></BlockMap>""";
+        const string xml = """<BlockMap HashMethod="http://www.w3.org/2001/04/xmlenc#sha256"><File Name="a" Size="1"><Block /></File></BlockMap>""";
         Assert.Throws<InvalidDataException>(() => BlockMapParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 
     [Fact]
     public void Parse_NegativeSize_Throws()
     {
-        const string xml = """<BlockMap><File Name="a" Size="-1"><Block Hash="AA" /></File></BlockMap>""";
+        const string xml = """<BlockMap HashMethod="http://www.w3.org/2001/04/xmlenc#sha256"><File Name="a" Size="-1"><Block Hash="AA" /></File></BlockMap>""";
         Assert.Throws<InvalidDataException>(() => BlockMapParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(xml))));
     }
 

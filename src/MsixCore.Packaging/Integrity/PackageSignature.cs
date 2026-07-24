@@ -28,10 +28,17 @@ public sealed record PackageSignature
     public required DateTimeOffset NotAfter { get; init; }
 
     /// <summary>
-    /// Whether the CMS/PKCS#7 signature is internally consistent (the signed digest matches and the
-    /// signature verifies against the signer's public key). This does <em>not</em> assert trust.
+    /// Whether the CMS/PKCS#7 envelope is internally consistent (the signed digest matches its
+    /// embedded content and the signature verifies against the signer's public key).
     /// </summary>
-    public required bool IsSignatureValid { get; init; }
+    /// <remarks>
+    /// This asserts CMS-envelope integrity only. It does <em>not</em> assert that the signature is
+    /// bound to this package's contents, nor that the signer is trusted. Callers gating a package must
+    /// additionally verify the block map (<see cref="MsixPackage.VerifyBlockMap"/>), confirm the
+    /// publisher via <see cref="MatchesPublisher(string)"/>, and (once implemented) verify the APPX
+    /// indirect-data digests and trust chain.
+    /// </remarks>
+    public required bool IsCmsIntegrityValid { get; init; }
 
     /// <summary>
     /// Returns <see langword="true"/> if the signer subject DN matches the given manifest

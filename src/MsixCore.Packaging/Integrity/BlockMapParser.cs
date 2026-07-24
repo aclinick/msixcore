@@ -72,9 +72,10 @@ public static class BlockMapParser
 
     internal static BlockMapHashMethod ParseHashMethod(string? value) => value switch
     {
-        null or "" or "http://www.w3.org/2001/04/xmlenc#sha256" => BlockMapHashMethod.Sha256,
-        "http://www.w3.org/2001/04/xmlenc#sha384" => BlockMapHashMethod.Sha384,
+        "http://www.w3.org/2001/04/xmlenc#sha256" => BlockMapHashMethod.Sha256,
+        "http://www.w3.org/2001/04/xmldsig-more#sha384" => BlockMapHashMethod.Sha384,
         "http://www.w3.org/2001/04/xmlenc#sha512" => BlockMapHashMethod.Sha512,
+        null or "" => throw new InvalidDataException("The block map is missing the required 'HashMethod' attribute."),
         _ => throw new InvalidDataException($"The block map declares an unsupported HashMethod '{value}'."),
     };
 

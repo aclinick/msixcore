@@ -45,19 +45,17 @@ public class PackageSignatureReaderTests
         PackageSignature result = PackageSignatureReader.Read(signature);
 
         Assert.Equal(cert.Thumbprint, result.Thumbprint);
-        Assert.True(result.IsSignatureValid);
+        Assert.True(result.IsCmsIntegrityValid);
         Assert.Equal(cert.NotAfter, result.NotAfter);
     }
 
     [Fact]
-    public void Read_WithoutMagic_StillDecodes()
+    public void Read_WithoutMagic_Throws()
     {
         using X509Certificate2 cert = CreateCertificate("CN=Contoso");
         byte[] signature = BuildSignature(cert, prependMagic: false);
 
-        PackageSignature result = PackageSignatureReader.Read(signature);
-
-        Assert.True(result.IsSignatureValid);
+        Assert.Throws<InvalidDataException>(() => PackageSignatureReader.Read(signature));
     }
 
     [Fact]
@@ -68,7 +66,7 @@ public class PackageSignatureReaderTests
 
         PackageSignature result = PackageSignatureReader.Read(new MemoryStream(signature));
 
-        Assert.True(result.IsSignatureValid);
+        Assert.True(result.IsCmsIntegrityValid);
     }
 
     [Fact]
