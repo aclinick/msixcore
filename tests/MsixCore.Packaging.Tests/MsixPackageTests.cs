@@ -111,5 +111,54 @@ public class MsixPackageTests
 
         Assert.Throws<InvalidDataException>(() => package.Manifest);
     }
+
+    [Fact]
+    public void VerifyBlockMap_MatchingPackage_IsValid()
+    {
+        var payload = new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["AppxManifest.xml"] = Encoding.UTF8.GetBytes(ValidManifest),
+            ["Assets/StoreLogo.png"] = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A },
+        };
+
+        var allParts = new Dictionary<string, byte[]>(payload, StringComparer.Ordinal)
+        {
+            ["AppxBlockMap.xml"] = Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(payload)),
+        };
+
+        using var zip = new MemoryStream();
+        using (var archive = new System.IO.Compression.ZipArchive(zip, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach ((string name, byte[] content) in allParts)
+            {
+                using Stream entry = archive.CreateEntry(name).Open();
+                entry.Write(content);
+            }
+        }
+
+        zip.Position = 0;
+        using MsixPackage package = MsixPackage.Open(zip, leaveOpen: true);
+
+        Assert.True(package.VerifyBlockMap().IsValid);
+    }
+
+    [Fact]
+    public void VerifyBlockMap_NoBlockMap_Throws()
+    {
+        using MemoryStream zip = CreateMinimalPackage();
+        using MsixPackage package = MsixPackage.Open(zip, leaveOpen: true);
+
+        Assert.Throws<InvalidDataException>(() => package.VerifyBlockMap());
+    }
+
+    [Fact]
+    public void Signature_UnsignedPackage_IsNull()
+    {
+        using MemoryStream zip = CreateMinimalPackage();
+        using MsixPackage package = MsixPackage.Open(zip, leaveOpen: true);
+
+        Assert.False(package.IsSigned);
+        Assert.Null(package.ReadSignature());
+    }
 }
 
