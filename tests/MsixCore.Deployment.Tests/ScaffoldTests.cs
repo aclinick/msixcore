@@ -21,12 +21,12 @@ public class ScaffoldTests
     }
 
     [Fact]
-    public void PackageManager_QuerySurface_NotYetImplemented_InPhase0()
+    public void PackageManager_AddRemove_NotYetImplemented_UntilPhase5()
     {
         var manager = new PackageManager();
 
-        // Contract guards: flip to real behavior in Phase 4/5.
-        Assert.Throws<NotImplementedException>(() => manager.FindPackage("Contoso.MyApp_1.0.0.0_x64__abc"));
-        Assert.Throws<NotImplementedException>(() => manager.GetMsixPackageInfo("nonexistent.msix"));
+        // Contract guards: flip to real behavior in Phase 5 (deployment engine).
+        Assert.Throws<NotImplementedException>(() => manager.AddPackage("nonexistent.msix"));
+        Assert.Throws<NotImplementedException>(() => manager.RemovePackage("Contoso.MyApp_1.0.0.0_x64__abc"));
     }
 }
