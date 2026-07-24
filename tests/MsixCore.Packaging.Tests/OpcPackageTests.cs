@@ -124,4 +124,56 @@ public class OpcPackageTests
         // Should not throw: stream is still usable.
         Assert.Equal(0, zip.Seek(0, SeekOrigin.Begin));
     }
+
+    [Fact]
+    public void Open_DuplicatePartNames_ThrowsInvalidData()
+    {
+        // Two entries whose names differ only by case are "equivalent" under OPC and forbidden.
+        using MemoryStream zip = CreateZip(
+            ("AppxManifest.xml", "<x/>"),
+            ("appxmanifest.xml", "<y/>"));
+
+        Assert.Throws<InvalidDataException>(() => OpcPackage.Open(zip));
+    }
+
+    [Theory]
+    [InlineData("../evil.xml")]
+    [InlineData("foo/../bar.xml")]
+    [InlineData("foo//bar.xml")]
+    [InlineData("./bar.xml")]
+    public void Open_InvalidPartName_ThrowsInvalidData(string badName)
+    {
+        using MemoryStream zip = CreateZip((badName, "<x/>"));
+        Assert.Throws<InvalidDataException>(() => OpcPackage.Open(zip));
+    }
+
+    [Fact]
+    public void Open_AllowsBracketedContentTypesPart()
+    {
+        using MemoryStream zip = CreateZip(("[Content_Types].xml", "<Types/>"));
+        using OpcPackage package = OpcPackage.Open(zip);
+
+        Assert.True(package.ContainsPart("[Content_Types].xml"));
+    }
+
+    [Fact]
+    public void Open_Stream_ValidationFailure_LeaveOpenTrue_PreservesStream()
+    {
+        using MemoryStream zip = CreateZip(("../evil.xml", "<x/>"));
+
+        Assert.Throws<InvalidDataException>(() => OpcPackage.Open(zip, leaveOpen: true));
+
+        // The caller-owned stream must remain usable after a validation failure.
+        Assert.Equal(0, zip.Seek(0, SeekOrigin.Begin));
+    }
+
+    [Fact]
+    public void IsValidPartName_RejectsRootedAndBackslashNames()
+    {
+        Assert.False(OpcPackage.IsValidPartName("/AppxManifest.xml"));
+        Assert.False(OpcPackage.IsValidPartName("dir\\file.xml"));
+        Assert.False(OpcPackage.IsValidPartName(string.Empty));
+        Assert.True(OpcPackage.IsValidPartName("AppxManifest.xml"));
+        Assert.True(OpcPackage.IsValidPartName("AppxMetadata/AppxBundleManifest.xml"));
+    }
 }
