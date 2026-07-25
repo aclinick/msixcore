@@ -30,6 +30,11 @@ public static class Program
             "Build an unsigned MSIX package (alias: makemsix).",
             PackCommand.Run,
             ["makemsix"]),
+        new(
+            "bundle",
+            "<package.msix>... -o|--output <file.msixbundle> [--version <a.b.c.d>] [--overwrite] [--json]",
+            "Build an unsigned MSIX bundle.",
+            BundleCommand.Run),
     ];
 
     internal static IReadOnlyList<CliVerb> Verbs => s_verbs;
@@ -98,7 +103,8 @@ public static class Program
         output.WriteLine(
             """
             For inspect, validate, and unpack, <path> may be a package file
-            (.msix/.appx) or an unpacked directory. pack requires a source directory.
+            (.msix/.appx) or an unpacked directory. pack requires a source directory;
+            bundle requires one or more already-built package files.
 
             Options:
               -h, --help                  Show this help.

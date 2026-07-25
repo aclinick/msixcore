@@ -23,6 +23,12 @@ public sealed record AppxManifest
     /// <summary>Whether the package is a framework package (<c>Properties/Framework</c> is <c>true</c>).</summary>
     public bool IsFramework { get; init; }
 
+    /// <summary>Whether this is a resource-only package (<c>Properties/ResourcePackage</c> is <c>true</c>).</summary>
+    public bool IsResourcePackage { get; init; }
+
+    /// <summary>The package's declared language, scale, and DirectX resource qualifiers.</summary>
+    public IReadOnlyList<BundleResource> Resources { get; init; } = [];
+
     /// <summary>The declared capabilities (e.g. <c>runFullTrust</c>, <c>internetClient</c>).</summary>
     public IReadOnlyList<string> Capabilities { get; init; } = [];
 

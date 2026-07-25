@@ -1,7 +1,7 @@
 # `msixmgr` CLI reference
 
 `msixmgr` is the MSIX Core (.NET) command-line tool. It reads, validates,
-extracts, and authors unsigned MSIX packages cross-platform. Build it once,
+extracts, and authors unsigned MSIX packages and bundles cross-platform. Build it once,
 then invoke via `dotnet`:
 
 ```bash
@@ -33,6 +33,7 @@ msixmgr <verb> [options]
 | `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
 | `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
 | `pack <sourceDir> -o <file.msix> [--compress] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package (`makemsix` alias). |
+| `bundle <package.msix>... -o <file.msixbundle> [--version <a.b.c.d>] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX bundle. |
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
@@ -65,9 +66,11 @@ Verbs:
   validate <path> [--json]                                               Verify integrity (block map + signature); CI exit code.
   unpack <path> -Destination <dir> [--json]                              Extract a package to a loose layout without installing.
   pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]  Build an unsigned MSIX package (alias: makemsix).
+  bundle <package.msix>... -o|--output <file.msixbundle> [--version <a.b.c.d>] [--overwrite] [--json]  Build an unsigned MSIX bundle.
 
 For inspect, validate, and unpack, <path> may be a package file
-(.msix/.appx) or an unpacked directory. pack requires a source directory.
+(.msix/.appx) or an unpacked directory. pack requires a source directory;
+bundle requires one or more already-built package files.
 
 Options:
   -h, --help                  Show this help.
@@ -303,6 +306,25 @@ $ dotnet $DLL pack ./layout --output ./Contoso.MyApp.msix --json
 
 Missing/invalid source content or an unwritable output returns exit `1`;
 missing/unknown/extra arguments return exit `2`.
+
+## `bundle`
+
+Builds an unsigned `.msixbundle` (or `.appxbundle`) from one or more already-built
+`.msix`/`.appx` packages:
+
+```console
+$ dotnet $DLL bundle ./Contoso.x64.msix ./Contoso.arm64.msix -o ./Contoso.msixbundle --version 1.2.3.4
+Bundled 2 packages (140462 bytes) to /abs/path/Contoso.msixbundle
+Identity: Contoso.MyApp_1.2.3.4_neutral__h91ms92gdsmmt
+```
+
+All child packages must share the same `Name` and `Publisher`, and application
+packages must target distinct architectures. Child packages are stored byte-for-byte
+without recompression. If `--version` is omitted, the highest child package version is
+used, making the default deterministic. Existing output requires `--overwrite`.
+
+`--json` reports the bundle identity plus every child's type, architecture/resource
+ID, payload offset, and size. The generated bundle is unsigned.
 
 ## Error handling examples
 

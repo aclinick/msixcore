@@ -191,6 +191,34 @@ part-name rules.
 - **`DeploymentOptions`** is a `[Flags]` enum (`None`, `ForceApplicationShutdown`,
   `ExtractOnly`, `ForceReinstall`, `AllowDowngrade`).
 
+## Authoring (`MsixCore.Packaging.Authoring`)
+
+`MsixPackageBuilder` authors deterministic packages; `MsixBundleBuilder` authors
+deterministic `.msixbundle`/`.appxbundle` containers from existing child packages.
+Both share `StoredZipWriter`, `BlockMapWriter`, and OPC content-type generation.
+
+The bundle layout was derived differentially from Windows SDK
+`makeappx.exe` 10.0.26100.8249:
+
+- child packages are ZIP **Stored** entries and are not listed in the bundle block map;
+- each manifest `Package/@Offset` is the absolute byte offset of the child's payload
+  (immediately after its local file header), while `Size` is the uncompressed child
+  package byte length;
+- `AppxBlockMap.xml` maps only
+  `AppxMetadata\AppxBundleManifest.xml`; the bundle manifest, block map, and content
+  types are block-DEFLATE entries;
+- schema 5.0 uses the 2013 bundle namespace, `b4`/`b5` ignorable namespaces,
+  application `Architecture`, resource `ResourceId`, resource qualifiers, and
+  `b4:Dependencies` copied from each child manifest;
+- `[Content_Types].xml` maps `.msix`/`.appx` to
+  `application/vnd.ms-appx`, XML to
+  `application/vnd.ms-appx.bundlemanifest+xml`, and overrides the block map type.
+
+MakeAppx writes data descriptors after Stored child entries, while this writer puts
+CRC/sizes directly in deterministic local headers. The resulting payload offsets
+differ by those descriptor bytes but have the same meaning; MakeAppx successfully
+unbundles the authored container and reproduces every child byte-for-byte.
+
 ## Layer 6 — CLI (`msixmgr`)
 
 `Program.Main` dispatches verbs. `PackageOpener` transparently opens a `.msix`

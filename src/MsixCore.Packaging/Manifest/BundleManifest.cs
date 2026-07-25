@@ -47,6 +47,15 @@ public sealed record BundlePackageEntry
 
     /// <summary>The resource applicability qualifiers (languages/scales/DXFL) the package provides.</summary>
     public IReadOnlyList<BundleResource> Resources { get; init; } = [];
+
+    /// <summary>The absolute byte offset of the child package payload in the bundle ZIP.</summary>
+    public long Offset { get; init; }
+
+    /// <summary>The child package size in bytes.</summary>
+    public long Size { get; init; }
+
+    /// <summary>The target device families copied from the child package manifest.</summary>
+    public IReadOnlyList<TargetDeviceFamily> TargetDeviceFamilies { get; init; } = [];
 }
 
 /// <summary>The strongly-typed contents of an <c>AppxBundleManifest.xml</c>.</summary>
