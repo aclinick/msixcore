@@ -155,6 +155,44 @@ public class FileSystemPackageStoreTests : IDisposable
         Assert.Empty(store.EnumeratePackages());
     }
 
+    [Fact]
+    public void Commit_BackupDeleteFailure_StillReportsSuccess()
+    {
+        var store = new FileSystemPackageStore(_root);
+        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
+
+        string first = store.CreateStagingLocation();
+        File.WriteAllText(Path.Combine(first, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+        string readOnly = Path.Combine(first, "readonly.txt");
+        File.WriteAllText(readOnly, "v1");
+        store.Commit(first, fullName);
+
+        // Mark a file in the installed payload read-only. On the next commit that payload is moved
+        // aside to the backup (renaming tolerates read-only files), the new payload is promoted, and
+        // then the best-effort backup deletion throws UnauthorizedAccessException on the read-only
+        // file. The promotion has already succeeded, so Commit must swallow that and report success.
+        string installedReadOnly = Path.Combine(store.GetInstallLocation(fullName), "readonly.txt");
+        File.SetAttributes(installedReadOnly, FileAttributes.ReadOnly);
+        try
+        {
+            string second = store.CreateStagingLocation();
+            File.WriteAllText(Path.Combine(second, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+
+            store.Commit(second, fullName);
+
+            Assert.True(store.Contains(fullName));
+            Assert.False(Directory.Exists(second));
+        }
+        finally
+        {
+            // Clear the read-only attribute on the leaked backup so test teardown can delete _root.
+            foreach (string file in Directory.EnumerateFiles(_root, "readonly.txt", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+        }
+    }
+
     [Theory]
     [InlineData("../escape")]
     [InlineData("a/b")]

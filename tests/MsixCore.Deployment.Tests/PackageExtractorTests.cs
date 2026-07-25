@@ -97,6 +97,28 @@ public class PackageExtractorTests : IDisposable
             PackageExtractor.Extract(package, Path.Combine(_root, "out")));
     }
 
+    [Fact]
+    public void Extract_RootIsReparsePoint_ThrowsInvalidData()
+    {
+        // A destination root that is itself a symlink/junction redirects every write outside the
+        // intended tree even though each part path looks contained, so it must be rejected up front.
+        string realTarget = Path.Combine(_root, "real");
+        Directory.CreateDirectory(realTarget);
+        string link = Path.Combine(_root, "link");
+        try
+        {
+            Directory.CreateSymbolicLink(link, realTarget);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return; // Environment cannot create symlinks (no privilege / Developer Mode); skip.
+        }
+
+        using OpcPackage package = OpcFrom(("AppxManifest.xml", "<manifest/>"));
+
+        Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, link));
+    }
+
     /// <summary>A hostile <see cref="IOpcPackage"/> that returns a traversing part name.</summary>
     private sealed class EscapingOpcPackage : IOpcPackage
     {

@@ -142,9 +142,20 @@ public sealed class FileSystemPackageStore : IPackageStore
             throw;
         }
 
+        // The new installation is already in place and the operation has succeeded. Removing the
+        // backup is pure cleanup, so a failure here (e.g. a transient lock on the old files) must not
+        // fail an otherwise-successful install. Leave the stale ('.'-prefixed, enumeration-excluded)
+        // backup behind for later cleanup rather than reporting a false failure.
         if (backup is not null && Directory.Exists(backup))
         {
-            Directory.Delete(backup, recursive: true);
+            try
+            {
+                Directory.Delete(backup, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best-effort cleanup; the successful promotion stands.
+            }
         }
     }
 

@@ -28,6 +28,17 @@ public static class PackageExtractor
 
         string root = Path.GetFullPath(destination);
         Directory.CreateDirectory(root);
+
+        // The destination root itself must not be a reparse point (symlink/junction); otherwise every
+        // write below it is silently redirected outside the intended tree even though each part path
+        // looks contained. The per-part walk below only inspects segments *beneath* the root, so the
+        // root has to be validated explicitly here, before any extraction begins.
+        if (new DirectoryInfo(root).Attributes.HasFlag(FileAttributes.ReparsePoint))
+        {
+            throw new InvalidDataException(
+                $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
+        }
+
         string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
             ? root
             : root + Path.DirectorySeparatorChar;

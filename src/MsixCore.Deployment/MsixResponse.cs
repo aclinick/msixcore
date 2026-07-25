@@ -109,13 +109,25 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
 
     private void RaiseProgress()
     {
-        try
+        EventHandler<IMsixResponse>? handlers = ProgressChanged;
+        if (handlers is null)
         {
-            ProgressChanged?.Invoke(this, this);
+            return;
         }
-        catch
+
+        // Invoke each subscriber independently: a single throwing observer must not prevent the
+        // remaining subscribers from receiving the notification (a plain multicast Invoke stops at
+        // the first exception), nor disrupt the deployment engine or strand the completion task.
+        foreach (Delegate handler in handlers.GetInvocationList())
         {
-            // Observer faults must not disrupt the deployment engine or strand the completion task.
+            try
+            {
+                ((EventHandler<IMsixResponse>)handler).Invoke(this, this);
+            }
+            catch
+            {
+                // Observer faults are isolated per-subscriber and swallowed.
+            }
         }
     }
 

@@ -118,6 +118,22 @@ public class MsixResponseTests
     }
 
     [Fact]
+    public void RaiseProgress_ThrowingSubscriber_DoesNotSuppressLaterSubscribers()
+    {
+        using var response = new MsixResponse(CancellationToken.None);
+        bool secondCalled = false;
+
+        // A throwing early subscriber must not prevent later subscribers from being notified: each
+        // handler is invoked in its own try/catch rather than via a single multicast Invoke.
+        response.ProgressChanged += (_, _) => throw new InvalidOperationException("first");
+        response.ProgressChanged += (_, _) => secondCalled = true;
+
+        response.Report(InstallationStep.Extraction, 10f, "x");
+
+        Assert.True(secondCalled);
+    }
+
+    [Fact]
     public void ExternalCancellation_SignalsToken()
     {
         using var cts = new CancellationTokenSource();
