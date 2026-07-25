@@ -1,6 +1,6 @@
 # msixmgr published-size report
 
-Generated: 2026-07-24 18:46:05 -07:00
+Generated: 2026-07-24 19:18:01 -07:00
 
 - Runtime identifier: `win-x64`
 - Configuration: `Release`
@@ -11,8 +11,8 @@ Generated: 2026-07-24 18:46:05 -07:00
 
 | Configuration | Total size | Files | msixmgr host |
 | --- | ---: | ---: | ---: |
-| Framework-dependent (portable) | 718.86 KB | 13 | 159.00 KB |
-| Self-contained (win-x64) | 77.06 MB | 200 | 159.00 KB |
+| Framework-dependent (portable) | 748.05 KB | 13 | 159.00 KB |
+| Self-contained (win-x64) | 77.09 MB | 200 | 159.00 KB |
 
 ## Key assemblies (per configuration)
 
@@ -21,22 +21,22 @@ Generated: 2026-07-24 18:46:05 -07:00
 | Assembly | Size |
 | --- | ---: |
 | msixmgr.exe | 159.00 KB |
-| MsixCore.Packaging.dll | 62.50 KB |
-| msixmgr.dll | 23.00 KB |
-| msixmgr.pdb | 15.25 KB |
-| MsixCore.Deployment.dll | 13.50 KB |
-| msixmgr.xml | 3.30 KB |
+| MsixCore.Packaging.dll | 64.50 KB |
+| msixmgr.dll | 26.00 KB |
+| MsixCore.Deployment.dll | 23.50 KB |
+| msixmgr.pdb | 16.03 KB |
+| msixmgr.xml | 3.77 KB |
 
 ### Self-contained (win-x64)
 
 | Assembly | Size |
 | --- | ---: |
 | msixmgr.exe | 159.00 KB |
-| MsixCore.Packaging.dll | 62.50 KB |
+| MsixCore.Packaging.dll | 64.50 KB |
 | msixmgr.deps.json | 28.78 KB |
-| msixmgr.dll | 23.00 KB |
-| msixmgr.pdb | 15.25 KB |
-| MsixCore.Deployment.dll | 13.50 KB |
+| msixmgr.dll | 26.00 KB |
+| MsixCore.Deployment.dll | 23.50 KB |
+| msixmgr.pdb | 16.03 KB |
 
 ## Comparison against the original C++ MSIX Core (future work)
 
@@ -54,8 +54,8 @@ repository, so a direct size comparison cannot be produced here yet. Intended me
    vs. the C++ `msix.dll`) over time in this report.
 
 > Note: trimmed self-contained size depends on trimming succeeding for the CLI. On this
-> repository the trimmed configuration currently FAILS to publish: the `inspect` and
-> `validate` verbs use reflection-based `System.Text.Json.JsonSerializer.Serialize`, which
+> repository the trimmed configuration currently FAILS to publish: the `inspect`, `validate`,
+> and `unpack` verbs use reflection-based `System.Text.Json.JsonSerializer.Serialize`, which
 > raises trim-analysis errors IL2026 (warnings-as-errors). Making the CLI trim-safe (source-
 > generated `JsonSerializerContext`) would unlock a materially smaller self-contained size.
 

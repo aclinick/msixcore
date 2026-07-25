@@ -32,9 +32,11 @@ Results are written to `BenchmarkDotNet.Artifacts\results\` (git-ignored). Copy 
 
 The benchmarks synthesize their own packages in a `[GlobalSetup]` step (an OPC ZIP plus a matching
 `AppxBlockMap.xml`, and a self-signed CMS `AppxSignature.p7x` for the signed cases), so no external
-package fixtures are required. The "large" package is ~10 MB across 64 files so hashing/extraction
-throughput is meaningful. A short job (`[SimpleJob(warmupCount: 3, iterationCount: 5)]`) keeps a full
-run to roughly a minute; raise the counts for publication-grade numbers.
+package fixtures are required. Extraction uses the real `MsixCore.Deployment.PackageExtractor.Extract`
+API; extracted output is deleted in an `[IterationCleanup]` outside the measured region. The "large"
+package is ~10 MB across 64 files so hashing/extraction throughput is meaningful. A short job
+(`[SimpleJob(warmupCount: 3, iterationCount: 5)]`) keeps a full run to roughly a minute; raise the
+counts for publication-grade numbers.
 
 ## Measuring published size
 

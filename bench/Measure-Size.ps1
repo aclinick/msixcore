@@ -154,8 +154,8 @@ foreach ($r in $results) {
 [void]$sb.AppendLine('   vs. the C++ `msix.dll`) over time in this report.')
 [void]$sb.AppendLine()
 [void]$sb.AppendLine('> Note: trimmed self-contained size depends on trimming succeeding for the CLI. On this')
-[void]$sb.AppendLine('> repository the trimmed configuration currently FAILS to publish: the `inspect` and')
-[void]$sb.AppendLine('> `validate` verbs use reflection-based `System.Text.Json.JsonSerializer.Serialize`, which')
+[void]$sb.AppendLine('> repository the trimmed configuration currently FAILS to publish: the `inspect`, `validate`,')
+[void]$sb.AppendLine('> and `unpack` verbs use reflection-based `System.Text.Json.JsonSerializer.Serialize`, which')
 [void]$sb.AppendLine('> raises trim-analysis errors IL2026 (warnings-as-errors). Making the CLI trim-safe (source-')
 [void]$sb.AppendLine('> generated `JsonSerializerContext`) would unlock a materially smaller self-contained size.')
 

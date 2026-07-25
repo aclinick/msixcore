@@ -4,7 +4,6 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using MsixCore.Packaging.Integrity;
-using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Benchmarks;
 
@@ -171,24 +170,5 @@ internal static class SyntheticPackage
         var rng = new Random(seed);
         rng.NextBytes(buffer);
         return buffer;
-    }
-
-    /// <summary>
-    /// Extracts every OPC part of a package to <paramref name="destination"/>. This is the same
-    /// I/O the deployment engine's package extractor performs; a dedicated
-    /// <c>PackageExtractor.Extract</c> API is introduced in a later phase and is not yet present on
-    /// this branch, so the harness benchmarks the equivalent part-by-part copy.
-    /// </summary>
-    public static void ExtractAllParts(IOpcPackage opc, string destination)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (string part in opc.PartNames)
-        {
-            string full = Path.Combine(destination, part.Replace('/', Path.DirectorySeparatorChar));
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            using Stream source = opc.OpenPart(part);
-            using FileStream target = File.Create(full);
-            source.CopyTo(target);
-        }
     }
 }
