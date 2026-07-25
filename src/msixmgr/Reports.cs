@@ -94,6 +94,8 @@ internal sealed record PackReport
     public required long TotalSize { get; init; }
 
     public required bool IsSigned { get; init; }
+
+    public required string Compression { get; init; }
 }
 
 /// <summary>Source-generated JSON metadata for CLI reports.</summary>

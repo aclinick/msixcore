@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml;
@@ -38,6 +39,56 @@ internal static class BlockMapWriter
         return new BlockMapFile { Name = name, Size = size, Blocks = blocks };
     }
 
+    public static CompressedBlockMapFile CompressAndHash(
+        string name,
+        Stream source,
+        Stream destination,
+        CompressionLevel compressionLevel)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
+
+        byte[] buffer = new byte[BlockMap.BlockSize];
+        var blocks = new List<BlockMapBlock>();
+        var crc32 = new Crc32Calculator();
+        long uncompressedSize = 0;
+        long compressedSize = 0;
+
+        while (true)
+        {
+            int length = ReadBlock(source, buffer);
+            if (length == 0)
+            {
+                break;
+            }
+
+            ReadOnlySpan<byte> block = buffer.AsSpan(0, length);
+            crc32.Append(block);
+            byte[] hash = SHA256.HashData(block);
+            byte[] compressed = CompressBlock(block, compressionLevel);
+            destination.Write(compressed);
+            blocks.Add(new BlockMapBlock
+            {
+                Hash = Convert.ToBase64String(hash),
+                CompressedSize = compressed.Length,
+            });
+            uncompressedSize += length;
+            compressedSize += compressed.Length;
+        }
+
+        // MakeAppx terminates the single ZIP deflate stream after its independently restartable,
+        // full-flushed blocks. The two-byte terminator is entry overhead and is not a Block Size.
+        destination.Write([0x03, 0x00]);
+        compressedSize += 2;
+
+        return new CompressedBlockMapFile(
+            new BlockMapFile { Name = name, Size = uncompressedSize, Blocks = blocks },
+            crc32.Value,
+            ToUInt32(compressedSize, "compressed size"),
+            ToUInt32(uncompressedSize, "uncompressed size"));
+    }
+
     public static byte[] Write(IReadOnlyList<AuthoredBlockMapFile> files)
     {
         ArgumentNullException.ThrowIfNull(files);
@@ -63,6 +114,13 @@ internal static class BlockMapWriter
                 {
                     writer.WriteStartElement("Block", BlockMapNamespace);
                     writer.WriteAttributeString("Hash", block.Hash);
+                    if (block.CompressedSize is long compressedSize)
+                    {
+                        writer.WriteAttributeString(
+                            "Size",
+                            compressedSize.ToString(CultureInfo.InvariantCulture));
+                    }
+
                     writer.WriteEndElement();
                 }
 
@@ -93,6 +151,28 @@ internal static class BlockMapWriter
         return filled;
     }
 
+    private static byte[] CompressBlock(ReadOnlySpan<byte> block, CompressionLevel compressionLevel)
+    {
+        using var output = new MemoryStream();
+        CompressionLevel effectiveLevel = compressionLevel == CompressionLevel.Optimal
+            ? CompressionLevel.SmallestSize
+            : compressionLevel;
+        using var compressor = new DeflateStream(output, effectiveLevel, leaveOpen: true);
+        compressor.Write(block);
+        compressor.Flush();
+        return output.ToArray();
+    }
+
+    private static uint ToUInt32(long value, string description)
+    {
+        if (value < 0 || value > uint.MaxValue)
+        {
+            throw new NotSupportedException($"ZIP entry {description} exceeds the non-ZIP64 limit.");
+        }
+
+        return (uint)value;
+    }
+
     private static XmlWriterSettings CreateSettings() => new()
     {
         Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
@@ -102,3 +182,9 @@ internal static class BlockMapWriter
 }
 
 internal sealed record AuthoredBlockMapFile(BlockMapFile File, int LocalFileHeaderSize);
+
+internal sealed record CompressedBlockMapFile(
+    BlockMapFile File,
+    uint Crc32,
+    uint CompressedSize,
+    uint UncompressedSize);

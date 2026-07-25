@@ -9,8 +9,9 @@ public sealed record PackOptions
     public bool Overwrite { get; init; }
 
     /// <summary>
-    /// The ZIP compression level. Only <see cref="CompressionLevel.NoCompression"/> is currently
-    /// supported because MSIX compression must operate independently on each 64 KiB block.
+    /// The MSIX payload compression level. <see cref="CompressionLevel.NoCompression"/> preserves the
+    /// deterministic Stored output; <see cref="CompressionLevel.Optimal"/> uses MakeAppx-compatible,
+    /// independently restartable raw-DEFLATE blocks.
     /// </summary>
     public CompressionLevel CompressionLevel { get; init; } = CompressionLevel.NoCompression;
 }

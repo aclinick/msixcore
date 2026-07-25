@@ -85,6 +85,31 @@ public sealed class AuthoringTests : IDisposable
         Assert.Empty(emptyElement.Elements());
     }
 
+    [Fact]
+    public void BlockMapWriter_CompressedBlocks_EmitsMakeAppxSizes()
+    {
+        byte[] content = Enumerable.Repeat((byte)'A', BlockMap.BlockSize + 123).ToArray();
+        using var compressed = new MemoryStream();
+
+        CompressedBlockMapFile result = BlockMapWriter.CompressAndHash(
+            "data.bin",
+            new MemoryStream(content),
+            compressed,
+            CompressionLevel.Optimal);
+
+        Assert.Equal([84L, 10L], result.File.Blocks.Select(static block => block.CompressedSize));
+        Assert.Equal(96U, result.CompressedSize);
+        Assert.Equal([0x03, 0x00], compressed.ToArray()[^2..]);
+
+        XDocument document = LoadXml(BlockMapWriter.Write(
+            [new AuthoredBlockMapFile(result.File, 38)]));
+        Assert.Equal(
+            ["84", "10"],
+            document.Root!.Descendants()
+                .Where(static element => element.Name.LocalName == "Block")
+                .Select(static element => element.Attribute("Size")!.Value));
+    }
+
     [Theory]
     [InlineData("plain.txt", "plain.txt")]
     [InlineData("space name.txt", "space%20name.txt")]
@@ -255,7 +280,7 @@ public sealed class AuthoringTests : IDisposable
     }
 
     [Fact]
-    public void Build_RejectsWholeEntryCompression()
+    public void Build_RejectsUnsupportedCompressionLevel()
     {
         string source = CreateSource("invalid-compression");
 
@@ -263,9 +288,134 @@ public sealed class AuthoringTests : IDisposable
             () => MsixPackageBuilder.Build(
                 source,
                 Path.Combine(_root, "invalid-compression.msix"),
-                new PackOptions { CompressionLevel = CompressionLevel.Optimal }));
+                new PackOptions { CompressionLevel = CompressionLevel.Fastest }));
 
-        Assert.Contains("stored", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CompressionLevel.Optimal", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_BlockDeflate_RoundTripsIndependentBlocksAndPreservesLfhSize()
+    {
+        string source = CreateSource("block-deflate");
+        byte[] compressible = Enumerable.Repeat((byte)'A', (BlockMap.BlockSize * 2) + 123).ToArray();
+        byte[] incompressible = new byte[BlockMap.BlockSize + 123];
+        new Random(41).NextBytes(incompressible);
+        byte[] png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+        WritePayload(source, "Data/compressible.bin", compressible);
+        WritePayload(source, "Data/incompressible.bin", incompressible);
+        WritePayload(source, "Assets/logo.png", png);
+        string output = Path.Combine(_root, "block-deflate.msix");
+
+        PackResult result = MsixPackageBuilder.Build(
+            source,
+            output,
+            new PackOptions { CompressionLevel = CompressionLevel.Optimal });
+
+        Assert.Equal(CompressionLevel.Optimal, result.CompressionLevel);
+        Dictionary<string, LocalHeader> headers = ReadLocalHeaders(output);
+        Assert.Equal(8, headers["Data/compressible.bin"].CompressionMethod);
+        Assert.Equal(8, headers["Data/incompressible.bin"].CompressionMethod);
+        Assert.Equal(8, headers["empty.dat"].CompressionMethod);
+        Assert.Equal(0, headers["Assets/logo.png"].CompressionMethod);
+        Assert.Equal(2U, headers["empty.dat"].CompressedSize);
+
+        using MsixPackage package = MsixPackage.Open(output);
+        Assert.True(package.VerifyBlockMap().IsValid);
+        BlockMapFile compressedFile = package.BlockMap.Files.Single(
+            static file => file.Name == "Data/compressible.bin");
+        BlockMapFile incompressibleFile = package.BlockMap.Files.Single(
+            static file => file.Name == "Data/incompressible.bin");
+        BlockMapFile pngFile = package.BlockMap.Files.Single(
+            static file => file.Name == "Assets/logo.png");
+        Assert.Equal([84L, 84L, 10L], compressedFile.Blocks.Select(static block => block.CompressedSize));
+        Assert.True(incompressibleFile.Blocks[0].CompressedSize > BlockMap.BlockSize);
+        Assert.All(incompressibleFile.Blocks, static block => Assert.NotNull(block.CompressedSize));
+        Assert.All(pngFile.Blocks, static block => Assert.Null(block.CompressedSize));
+
+        foreach (BlockMapFile file in package.BlockMap.Files)
+        {
+            LocalHeader header = headers[file.Name];
+            Assert.Equal(30 + Encoding.UTF8.GetByteCount(OpcPartNameEncoder.Encode(file.Name)), header.Size);
+            if (header.CompressionMethod == 8)
+            {
+                Assert.Equal(
+                    header.CompressedSize,
+                    checked((uint)(file.Blocks.Sum(static block => block.CompressedSize!.Value) + 2)));
+                AssertIndependentBlocks(output, header, file);
+            }
+        }
+
+        using Stream payload = package.Opc.OpenPart("Data/incompressible.bin");
+        using var copy = new MemoryStream();
+        payload.CopyTo(copy);
+        Assert.Equal(incompressible, copy.ToArray());
+    }
+
+    [Fact]
+    public void Build_BlockDeflate_ExactBlockMultiplesHaveNoTrailingEmptyBlock()
+    {
+        string source = CreateSource("exact-block-multiples");
+        PrepareMakeAppxCompatibleSource(source);
+        byte[] oneBlockCompressible = Enumerable.Repeat((byte)'A', BlockMap.BlockSize).ToArray();
+        byte[] twoBlocksIncompressible = new byte[BlockMap.BlockSize * 2];
+        new Random(41).NextBytes(twoBlocksIncompressible);
+        WritePayload(source, "Data/exact-one.bin", oneBlockCompressible);
+        WritePayload(source, "Data/exact-two.bin", twoBlocksIncompressible);
+        string output = Path.Combine(_root, "exact-block-multiples.msix");
+
+        MsixPackageBuilder.Build(
+            source,
+            output,
+            new PackOptions { CompressionLevel = CompressionLevel.Optimal });
+
+        Dictionary<string, LocalHeader> headers = ReadLocalHeaders(output);
+        using (MsixPackage package = MsixPackage.Open(output))
+        {
+            Assert.True(package.VerifyBlockMap().IsValid);
+            AssertExactBlockMultiple(
+                output,
+                package.BlockMap.Files.Single(static file => file.Name == "Data/exact-one.bin"),
+                headers["Data/exact-one.bin"],
+                oneBlockCompressible,
+                expectedBlockCount: 1);
+            AssertExactBlockMultiple(
+                output,
+                package.BlockMap.Files.Single(static file => file.Name == "Data/exact-two.bin"),
+                headers["Data/exact-two.bin"],
+                twoBlocksIncompressible,
+                expectedBlockCount: 2);
+        }
+
+        string? makeAppx = FindMakeAppx();
+        if (makeAppx is not null)
+        {
+            string unpacked = Path.Combine(_root, "exact-block-multiples-unpacked");
+            (int exitCode, string diagnostics) = RunProcess(
+                makeAppx,
+                "unpack", "/o", "/p", output, "/d", unpacked);
+            Assert.True(exitCode == 0, diagnostics);
+            Assert.Equal(oneBlockCompressible, File.ReadAllBytes(Path.Combine(unpacked, "Data", "exact-one.bin")));
+            Assert.Equal(twoBlocksIncompressible, File.ReadAllBytes(Path.Combine(unpacked, "Data", "exact-two.bin")));
+        }
+    }
+
+    [Fact]
+    public void Build_BlockDeflate_IsByteDeterministic()
+    {
+        string source = CreateSource("deflate-determinism");
+        WritePayload(
+            source,
+            "Data/value.bin",
+            Enumerable.Range(0, BlockMap.BlockSize + 17).Select(static value => (byte)(value % 251)).ToArray());
+        string first = Path.Combine(_root, "deflate-first.msix");
+        string second = Path.Combine(_root, "deflate-second.msix");
+        var options = new PackOptions { CompressionLevel = CompressionLevel.Optimal };
+
+        MsixPackageBuilder.Build(source, first, options);
+        MsixPackageBuilder.Build(source, second, options);
+
+        Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(second));
     }
 
     [Fact]
@@ -306,6 +456,71 @@ public sealed class AuthoringTests : IDisposable
         }
 
         string source = CreateSource("makeappx");
+        PrepareMakeAppxCompatibleSource(source);
+        WritePayload(
+            source,
+            "Data/sample.bin",
+            Enumerable.Range(0, BlockMap.BlockSize + 41).Select(static value => (byte)(value % 239)).ToArray());
+        string authoredOutput = Path.Combine(_root, "authored.msix");
+        string makeAppxOutput = Path.Combine(_root, "makeappx.msix");
+        string unpackedOutput = Path.Combine(_root, "makeappx-unpacked");
+        MsixPackageBuilder.Build(
+            source,
+            authoredOutput,
+            new PackOptions { CompressionLevel = CompressionLevel.Optimal });
+
+        (int packExitCode, string packDiagnostics) = RunProcess(
+            makeAppx,
+            "pack", "/nv", "/o", "/d", source, "/p", makeAppxOutput);
+        Assert.True(packExitCode == 0, packDiagnostics);
+
+        using MsixPackage authored = MsixPackage.Open(authoredOutput);
+        using MsixPackage reference = MsixPackage.Open(makeAppxOutput);
+        Dictionary<string, string[]> authoredHashes = authored.BlockMap.Files.ToDictionary(
+            static file => file.Name,
+            static file => file.Blocks.Select(static block => block.Hash).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string[]> referenceHashes = reference.BlockMap.Files.ToDictionary(
+            static file => file.Name,
+            static file => file.Blocks.Select(static block => block.Hash).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(referenceHashes.Keys.Order(StringComparer.OrdinalIgnoreCase), authoredHashes.Keys.Order(StringComparer.OrdinalIgnoreCase));
+        foreach ((string name, string[] hashes) in referenceHashes)
+        {
+            Assert.Equal(hashes, authoredHashes[name]);
+        }
+
+        Dictionary<string, long?[]> authoredSizes = authored.BlockMap.Files.ToDictionary(
+            static file => file.Name,
+            static file => file.Blocks.Select(static block => block.CompressedSize).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, long?[]> referenceSizes = reference.BlockMap.Files.ToDictionary(
+            static file => file.Name,
+            static file => file.Blocks.Select(static block => block.CompressedSize).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, long?[] sizes) in referenceSizes)
+        {
+            Assert.Equal(sizes, authoredSizes[name]);
+        }
+
+        Assert.True(authored.VerifyBlockMap().IsValid);
+
+        (int unpackExitCode, string unpackDiagnostics) = RunProcess(
+            makeAppx,
+            "unpack", "/o", "/p", authoredOutput, "/d", unpackedOutput);
+        Assert.True(unpackExitCode == 0, unpackDiagnostics);
+        foreach (string sourceFile in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(source, sourceFile);
+            Assert.Equal(
+                File.ReadAllBytes(sourceFile),
+                File.ReadAllBytes(Path.Combine(unpackedOutput, relativePath)));
+        }
+    }
+
+    private static void PrepareMakeAppxCompatibleSource(string source)
+    {
         File.WriteAllText(
             Path.Combine(source, OpcPartNames.AppxManifest),
             """
@@ -345,47 +560,6 @@ public sealed class AuthoringTests : IDisposable
         WritePayload(source, "Assets/Square150x150Logo.png", png);
         WritePayload(source, "Assets/Square44x44Logo.png", png);
         WritePayload(source, "app.exe", []);
-        WritePayload(
-            source,
-            "Data/sample.bin",
-            Enumerable.Range(0, BlockMap.BlockSize + 41).Select(static value => (byte)(value % 239)).ToArray());
-        string authoredOutput = Path.Combine(_root, "authored.msix");
-        string makeAppxOutput = Path.Combine(_root, "makeappx.msix");
-        string unpackedOutput = Path.Combine(_root, "makeappx-unpacked");
-        MsixPackageBuilder.Build(source, authoredOutput);
-
-        (int packExitCode, string packDiagnostics) = RunProcess(
-            makeAppx,
-            "pack", "/nv", "/o", "/d", source, "/p", makeAppxOutput);
-        Assert.True(packExitCode == 0, packDiagnostics);
-
-        using MsixPackage authored = MsixPackage.Open(authoredOutput);
-        using MsixPackage reference = MsixPackage.Open(makeAppxOutput);
-        Dictionary<string, string[]> authoredHashes = authored.BlockMap.Files.ToDictionary(
-            static file => file.Name,
-            static file => file.Blocks.Select(static block => block.Hash).ToArray(),
-            StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string[]> referenceHashes = reference.BlockMap.Files.ToDictionary(
-            static file => file.Name,
-            static file => file.Blocks.Select(static block => block.Hash).ToArray(),
-            StringComparer.OrdinalIgnoreCase);
-
-        Assert.Equal(referenceHashes.Keys.Order(StringComparer.OrdinalIgnoreCase), authoredHashes.Keys.Order(StringComparer.OrdinalIgnoreCase));
-        foreach ((string name, string[] hashes) in referenceHashes)
-        {
-            Assert.Equal(hashes, authoredHashes[name]);
-        }
-
-        (int unpackExitCode, string unpackDiagnostics) = RunProcess(
-            makeAppx,
-            "unpack", "/o", "/p", authoredOutput, "/d", unpackedOutput);
-        Assert.True(unpackExitCode == 0, unpackDiagnostics);
-        Assert.Equal(
-            File.ReadAllBytes(Path.Combine(source, "Data", "sample.bin")),
-            File.ReadAllBytes(Path.Combine(unpackedOutput, "Data", "sample.bin")));
-        Assert.Equal(
-            File.ReadAllBytes(Path.Combine(source, OpcPartNames.AppxManifest)),
-            File.ReadAllBytes(Path.Combine(unpackedOutput, OpcPartNames.AppxManifest)));
     }
 
     private string CreateSource(string name)
@@ -424,10 +598,15 @@ public sealed class AuthoringTests : IDisposable
             return null;
         }
 
-        return Directory.EnumerateFiles(kitsBin, "makeappx.exe", SearchOption.AllDirectories)
-            .Where(static path => path.Contains($"{Path.DirectorySeparatorChar}x64{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+        string[] candidates = Directory.EnumerateFiles(kitsBin, "makeappx.exe", SearchOption.AllDirectories)
             .Order(StringComparer.OrdinalIgnoreCase)
-            .LastOrDefault();
+            .ToArray();
+        return candidates.LastOrDefault(static path => path.Contains(
+                $"{Path.DirectorySeparatorChar}arm64{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase))
+            ?? candidates.LastOrDefault(static path => path.Contains(
+                $"{Path.DirectorySeparatorChar}x64{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private static (int ExitCode, string Diagnostics) RunProcess(string fileName, params string[] arguments)
@@ -463,17 +642,113 @@ public sealed class AuthoringTests : IDisposable
         {
             ushort compressionMethod = BinaryPrimitives.ReadUInt16LittleEndian(package.AsSpan(offset + 8, 2));
             uint compressedSize = BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(offset + 18, 4));
+            uint crc32 = BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(offset + 14, 4));
             ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(package.AsSpan(offset + 26, 2));
             ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(package.AsSpan(offset + 28, 2));
             int localHeaderSize = 30 + nameLength + extraLength;
             string rawName = Encoding.UTF8.GetString(package, offset + 30, nameLength);
             Assert.True(OpcPackage.TryCanonicalizePartName(rawName, out string name));
-            headers.Add(name, new LocalHeader(localHeaderSize, compressionMethod));
+            uint uncompressedSize = BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(offset + 22, 4));
+            headers.Add(name, new LocalHeader(
+                localHeaderSize,
+                compressionMethod,
+                crc32,
+                compressedSize,
+                uncompressedSize,
+                offset + localHeaderSize));
             offset = checked(offset + localHeaderSize + (int)compressedSize);
         }
 
         return headers;
     }
 
-    private sealed record LocalHeader(int Size, ushort CompressionMethod);
+    private static void AssertIndependentBlocks(string packagePath, LocalHeader header, BlockMapFile file)
+    {
+        byte[] package = File.ReadAllBytes(packagePath);
+        int offset = header.DataOffset;
+        long remaining = file.Size;
+        foreach (BlockMapBlock block in file.Blocks)
+        {
+            int compressedSize = checked((int)block.CompressedSize!.Value);
+            byte[] terminated = new byte[compressedSize + 2];
+            package.AsSpan(offset, compressedSize).CopyTo(terminated);
+            terminated[^2] = 0x03;
+            terminated[^1] = 0x00;
+            offset += compressedSize;
+
+            using var compressed = new MemoryStream(terminated);
+            using var inflater = new DeflateStream(compressed, CompressionMode.Decompress);
+            using var uncompressed = new MemoryStream();
+            inflater.CopyTo(uncompressed);
+            int expectedSize = checked((int)Math.Min(BlockMap.BlockSize, remaining));
+            Assert.Equal(expectedSize, uncompressed.Length);
+            Assert.Equal(
+                block.Hash,
+                Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(uncompressed.ToArray())));
+            remaining -= expectedSize;
+        }
+
+        Assert.Equal(0, remaining);
+        Assert.Equal([0x03, 0x00], package.AsSpan(offset, 2).ToArray());
+    }
+
+    private static void AssertExactBlockMultiple(
+        string packagePath,
+        BlockMapFile file,
+        LocalHeader header,
+        byte[] expected,
+        int expectedBlockCount)
+    {
+        Assert.Equal(expectedBlockCount, file.Blocks.Count);
+        Assert.Equal((long)expectedBlockCount * BlockMap.BlockSize, file.Size);
+        Assert.Equal(8, header.CompressionMethod);
+        Assert.Equal((uint)expected.Length, header.UncompressedSize);
+        Assert.Equal(
+            header.CompressedSize,
+            checked((uint)(file.Blocks.Sum(static block => block.CompressedSize!.Value) + 2)));
+        Assert.Equal(ComputeCrc32(expected), header.Crc32);
+
+        if (expectedBlockCount == 1)
+        {
+            Assert.True(file.Blocks[0].CompressedSize < BlockMap.BlockSize);
+        }
+        else
+        {
+            Assert.All(file.Blocks, static block => Assert.True(block.CompressedSize > BlockMap.BlockSize));
+        }
+
+        byte[] package = File.ReadAllBytes(packagePath);
+        using var compressed = new MemoryStream(
+            package,
+            header.DataOffset,
+            checked((int)header.CompressedSize),
+            writable: false);
+        using var inflater = new DeflateStream(compressed, CompressionMode.Decompress);
+        using var uncompressed = new MemoryStream();
+        inflater.CopyTo(uncompressed);
+        Assert.Equal(expected, uncompressed.ToArray());
+    }
+
+    private static uint ComputeCrc32(ReadOnlySpan<byte> bytes)
+    {
+        uint crc = uint.MaxValue;
+        foreach (byte value in bytes)
+        {
+            crc ^= value;
+            for (int bit = 0; bit < 8; bit++)
+            {
+                crc = (crc >> 1) ^ ((crc & 1) == 0 ? 0 : 0xEDB88320);
+            }
+        }
+
+        return ~crc;
+    }
+
+    private sealed record LocalHeader(
+        int Size,
+        ushort CompressionMethod,
+        uint Crc32,
+        uint CompressedSize,
+        uint UncompressedSize,
+        int DataOffset);
 }

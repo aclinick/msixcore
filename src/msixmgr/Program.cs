@@ -26,7 +26,7 @@ public static class Program
             UnpackCommand.Run),
         new(
             "pack",
-            "<sourceDir> -o|--output <file.msix> [--overwrite] [--json]",
+            "<sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]",
             "Build an unsigned MSIX package (alias: makemsix).",
             PackCommand.Run,
             ["makemsix"]),
