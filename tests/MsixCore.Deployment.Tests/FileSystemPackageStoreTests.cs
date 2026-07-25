@@ -51,6 +51,33 @@ public class FileSystemPackageStoreTests : IDisposable
     }
 
     [Fact]
+    public void ManifestLookup_IsCaseInsensitiveOnCaseSensitiveFileSystems()
+    {
+        string directory = LoosePackageBuilder.Create(_root, "pkgA");
+        string manifest = Path.Combine(directory, "AppxManifest.xml");
+        string temporary = Path.Combine(directory, "manifest.tmp");
+        string lowerCaseManifest = Path.Combine(directory, "appxmanifest.xml");
+        File.Move(manifest, temporary);
+        File.Move(temporary, lowerCaseManifest);
+
+        var store = new FileSystemPackageStore(_root);
+        Assert.True(store.Contains("pkgA"));
+
+        IReadOnlyList<IInstalledPackage> packages = store.EnumeratePackages();
+        try
+        {
+            Assert.Single(packages);
+        }
+        finally
+        {
+            foreach (IInstalledPackage package in packages)
+            {
+                package.Dispose();
+            }
+        }
+    }
+
+    [Fact]
     public void EnumeratePackages_IgnoresFoldersWithoutManifest()
     {
         Directory.CreateDirectory(Path.Combine(_root, "not-a-package"));
@@ -155,7 +182,7 @@ public class FileSystemPackageStoreTests : IDisposable
         Assert.Empty(store.EnumeratePackages());
     }
 
-    [Fact]
+    [WindowsFact]
     public void Commit_BackupDeleteFailure_StillReportsSuccess()
     {
         var store = new FileSystemPackageStore(_root);
@@ -212,14 +239,9 @@ public class FileSystemPackageStoreTests : IDisposable
         Assert.True(File.Exists(Path.Combine(store.GetInstallLocation(fullName), "AppxManifest.xml")));
     }
 
-    [Fact]
+    [WindowsFact]
     public void Commit_ConcurrentCommits_DifferentRootCasing_LeaveConsistentState()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return; // Only Windows resolves differently-cased paths to the same directory.
-        }
-
         // Two stores whose roots differ only by case address the same directory on Windows; the
         // promotion gate must treat them as the same destination so concurrent commits still serialize.
         var lower = new FileSystemPackageStore(_root);
@@ -242,10 +264,25 @@ public class FileSystemPackageStoreTests : IDisposable
     [InlineData("../escape")]
     [InlineData("a/b")]
     [InlineData("a\\b")]
+    [InlineData("a:b")]
+    [InlineData("a?b")]
+    [InlineData("trailing.")]
+    [InlineData("trailing ")]
     [InlineData("..")]
-    public void GetInstallLocation_TraversingFullName_Throws(string fullName)
+    public void GetInstallLocation_InvalidFullName_Throws(string fullName)
     {
         var store = new FileSystemPackageStore(_root);
         Assert.Throws<ArgumentException>(() => store.GetInstallLocation(fullName));
+    }
+}
+
+public sealed class WindowsFactAttribute : FactAttribute
+{
+    public WindowsFactAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Skip = "This test requires Windows case-insensitive path semantics.";
+        }
     }
 }

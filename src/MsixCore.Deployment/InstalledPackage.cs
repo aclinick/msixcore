@@ -76,7 +76,7 @@ public sealed class InstalledPackage : IInstalledPackage
 
         // A manifest is untrusted input: reject rooted paths or ".." escapes that would resolve the
         // executable outside the install location.
-        if (Path.IsPathRooted(relative))
+        if (Path.IsPathRooted(relative) || IsWindowsDrivePath(relative))
         {
             return null;
         }
@@ -97,4 +97,7 @@ public sealed class InstalledPackage : IInstalledPackage
             WorkingDirectory = root,
         };
     }
+
+    private static bool IsWindowsDrivePath(string path) =>
+        path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':';
 }
