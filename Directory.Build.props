@@ -12,11 +12,26 @@
     <!-- Keep the library cross-platform: opt out of Windows-only API warnings only where guarded. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <Deterministic>true</Deterministic>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>preview.1</VersionSuffix>
     <Company>msixcore contributors</Company>
     <Product>MSIX Core (.NET)</Product>
     <Copyright>Copyright (c) msixcore contributors. MIT License.</Copyright>
+    <Authors>msixcore contributors</Authors>
+    <Description>Cross-platform .NET libraries and command-line tooling for inspecting, validating, unpacking, and deploying MSIX/APPX packages.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/aclinick/msixcore</PackageProjectUrl>
     <RepositoryUrl>https://github.com/aclinick/msixcore</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageTags>msix;appx;packaging;deployment;cross-platform</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 
 </Project>

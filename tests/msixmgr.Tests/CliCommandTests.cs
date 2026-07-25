@@ -182,10 +182,38 @@ public class CliCommandTests : IDisposable
     }
 
     [Fact]
-    public void Program_Help_ReturnsZeroAndListsVerbs()
+    public void Program_HelpAndDispatchUseTheSameVerbRegistry()
     {
-        int code = Program.Main(["--help"]);
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        int code = Program.Run(["--help"], output, error);
+
         Assert.Equal(0, code);
+        Assert.Empty(error.ToString());
+
+        string help = output.ToString();
+        string verbSection = help.Split("Verbs:", StringSplitOptions.None)[1]
+            .Split("<path> may be", StringSplitOptions.None)[0];
+        string[] helpVerbs = verbSection
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.TrimStart().Split(' ', 2)[0])
+            .ToArray();
+        string[] registeredVerbs = Program.Verbs.Select(static verb => verb.Name).ToArray();
+
+        Assert.Equal(registeredVerbs, helpVerbs);
+
+        foreach (string verb in helpVerbs)
+        {
+            output.GetStringBuilder().Clear();
+            error.GetStringBuilder().Clear();
+
+            int dispatchCode = Program.Run([verb], output, error);
+
+            Assert.Equal(2, dispatchCode);
+            Assert.Contains($"msixmgr {verb}:", error.ToString());
+            Assert.DoesNotContain("unknown verb", error.ToString());
+        }
     }
 
     [Fact]

@@ -3,42 +3,62 @@ using System.Reflection;
 namespace MsixMgr;
 
 /// <summary>
-/// Entry point for the <c>msixmgr</c> command-line tool. Phase 0 wires up help/version and the
-/// verb surface; full verb behavior lands in Phase 7.
+/// Entry point for the <c>msixmgr</c> command-line tool.
 /// </summary>
 public static class Program
 {
+    private static readonly CliVerb[] s_verbs =
+    [
+        new(
+            "inspect",
+            "<path> [--json]",
+            "Show package identity and metadata.",
+            InspectCommand.Run),
+        new(
+            "validate",
+            "<path> [--json]",
+            "Verify integrity (block map + signature); CI exit code.",
+            ValidateCommand.Run),
+        new(
+            "unpack",
+            "<path> -Destination <dir> [--json]",
+            "Extract a package to a loose layout without installing.",
+            UnpackCommand.Run),
+    ];
+
+    internal static IReadOnlyList<CliVerb> Verbs => s_verbs;
+
     /// <summary>Process entry point.</summary>
     /// <param name="args">Command-line arguments.</param>
     /// <returns>Process exit code (0 = success).</returns>
     public static int Main(string[] args)
+        => Run(args, Console.Out, Console.Error);
+
+    internal static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter error)
     {
-        if (args.Length == 0 || IsHelp(args[0]))
+        if (args.Count == 0 || IsHelp(args[0]))
         {
-            PrintUsage();
+            PrintUsage(output);
             return 0;
         }
 
         if (IsVersion(args[0]))
         {
-            Console.WriteLine(GetVersion());
+            output.WriteLine(GetVersion());
             return 0;
         }
 
-        string[] rest = args[1..];
-        switch (args[0])
+        CliVerb? verb = Array.Find(
+            s_verbs,
+            candidate => string.Equals(candidate.Name, args[0], StringComparison.Ordinal));
+        if (verb is null)
         {
-            case "inspect":
-                return InspectCommand.Run(rest, Console.Out, Console.Error);
-            case "validate":
-                return ValidateCommand.Run(rest, Console.Out, Console.Error);
-            case "unpack":
-                return UnpackCommand.Run(rest, Console.Out, Console.Error);
-            default:
-                Console.Error.WriteLine($"msixmgr: verb '{args[0]}' is not implemented yet.");
-                Console.Error.WriteLine("Run 'msixmgr --help' for usage.");
-                return 2;
+            error.WriteLine($"msixmgr: unknown verb '{args[0]}'.");
+            error.WriteLine("Run 'msixmgr --help' for usage.");
+            return 2;
         }
+
+        return verb.Run(args.Skip(1).ToArray(), output, error);
     }
 
     private static bool IsHelp(string arg) =>
@@ -50,24 +70,27 @@ public static class Program
     internal static string GetVersion() =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
 
-    private static void PrintUsage()
+    private static void PrintUsage(TextWriter output)
     {
-        Console.WriteLine(
+        output.WriteLine(
             """
             msixmgr - MSIX Core (.NET) command-line tool
 
             Usage:
               msixmgr <verb> [options]
 
-            Verbs (implemented incrementally):
-              inspect <path> [--json]     Show package identity and metadata.
-              validate <path> [--json]    Verify integrity (block map + signature); CI exit code.
-              unpack <path> -Destination <dir> [--json]
-                                          Extract a package to a loose layout without installing.
-              -AddPackage <path>          Install an MSIX/APPX package.
-              -RemovePackage <fullName>   Uninstall a package by full name.
-              -FindPackage <pattern>      Query installed packages (supports * and ?).
+            Verbs:
+            """);
 
+        int usageWidth = s_verbs.Max(static verb => verb.Usage.Length) + 2;
+        foreach (CliVerb verb in s_verbs)
+        {
+            output.WriteLine($"  {verb.Usage.PadRight(usageWidth)}{verb.Description}");
+        }
+
+        output.WriteLine();
+        output.WriteLine(
+            """
             <path> may be a package file (.msix/.appx) or an unpacked directory.
 
             Options:
@@ -75,4 +98,13 @@ public static class Program
               -v, --version               Show version information.
             """);
     }
+}
+
+internal sealed record CliVerb(
+    string Name,
+    string Arguments,
+    string Description,
+    Func<IReadOnlyList<string>, TextWriter, TextWriter, int> Run)
+{
+    public string Usage => string.IsNullOrEmpty(Arguments) ? Name : $"{Name} {Arguments}";
 }

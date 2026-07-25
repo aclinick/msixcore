@@ -33,7 +33,7 @@ internal static class UnpackCommand
                     Destination = Path.GetFullPath(destination!),
                     ExtractedPartCount = count,
                 };
-                output.WriteLine(JsonSerializer.Serialize(report, ReportJson.Options));
+                output.WriteLine(JsonSerializer.Serialize(report, ReportJsonContext.Default.UnpackReport));
             }
             else
             {
