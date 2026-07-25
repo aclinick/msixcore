@@ -20,13 +20,15 @@ public static class AppxDigestTableVerifier
 
     /// <summary>
     /// Snapshots the footprint parts from <paramref name="opc"/> once, then verifies the
-    /// digest table against those snapshots. This ensures exactly one read per part,
-    /// eliminating TOCTOU exposure on directory-backed packages.
+    /// digest table against those snapshots. This ensures exactly one read per part within
+    /// a single call, but does <em>not</em> share state with earlier parsing/verification
+    /// phases — use <see cref="VerifyFromSnapshots"/> from <see cref="MsixPackage.VerifySignatureBinding"/>
+    /// for the full single-read-single-hash guarantee across the pipeline.
     /// </summary>
     /// <param name="table">The parsed digest table from the CMS signature.</param>
     /// <param name="opc">The OPC package to verify against.</param>
     /// <returns>A structured result describing the verification outcome for each tag.</returns>
-    public static IndirectDataBindingResult Verify(AppxDigestTable table, IOpcPackage opc)
+    internal static IndirectDataBindingResult Verify(AppxDigestTable table, IOpcPackage opc)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(opc);

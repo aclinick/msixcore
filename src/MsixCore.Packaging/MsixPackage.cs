@@ -24,6 +24,13 @@ public sealed class MsixPackage : IPackage
     /// file on each call.
     /// </summary>
     private readonly Dictionary<string, byte[]> _footprintCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Serializes access to <see cref="_footprintCache"/> so that concurrent calls to
+    /// <see cref="GetFootprintBytes"/> cannot both miss and both read the file (potentially
+    /// reading different bytes at different times on a mutable directory).
+    /// </summary>
+    private readonly object _footprintLock = new();
     private bool _disposed;
 
     private MsixPackage(IOpcPackage opc)
@@ -155,15 +162,21 @@ public sealed class MsixPackage : IPackage
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For <c>AppxBlockMap.xml</c>, binding hashes the exact bytes that were read and parsed
-    /// by <see cref="ReadBlockMap"/>. This single-read-single-hash guarantee eliminates TOCTOU
-    /// exposure on directory-backed packages where each <see cref="IOpcPackage.OpenPart"/> opens
-    /// the live file.
+    /// <strong>Container packages (<c>.msix</c>/<c>.appx</c>):</strong> the underlying ZIP
+    /// archive is opened once from a single stream. The single-read-single-hash guarantee is
+    /// unconditional — no concurrent modification is possible.
     /// </para>
     /// <para>
-    /// <c>[Content_Types].xml</c> and <c>AppxMetadata/CodeIntegrity.cat</c> are not read by any
-    /// earlier verification phase, so they are read here for the first (and only) time and cached
-    /// for consistency.
+    /// <strong>Loose directory packages:</strong> validation is best-effort against a
+    /// concurrently-writable directory. The implementation caches footprint bytes on first read
+    /// and detects parts that appear after open, but a sufficiently-privileged attacker with
+    /// write access to the directory <em>before</em> the package is opened can still present
+    /// crafted content. For a hard security boundary, validate container files, not directories.
+    /// </para>
+    /// <para>
+    /// For <c>AppxBlockMap.xml</c>, binding hashes the exact bytes that were read and parsed
+    /// by the block-map parser. <c>[Content_Types].xml</c> and <c>AppxMetadata/CodeIntegrity.cat</c>
+    /// are read once at binding time and cached.
     /// </para>
     /// </remarks>
     /// <param name="signature">
@@ -192,9 +205,27 @@ public sealed class MsixPackage : IPackage
                 $"Cannot verify signature binding: {signature.DigestTableError ?? "the digest table is not available."}");
         }
 
+        // For directory-backed packages, detect footprint parts that appeared on disk after
+        // the package was opened. The open-time snapshot is frozen, so ContainsPart would
+        // return false for newly-created files — an attacker could slip an unsigned
+        // CodeIntegrity.cat after open and we would never notice. Fail closed on drift.
+        string? driftError = DetectFootprintDrift();
+        if (driftError is not null)
+        {
+            return new IndirectDataBindingResult
+            {
+                IsBindingValid = false,
+                Results = [new DigestEntryResult
+                {
+                    Tag = AppxDigestTag.Axci,
+                    Status = DigestVerificationStatus.DigestMissing,
+                    Detail = driftError,
+                }],
+                Summary = $"APPX indirect-data binding FAILED — {driftError}",
+            };
+        }
+
         // Build a snapshot dictionary from cached footprint bytes.
-        // AppxBlockMap.xml is already cached from ReadBlockMap(); for the other parts we
-        // read once now and cache for the same single-read guarantee.
         var snapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         SnapshotFootprint(OpcPartNames.ContentTypes, snapshots);
         SnapshotFootprint(OpcPartNames.AppxBlockMap, snapshots);
@@ -204,27 +235,75 @@ public sealed class MsixPackage : IPackage
     }
 
     /// <summary>
+    /// For <see cref="DirectoryOpcPackage"/>-backed packages, checks whether any footprint
+    /// part that was absent at open time now exists on the live filesystem. Returns an error
+    /// message if drift is detected, or <see langword="null"/> if safe.
+    /// </summary>
+    /// <remarks>
+    /// Container-backed packages (<c>.msix</c>/<c>.appx</c> files) are inherently safe — the
+    /// ZIP archive is a single immutable stream. This check only applies to loose directories.
+    /// </remarks>
+    private string? DetectFootprintDrift()
+    {
+        if (_opc is not DirectoryOpcPackage dirPkg)
+        {
+            return null; // Container packages: no drift possible.
+        }
+
+        // Footprint parts that binding verification cares about.
+        ReadOnlySpan<string> footprintParts =
+        [
+            OpcPartNames.ContentTypes,
+            OpcPartNames.AppxBlockMap,
+            OpcPartNames.CodeIntegrityCatalog,
+        ];
+
+        string root = dirPkg.RootDirectory;
+        foreach (string partName in footprintParts)
+        {
+            if (_opc.ContainsPart(partName))
+            {
+                continue; // Was present at open time — already in the snapshot, fine.
+            }
+
+            // Check if the file now exists on the live filesystem.
+            string fullPath = Path.Combine(root, partName.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(fullPath))
+            {
+                return $"Footprint part '{partName}' was absent when the package was opened but now exists on disk — the directory has been modified. Binding cannot be trusted.";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Ensures the named part's bytes are in <see cref="_footprintCache"/>, reading from
     /// <see cref="_opc"/> only if not already cached. Returns the cached bytes. This is the
     /// single choke-point for all footprint-part reads — every method that needs raw footprint
     /// bytes must go through here so there is exactly one read per part per package lifetime.
+    /// Serialized by <see cref="_footprintLock"/> so concurrent callers cannot both miss and
+    /// both read.
     /// </summary>
     /// <returns>The cached bytes, or <see langword="null"/> if the part does not exist.</returns>
     private byte[]? GetFootprintBytes(string partName)
     {
-        if (_footprintCache.TryGetValue(partName, out byte[]? cached))
+        lock (_footprintLock)
         {
+            if (_footprintCache.TryGetValue(partName, out byte[]? cached))
+            {
+                return cached;
+            }
+
+            if (!_opc.ContainsPart(partName))
+            {
+                return null;
+            }
+
+            cached = ReadPartBytesUncached(partName);
+            _footprintCache[partName] = cached;
             return cached;
         }
-
-        if (!_opc.ContainsPart(partName))
-        {
-            return null;
-        }
-
-        cached = ReadPartBytesUncached(partName);
-        _footprintCache[partName] = cached;
-        return cached;
     }
 
     /// <summary>

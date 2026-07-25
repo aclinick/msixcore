@@ -1069,6 +1069,201 @@ public class AppxDigestBindingTests
 
     #endregion
 
+    #region Alert 1 — Verify(table, opc) is internal, not a public bypass
+
+    [Fact]
+    public void VerifyOpcOverload_IsInternal_NotPublicApi()
+    {
+        // The Verify(AppxDigestTable, IOpcPackage) overload must not be public — it bypasses
+        // the MsixPackage footprint cache and TOCTOU protection. Confirm via reflection that
+        // it is not publicly accessible.
+        var method = typeof(AppxDigestTableVerifier).GetMethod(
+            "Verify",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            [typeof(AppxDigestTable), typeof(IOpcPackage)]);
+
+        Assert.Null(method); // Must not be found as a public method.
+    }
+
+    #endregion
+
+    #region Alert 2 — Concurrent access returns consistent bytes
+
+    [Fact]
+    public void Concurrent_VerifyBlockMapAndBinding_SameBytes()
+    {
+        // This test exercises the lock by running VerifyBlockMap and VerifySignatureBinding
+        // concurrently from multiple threads. Both must observe the same block map bytes.
+        // On a mutable directory without the lock, the two threads could both miss the cache
+        // and read at different times.
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-conc-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] payload = "test payload"u8.ToArray();
+            var files = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payload,
+            };
+            byte[] blockMapBytes = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(files));
+
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payload);
+
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            var entries = MakeCorrectEntries(contentTypes, blockMapBytes);
+            AppxDigestTable table = ParseTableDirect(entries);
+            var fakeSig = new PackageSignature
+            {
+                SubjectName = "CN=Test",
+                SubjectNameRawData = ReadOnlyMemory<byte>.Empty,
+                IssuerName = "CN=Test",
+                Thumbprint = "AAAA",
+                NotBefore = DateTimeOffset.UtcNow,
+                NotAfter = DateTimeOffset.UtcNow,
+                IsCmsIntegrityValid = true,
+                DigestTable = table,
+            };
+
+            // Run both operations concurrently multiple times.
+            bool allBindingValid = true;
+            bool allBlockMapValid = true;
+            Parallel.For(0, 20, _ =>
+            {
+                IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
+                if (!binding.IsBindingValid) allBindingValid = false;
+
+                BlockMapVerificationResult bm = package.VerifyBlockMap();
+                if (!bm.IsValid) allBlockMapValid = false;
+            });
+
+            Assert.True(allBindingValid, "All concurrent binding verifications must pass.");
+            Assert.True(allBlockMapValid, "All concurrent block map verifications must pass.");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+    }
+
+    #endregion
+
+    #region Alert 3 — Post-open footprint drift detected
+
+    [Fact]
+    public void DriftDetection_CodeIntegrityCatCreatedAfterOpen_BindingFails()
+    {
+        // Open a directory package that has NO CodeIntegrity.cat.
+        // After open, attacker creates CodeIntegrity.cat on disk.
+        // VerifySignatureBinding must fail closed — the drift detection must catch it.
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-drift-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] payload = "legitimate payload"u8.ToArray();
+            var files = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payload,
+            };
+            byte[] blockMapBytes = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(files));
+
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payload);
+
+            // Open — no CodeIntegrity.cat at this point.
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // Attacker creates CodeIntegrity.cat after open.
+            Directory.CreateDirectory(Path.Combine(dir, "AppxMetadata"));
+            File.WriteAllBytes(Path.Combine(dir, "AppxMetadata", "CodeIntegrity.cat"),
+                new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });
+
+            // Build a valid digest table (no AXCI — the original package didn't have it).
+            var entries = MakeCorrectEntries(contentTypes, blockMapBytes);
+            AppxDigestTable table = ParseTableDirect(entries);
+            var fakeSig = new PackageSignature
+            {
+                SubjectName = "CN=Test",
+                SubjectNameRawData = ReadOnlyMemory<byte>.Empty,
+                IssuerName = "CN=Test",
+                Thumbprint = "AAAA",
+                NotBefore = DateTimeOffset.UtcNow,
+                NotAfter = DateTimeOffset.UtcNow,
+                IsCmsIntegrityValid = true,
+                DigestTable = table,
+            };
+
+            // Must fail closed — attacker-created CodeIntegrity.cat detected.
+            IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
+
+            Assert.False(binding.IsBindingValid,
+                "Binding must FAIL: CodeIntegrity.cat appeared after open — drift detected.");
+            Assert.Contains("now exists on disk", binding.Summary);
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DriftDetection_ContainerPackage_NoDriftCheckNeeded()
+    {
+        // Container (ZIP) packages cannot have post-open drift — confirm no false positive.
+        byte[] contentTypes = "<Types />"u8.ToArray();
+        byte[] blockMap = "<BlockMap />"u8.ToArray();
+        byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+
+        var entries = MakeCorrectEntries(contentTypes, blockMap);
+        var parts = new Dictionary<string, byte[]>
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMap,
+            ["AppxManifest.xml"] = manifest,
+        };
+
+        using MsixPackage package = MsixPackage.Open(BuildOpcStream(parts));
+
+        AppxDigestTable table = ParseTableDirect(entries);
+        var fakeSig = new PackageSignature
+        {
+            SubjectName = "CN=Test",
+            SubjectNameRawData = ReadOnlyMemory<byte>.Empty,
+            IssuerName = "CN=Test",
+            Thumbprint = "AAAA",
+            NotBefore = DateTimeOffset.UtcNow,
+            NotAfter = DateTimeOffset.UtcNow,
+            IsCmsIntegrityValid = true,
+            DigestTable = table,
+        };
+
+        IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
+        Assert.True(binding.IsBindingValid);
+    }
+
+    #endregion
+
     #region Helper methods
 
     /// <summary>Directly constructs an <see cref="AppxDigestTable"/> for verifier tests (bypasses CMS).</summary>
