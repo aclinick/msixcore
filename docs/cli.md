@@ -1,7 +1,8 @@
 # `msixmgr` CLI reference
 
-`msixmgr` is the MSIX Core (.NET) command-line tool. It reads and validates
-MSIX/APPX packages cross-platform. Build it once, then invoke via `dotnet`:
+`msixmgr` is the MSIX Core (.NET) command-line tool. It reads, validates,
+extracts, and authors unsigned MSIX packages cross-platform. Build it once,
+then invoke via `dotnet`:
 
 ```bash
 dotnet build -c Release
@@ -16,8 +17,9 @@ $DLL = "src\msixmgr\bin\Release\net10.0\msixmgr.dll"
 dotnet $DLL --help
 ```
 
-`<path>` may be a package **file** (`.msix`/`.appx`) or an unpacked
-**directory** — both are supported transparently by every verb.
+For `inspect`, `validate`, and `unpack`, `<path>` may be a package **file**
+(`.msix`/`.appx`) or an unpacked **directory**. `pack` specifically requires a
+source directory.
 
 ## Synopsis
 
@@ -30,6 +32,7 @@ msixmgr <verb> [options]
 | `inspect <path> [--json]`              | Implemented   | Show package identity and metadata. |
 | `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
 | `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
+| `pack <sourceDir> -o <file.msix> [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package (`makemsix` alias). |
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
@@ -58,11 +61,13 @@ Usage:
   msixmgr <verb> [options]
 
 Verbs:
-  inspect <path> [--json]                       Show package identity and metadata.
-  validate <path> [--json]                      Verify integrity (block map + signature); CI exit code.
-  unpack <path> -Destination <dir> [--json]     Extract a package to a loose layout without installing.
+  inspect <path> [--json]                                                Show package identity and metadata.
+  validate <path> [--json]                                               Verify integrity (block map + signature); CI exit code.
+  unpack <path> -Destination <dir> [--json]                              Extract a package to a loose layout without installing.
+  pack <sourceDir> -o|--output <file.msix> [--overwrite] [--json]        Build an unsigned MSIX package (alias: makemsix).
 
-<path> may be a package file (.msix/.appx) or an unpacked directory.
+For inspect, validate, and unpack, <path> may be a package file
+(.msix/.appx) or an unpacked directory. pack requires a source directory.
 
 Options:
   -h, --help                  Show this help.
@@ -258,6 +263,42 @@ Extraction is hardened against traversal: a part that would resolve outside the
 destination, or a symlink/junction anywhere on the destination path (including a
 dangling link, or the destination root itself), aborts extraction with exit code
 `1`. See [architecture.md](architecture.md#layer-5--deployment-engine-msixcoredeployment).
+
+## `pack` (`makemsix`)
+
+Builds an unsigned `.msix` from a directory containing `AppxManifest.xml` at
+its root plus payload files:
+
+```console
+$ dotnet $DLL pack ./layout -o ./Contoso.MyApp.msix
+Packed 4 files (70231 bytes) to /abs/path/Contoso.MyApp.msix
+Identity: Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
+```
+
+`makemsix` is an alias for `pack`. Existing output is rejected unless
+`--overwrite` is supplied. Input `AppxBlockMap.xml`, `AppxSignature.p7x`, and
+`[Content_Types].xml` files are ignored; the builder generates fresh block-map
+and content-types parts and does not sign the package. Package entries are
+Stored/uncompressed by default; block-level deflate compression is not yet
+available ([issue #41](https://github.com/aclinick/msixcore/issues/41)).
+
+```console
+$ dotnet $DLL pack ./layout --output ./Contoso.MyApp.msix --json
+{
+  "OutputPath": "/abs/path/Contoso.MyApp.msix",
+  "Name": "Contoso.MyApp",
+  "PackageFullName": "Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt",
+  "PackageFamilyName": "Contoso.MyApp_h91ms92gdsmmt",
+  "Version": "1.2.3.4",
+  "Architecture": "x64",
+  "FileCount": 4,
+  "TotalSize": 70231,
+  "IsSigned": false
+}
+```
+
+Missing/invalid source content or an unwritable output returns exit `1`;
+missing/unknown/extra arguments return exit `2`.
 
 ## Error handling examples
 

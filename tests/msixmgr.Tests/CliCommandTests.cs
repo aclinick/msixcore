@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using MsixCore.Packaging;
 
 namespace MsixMgr.Tests;
 
@@ -35,6 +37,14 @@ public class CliCommandTests : IDisposable
         var o = new StringWriter();
         var e = new StringWriter();
         int code = ValidateCommand.Run(args, o, e);
+        return (code, o.ToString(), e.ToString());
+    }
+
+    private static (int Code, string Out, string Err) RunPack(params string[] args)
+    {
+        var o = new StringWriter();
+        var e = new StringWriter();
+        int code = PackCommand.Run(args, o, e);
         return (code, o.ToString(), e.ToString());
     }
 
@@ -182,6 +192,104 @@ public class CliCommandTests : IDisposable
     }
 
     [Fact]
+    public void Pack_SourceDirectory_CreatesValidPackage()
+    {
+        string source = LooseCliPackage.Create(
+            _root,
+            "pack-source",
+            new Dictionary<string, byte[]> { ["Data/value.txt"] = "payload"u8.ToArray() });
+        string outputPath = Path.Combine(_root, "packed.msix");
+
+        (int code, string output, string error) = RunPack(source, "-o", outputPath);
+
+        Assert.Equal(0, code);
+        Assert.Empty(error);
+        Assert.True(File.Exists(outputPath));
+        Assert.Contains("Identity:", output);
+        Assert.Contains(Path.GetFullPath(outputPath), output);
+        using MsixPackage package = MsixPackage.Open(outputPath);
+        Assert.True(package.VerifyBlockMap().IsValid);
+    }
+
+    [Fact]
+    public void Pack_Json_EmitsStructuredResult()
+    {
+        string source = LooseCliPackage.Create(_root, "pack-json");
+        string outputPath = Path.Combine(_root, "packed-json.msix");
+
+        (int code, string output, _) = RunPack(source, "--output", outputPath, "--json");
+
+        Assert.Equal(0, code);
+        using JsonDocument document = JsonDocument.Parse(output);
+        JsonElement root = document.RootElement;
+        Assert.Equal(Path.GetFullPath(outputPath), root.GetProperty("OutputPath").GetString());
+        Assert.Equal("Contoso.MyApp", root.GetProperty("Name").GetString());
+        Assert.Equal("1.2.3.4", root.GetProperty("Version").GetString());
+        Assert.Equal("x64", root.GetProperty("Architecture").GetString());
+        Assert.False(root.GetProperty("IsSigned").GetBoolean());
+        Assert.True(root.GetProperty("FileCount").GetInt32() >= 1);
+        Assert.True(root.GetProperty("TotalSize").GetInt64() > 0);
+    }
+
+    [Fact]
+    public void Pack_MissingManifest_ReturnsRuntimeError()
+    {
+        string source = Path.Combine(_root, "pack-no-manifest");
+        Directory.CreateDirectory(source);
+        string outputPath = Path.Combine(_root, "missing.msix");
+
+        (int code, _, string error) = RunPack(source, "-o", outputPath);
+
+        Assert.Equal(1, code);
+        Assert.Contains("AppxManifest.xml", error);
+        Assert.False(File.Exists(outputPath));
+    }
+
+    [Theory]
+    [InlineData()]
+    [InlineData("source")]
+    [InlineData("-o", "output.msix")]
+    [InlineData("source", "--bogus")]
+    [InlineData("source", "-o")]
+    public void Pack_BadArguments_ReturnUsageError(params string[] args)
+    {
+        (int code, _, string error) = RunPack(args);
+
+        Assert.Equal(2, code);
+        Assert.Contains("Usage: msixmgr pack", error);
+    }
+
+    [Fact]
+    public void Pack_OverwriteFlagControlsReplacement()
+    {
+        string source = LooseCliPackage.Create(_root, "pack-overwrite");
+        string outputPath = Path.Combine(_root, "overwrite.msix");
+
+        Assert.Equal(0, RunPack(source, "-o", outputPath).Code);
+        (int withoutOverwrite, _, string error) = RunPack(source, "-o", outputPath);
+        (int withOverwrite, _, _) = RunPack(source, "-o", outputPath, "--overwrite");
+
+        Assert.Equal(1, withoutOverwrite);
+        Assert.Contains("already exists", error);
+        Assert.Equal(0, withOverwrite);
+    }
+
+    [Fact]
+    public void Program_MakeMsixAlias_CreatesPackage()
+    {
+        string source = LooseCliPackage.Create(_root, "makemsix-alias");
+        string outputPath = Path.Combine(_root, "alias.msix");
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        int code = Program.Run(["makemsix", source, "-o", outputPath], output, error);
+
+        Assert.Equal(0, code);
+        Assert.Empty(error.ToString());
+        Assert.True(File.Exists(outputPath));
+    }
+
+    [Fact]
     public void Program_HelpAndDispatchUseTheSameVerbRegistry()
     {
         var output = new StringWriter();
@@ -194,7 +302,7 @@ public class CliCommandTests : IDisposable
 
         string help = output.ToString();
         string verbSection = help.Split("Verbs:", StringSplitOptions.None)[1]
-            .Split("<path> may be", StringSplitOptions.None)[0];
+            .Split("For inspect,", StringSplitOptions.None)[0];
         string[] helpVerbs = verbSection
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
             .Select(static line => line.TrimStart().Split(' ', 2)[0])
@@ -202,6 +310,9 @@ public class CliCommandTests : IDisposable
         string[] registeredVerbs = Program.Verbs.Select(static verb => verb.Name).ToArray();
 
         Assert.Equal(registeredVerbs, helpVerbs);
+        CliVerb pack = Assert.Single(Program.Verbs, static verb => verb.Name == "pack");
+        Assert.Contains("makemsix", pack.Aliases!);
+        Assert.Contains("alias: makemsix", help);
 
         foreach (string verb in helpVerbs)
         {

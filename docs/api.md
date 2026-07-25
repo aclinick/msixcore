@@ -6,6 +6,32 @@ source for full details. Types are immutable `record`s unless noted.
 
 ## `MsixCore.Packaging`
 
+### Authoring — `MsixCore.Packaging.Authoring`
+
+`MsixPackageBuilder` creates unsigned `.msix` OPC/ZIP packages and generates
+`AppxBlockMap.xml` plus `[Content_Types].xml`.
+
+| Member | Description |
+|--------|-------------|
+| `static PackResult Build(string sourceDirectory, string outputPath, PackOptions? = null)` | Build from a directory whose root contains `AppxManifest.xml`. |
+| `MsixPackageBuilder SetManifest(Stream)` | Copy manifest bytes from the stream's current position; the caller retains ownership. |
+| `MsixPackageBuilder AddFile(string packagePath, Stream)` | Copy payload bytes immediately; the caller retains ownership. |
+| `MsixPackageBuilder AddFile(string packagePath, string sourcePath)` | Add a payload file that is opened when building. |
+| `PackResult Build(string outputPath, PackOptions? = null)` | Build the programmatically configured package. |
+
+`PackOptions.Overwrite` controls replacement of an existing output.
+`PackOptions.CompressionLevel` defaults to `CompressionLevel.NoCompression`;
+all entries are Stored/uncompressed so their block map and ZIP local headers
+are exactly representable and MSIX-conformant. Other compression levels are
+currently rejected. Spec-conformant 64 KiB block-level deflate is tracked by
+[issue #41](https://github.com/aclinick/msixcore/issues/41).
+`PackResult` reports the absolute output path, manifest `Identity`, block-mapped
+file count, and total uncompressed payload size. The completed package is read
+back and block-map verified before it replaces the requested output.
+
+The builder authors packages only: it does not sign them and does not create
+`.msixbundle` files.
+
 ### `MsixPackage` (sealed class, `IPackage`)
 
 The primary entry point for reading a package from a file, stream, or loose

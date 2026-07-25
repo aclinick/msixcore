@@ -10,10 +10,10 @@ as a modern, memory-safe, **cross-platform** library and CLI.
 
 ## Why
 
-- **Cross-platform, memory-safe MSIX tooling.** Everything that reads and
-  validates a package is pure managed code on top of `System.IO.Compression`,
-  `System.Xml`, and `System.Security.Cryptography` — no Windows-only APIs — so it
-  runs on Linux, macOS, and Windows alike.
+- **Cross-platform, memory-safe MSIX tooling.** Package reading, validation,
+  extraction, and unsigned authoring are pure managed code on top of
+  `System.IO.Compression`, `System.Xml`, and `System.Security.Cryptography` — no
+  Windows-only APIs — so it runs on Linux, macOS, and Windows alike.
 - **Linux CI validation.** `msixmgr validate` verifies block-map integrity and
   signature-envelope integrity and returns a CI-friendly exit code, so a Linux
   build agent can gate MSIX packages before they ship.
@@ -26,30 +26,35 @@ as a modern, memory-safe, **cross-platform** library and CLI.
 
 ## Components
 
-- **`MsixCore.Packaging`** — cross-platform package reading: OPC/ZIP container
-  (`OpcPackage` / `DirectoryOpcPackage`), `AppxManifest.xml` parsing
+- **`MsixCore.Packaging`** — cross-platform package reading and unsigned
+  authoring: OPC/ZIP container (`OpcPackage` / `DirectoryOpcPackage`),
+  `AppxManifest.xml` parsing
   (`AppxManifestParser`), block-map and signature integrity (`BlockMapVerifier`,
-  `PackageSignatureReader`), and identity (`PackageFullName` /
-  `PackageFamilyName`).
+  `PackageSignatureReader`), identity (`PackageFullName` /
+  `PackageFamilyName`), and `MsixPackageBuilder`.
 - **`MsixCore.Deployment`** — install/uninstall/query engine over an
   `IPackageStore`, with cross-platform payload extraction (`PackageExtractor`) and a
   *planned* handler pipeline (interfaces defined, not yet wired).
   `PackageManager.AddPackage`/`RemovePackage` are implemented (transactional install
   with rollback); OS integration (shortcuts, registry, file-type associations) is a
   later phase.
-- **`msixmgr`** — command-line tool. `inspect`, `validate`, and `unpack` are
+- **`msixmgr`** — command-line tool. `inspect`, `validate`, `unpack`, and `pack` are
   implemented. Deployment operations remain available through the
   `MsixCore.Deployment` library until dedicated CLI verbs are implemented.
 
 ## Status
 
 Under active, **phased** development. Each phase lands as its own reviewed PR
-with full test coverage (currently 273 passing tests). The reader
+with full test coverage (currently 314 passing tests). The reader
 (OPC → manifest → block map → signature → identity), the deployment **engine**
 (transactional add/remove driving `IMsixResponse`, cross-platform extraction,
-and query), and the `unpack` CLI verb are implemented; Windows OS-integration
-handlers (shortcuts, registry, associations) are guarded and land in a later
-phase.
+and query), package authoring, and the `unpack`/`pack` CLI verbs are
+implemented; Windows OS-integration handlers (shortcuts, registry,
+associations) are guarded and land in a later phase. Authoring currently
+produces unsigned `.msix` packages; signing and bundle authoring remain
+separate/future capabilities. Authored entries are currently Stored
+(uncompressed) for strict block-map conformance; block-level deflate is tracked
+in [issue #41](https://github.com/aclinick/msixcore/issues/41).
 
 ## Requirements
 

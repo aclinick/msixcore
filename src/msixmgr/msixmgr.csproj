@@ -11,8 +11,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>msixmgr</PackageId>
-    <Description>Cross-platform dotnet tool for inspecting, validating, and unpacking MSIX/APPX packages.</Description>
-    <PackageTags>msix;appx;dotnet-tool;validation;unpack;cross-platform</PackageTags>
+    <Description>Cross-platform dotnet tool for inspecting, validating, unpacking, and authoring MSIX/APPX packages.</Description>
+    <PackageTags>msix;appx;dotnet-tool;validation;unpack;pack;authoring;cross-platform</PackageTags>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>msixmgr</ToolCommandName>
     <IsTrimmable>true</IsTrimmable>

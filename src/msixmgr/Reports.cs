@@ -74,6 +74,28 @@ internal sealed record UnpackReport
     public required int ExtractedPartCount { get; init; }
 }
 
+/// <summary>Machine-readable result of the <c>pack</c> verb.</summary>
+internal sealed record PackReport
+{
+    public required string OutputPath { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string PackageFullName { get; init; }
+
+    public required string PackageFamilyName { get; init; }
+
+    public required string Version { get; init; }
+
+    public required string Architecture { get; init; }
+
+    public required int FileCount { get; init; }
+
+    public required long TotalSize { get; init; }
+
+    public required bool IsSigned { get; init; }
+}
+
 /// <summary>Source-generated JSON metadata for CLI reports.</summary>
 [JsonSourceGenerationOptions(
     WriteIndented = true,
@@ -81,6 +103,7 @@ internal sealed record UnpackReport
 [JsonSerializable(typeof(InspectionReport))]
 [JsonSerializable(typeof(ValidationReport))]
 [JsonSerializable(typeof(UnpackReport))]
+[JsonSerializable(typeof(PackReport))]
 internal sealed partial class ReportJsonContext : JsonSerializerContext
 {
 }

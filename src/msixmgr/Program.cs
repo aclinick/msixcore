@@ -24,6 +24,12 @@ public static class Program
             "<path> -Destination <dir> [--json]",
             "Extract a package to a loose layout without installing.",
             UnpackCommand.Run),
+        new(
+            "pack",
+            "<sourceDir> -o|--output <file.msix> [--overwrite] [--json]",
+            "Build an unsigned MSIX package (alias: makemsix).",
+            PackCommand.Run,
+            ["makemsix"]),
     ];
 
     internal static IReadOnlyList<CliVerb> Verbs => s_verbs;
@@ -50,7 +56,7 @@ public static class Program
 
         CliVerb? verb = Array.Find(
             s_verbs,
-            candidate => string.Equals(candidate.Name, args[0], StringComparison.Ordinal));
+            candidate => candidate.Matches(args[0]));
         if (verb is null)
         {
             error.WriteLine($"msixmgr: unknown verb '{args[0]}'.");
@@ -91,7 +97,8 @@ public static class Program
         output.WriteLine();
         output.WriteLine(
             """
-            <path> may be a package file (.msix/.appx) or an unpacked directory.
+            For inspect, validate, and unpack, <path> may be a package file
+            (.msix/.appx) or an unpacked directory. pack requires a source directory.
 
             Options:
               -h, --help                  Show this help.
@@ -104,7 +111,12 @@ internal sealed record CliVerb(
     string Name,
     string Arguments,
     string Description,
-    Func<IReadOnlyList<string>, TextWriter, TextWriter, int> Run)
+    Func<IReadOnlyList<string>, TextWriter, TextWriter, int> Run,
+    IReadOnlyList<string>? Aliases = null)
 {
     public string Usage => string.IsNullOrEmpty(Arguments) ? Name : $"{Name} {Arguments}";
+
+    public bool Matches(string token) =>
+        string.Equals(Name, token, StringComparison.Ordinal)
+        || (Aliases?.Contains(token, StringComparer.Ordinal) ?? false);
 }
