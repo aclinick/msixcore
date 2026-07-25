@@ -8,7 +8,7 @@ The Windows OS AppxPackaging COM reader **does accept packages authored by MSIX 
 
 For the OS reader, **ZIP64 is not required, data descriptors are not required, and the UTF-8 general-purpose bit is tolerated**.  The ablation matrix also shows the reader accepts ZIP64, data descriptors, both together, and clearing the UTF-8 bit.
 
-Full `Add-AppxPackage` registration was attempted only with throwaway identities.  It did not reach a successful install in this non-elevated environment: unsigned packages were rejected by unsigned-package policy, and signed packages were rejected because AppX deployment did not trust the current-user test root (`0x800B0109`) even though `signtool verify /pa` trusted it.  No install failure implicated ZIP64, data descriptors, UTF-8, block map, or MSIX Core ZIP structure.
+Full `Add-AppxPackage` registration was attempted first with throwaway identities and then, after scope correction, with the user's own `CcProto` package.  `CcProto` was not installed before the test, so the real identity path was used and each attempt was followed by `Remove-AppxPackage` if anything registered.  The non-elevated environment still could not complete signed installation: AppX deployment rejected current-user-root test certificates with `0x800B0109` even though `signtool verify /pa` trusted them.  No install failure implicated ZIP64, UTF-8, block map, or MSIX Core's baseline ZIP structure.
 
 ## Controls and real packages
 
@@ -103,13 +103,59 @@ A scratch package with `StartPage=index.html` and no executable field was author
 - Deployment HRESULT: `0x80073D2B`
 - Event 791: `Windows cannot install package MsixCoreOSTest.UwpContent_1.0.0.0_x64__cb2j79ga0v7n2 because it is not a valid unsigned package.`
 
+### Scope-corrected attempt 5: signed CcProto real identity
+
+After the user's scope correction, install testing was repeated with `CcProto_1.0.2.0_x64_Debug.msix`, which is the user's own app and is safe for install testing.  Pre-check:
+
+```powershell
+Get-AppxPackage -Name '*CcProto*'
+```
+
+returned no installed CcProto package, so the real identity `fruitybunny.CcProto_1.0.2.0_x64__rf6ttnqpqgr0w` was used.  No pre-existing CcProto was removed.
+
+The original CcProto package is signed by `CN=Fruit`, but that certificate expired on 2026-06-29.  Repacked packages were therefore signed with a fresh 7-day self-signed certificate:
+
+- Subject: `CN=Fruit`
+- Thumbprint: `157125F316332997849C3587836AFB8C06FE4D93`
+- Stores touched: CurrentUser `My`, `TrustedPeople`, and `Root`
+- `signtool verify /pa /v C:\osaccept-work\ccproto-signed\variant-baseline.msix`: success
+
+Install matrix:
+
+| Package | Install result | Exact failure |
+|---|---|---|
+| original CcProto | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; AppXDeploymentServer `[402] error 0x87E80034: Reading manifest from location: CcProto_1.0.2.0_x64_Debug.msix failed with error: Unknown error`; `[495] Common::Deployment::MsixvcStagingSession::GetManifestReader ... failed with error 0x87E80034` |
+| makeappx, re-signed `CN=Fruit` | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; specific error `0x800B0109: The root certificate of the signature in the app package or bundle must be trusted`; AppXDeploymentServer `[402] error 0x87E80034`; `[495] GetManifestReader ... 0x87E80034` |
+| MSIX Core Stored, re-signed | FAIL | Same `0x800B0109` trust failure |
+| MSIX Core Optimal, re-signed | FAIL | Same `0x800B0109` trust failure |
+| A baseline, re-signed | FAIL | Same `0x800B0109` trust failure |
+| B +ZIP64, re-signed | FAIL | Same `0x800B0109` trust failure |
+| C +data descriptors, re-signed | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; `Common::Deployment::MsixvcStagingSession::GetManifestReader ... failed with error 0x87E80034` |
+| D +both, re-signed | FAIL | Same `0x800B0109` trust failure |
+| E no UTF-8, re-signed | FAIL | Same `0x800B0109` trust failure |
+
+Reader check on the signed CcProto packages:
+
+| Signed package | OS reader result |
+|---|---|
+| makeappx | OK |
+| MSIX Core Stored | OK |
+| MSIX Core Optimal | OK |
+| A baseline | OK |
+| B +ZIP64 | OK |
+| C +data descriptors | FAIL: `COM failure HRESULT=0x80511007` |
+| D +both | OK |
+| E no UTF-8 | OK |
+
+Interpretation: the corrected install subject still could not prove full registration because this non-elevated shell could not establish the trust root required by AppX deployment.  The data-descriptor-only signed package also becomes unreadable (`0x80511007` / `0x87E80034`) after `signtool` signs it; the unsigned descriptor-only package remains accepted by the OS reader.  This points to an interaction between the experimental post-processed descriptor-only shape and signing, not to a requirement that MSIX Core's default writer add descriptors.
+
 ## Recommendation
 
 1. **Do not change `StoredZipWriter` for ZIP64 or data descriptors as a correctness fix.**  The real OS reader accepted MSIX Core-authored packages without either feature, and accepted the ablation variants with either or both features present.
 2. **Treat makeappx's always-ZIP64 output as cosmetic for normal-size packages.**  Implement ZIP64 only when needed for >4 GiB offsets/sizes or >65,535 entries, or if a future compatibility target proves it necessary.
 3. **Treat makeappx's data descriptors as cosmetic for reader compatibility.**  They are not required by the OS reader.  Descriptor-only packages should not be signed using the experimental post-processor without further investigation because the signed copy failed reader/deployment (`0x80511007` / `0x87E80034`).
 4. **The UTF-8 bit is tolerated.**  Clearing it was also tolerated for these ASCII-only package paths, so there is no evidence that either setting is a correctness issue.
-5. **Follow-up if full install proof is required:** run the same committed commands from an elevated shell, import the test certificate into the machine trust store, then repeat the signed `Add-AppxPackage` matrix.  The current non-elevated run could not alter machine trust and therefore could not complete signed installation.
+5. **Follow-up if full install proof is required:** run the same committed commands from an elevated shell, import the test certificate into the machine trust store, then repeat the signed CcProto `Add-AppxPackage` matrix.  The current non-elevated run could not alter machine trust and therefore could not complete signed installation.
 
 ## Repro commands
 
@@ -134,7 +180,13 @@ foreach ($p in @(
   dotnet $tool read $p
 }
 
-# Tier 2 throwaway install example; all installed packages are removed immediately by name prefix.
+# Tier 2 corrected CcProto install example; first verify CcProto is not pre-installed.
+Get-AppxPackage -Name '*CcProto*'
+
+# If absent, sign the CcProto real-identity variants with a fresh CN=Fruit cert and run Add-AppxPackage.
+# If present, rewrite to a throwaway MsixCoreOSTest identity before installing.
+
+# Earlier throwaway install example; all installed packages are removed immediately by name prefix.
 dotnet $tool pack-throwaway 'C:\Users\andre\Downloads\CcProto_1.0.2.0_x64_Debug_Test\CcProto_1.0.2.0_x64_Debug_Test\Dependencies\x64\Microsoft.WindowsAppRuntime.1.8-experimental3.msix' C:\osaccept-work\install MsixCoreOSTest.WindowsAppRuntime18Experimental3 'CN=MsixCoreOSTest'
 foreach ($v in 'baseline','zip64','descriptor','both','no-utf8') {
   dotnet $tool variant C:\osaccept-work\install\ours-optimal.msix C:\osaccept-work\install\variant-$v.msix $v
@@ -144,6 +196,6 @@ foreach ($v in 'baseline','zip64','descriptor','both','no-utf8') {
 ## Cleanup performed
 
 - Removed all packages matching `MsixCoreOSTest*`; final `Get-AppxPackage -Name 'MsixCoreOSTest*'` returned no packages.
-- Removed the test certificate `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86` from CurrentUser `My`, `TrustedPeople`, and `Root`.
+- Removed the test certificates `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86` and `157125F316332997849C3587836AFB8C06FE4D93` from CurrentUser `My`, `TrustedPeople`, and `Root`.
 - Deleted scratch directory `C:\osaccept-work` after recording the results above.
 - No package bytes or payloads are committed.
