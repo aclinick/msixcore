@@ -4,10 +4,9 @@
     Measures the published binary size of the msixmgr CLI across deployment configurations.
 
 .DESCRIPTION
-    Publishes src/msixmgr in three configurations:
-      1. Framework-dependent (portable, requires the .NET 10 runtime on the target).
-      2. Self-contained win-x64 (bundles the .NET runtime).
-      3. Self-contained win-x64 + trimmed (IL-trimmed; only built if it succeeds).
+    Publishes src/msixmgr framework-dependent, self-contained, and trimmed for
+    win-x64 and win-arm64. Trim failures remain non-fatal so the report explains
+    unsupported configurations rather than losing the other measurements.
 
     For each configuration it records the total published output size and the size of the
     key assemblies, then writes a Markdown summary to bench/size-report.md.
@@ -21,8 +20,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Runtime = 'win-x64',
-    [string]$Configuration = 'Release'
+    [string[]]$Runtime = @('win-x64', 'win-arm64'),
+    [string]$Configuration = 'Release',
+    [string]$WindowsSdkBin = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +31,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $repoRoot 'src/msixmgr/msixmgr.csproj'
 $publishRoot = Join-Path $PSScriptRoot 'publish'
 $reportPath = Join-Path $PSScriptRoot 'size-report.md'
+$hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 
 if (-not (Test-Path $project)) {
     throw "Cannot find msixmgr project at $project"
@@ -90,17 +91,19 @@ function Publish-Config {
 
 $results = @()
 
-$results += Publish-Config -Name 'Framework-dependent (portable)' `
+$results += Publish-Config -Name 'Framework-dependent (portable, host architecture)' `
     -OutDir (Join-Path $publishRoot 'framework-dependent') `
-    -ExtraArgs @('-r', $Runtime, '--self-contained', 'false')
+    -ExtraArgs @('--self-contained', 'false')
 
-$results += Publish-Config -Name "Self-contained ($Runtime)" `
-    -OutDir (Join-Path $publishRoot 'self-contained') `
-    -ExtraArgs @('-r', $Runtime, '--self-contained', 'true')
+foreach ($rid in $Runtime) {
+    $results += Publish-Config -Name "Self-contained ($rid)" `
+        -OutDir (Join-Path $publishRoot "self-contained-$rid") `
+        -ExtraArgs @('-r', $rid, '--self-contained', 'true')
 
-$results += Publish-Config -Name "Self-contained + trimmed ($Runtime)" `
-    -OutDir (Join-Path $publishRoot 'self-contained-trimmed') `
-    -ExtraArgs @('-r', $Runtime, '--self-contained', 'true', '-p:PublishTrimmed=true')
+    $results += Publish-Config -Name "Self-contained + trimmed ($rid)" `
+        -OutDir (Join-Path $publishRoot "self-contained-trimmed-$rid") `
+        -ExtraArgs @('-r', $rid, '--self-contained', 'true', '-p:PublishTrimmed=true')
+}
 
 $results = $results | Where-Object { $null -ne $_ }
 
@@ -110,7 +113,7 @@ $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine()
 [void]$sb.AppendLine("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
 [void]$sb.AppendLine()
-[void]$sb.AppendLine("- Runtime identifier: ``$Runtime``")
+[void]$sb.AppendLine("- Runtime identifiers: ``$($Runtime -join ', ')``")
 [void]$sb.AppendLine("- Configuration: ``$Configuration``")
 [void]$sb.AppendLine("- .NET SDK: ``$(dotnet --version)``")
 [void]$sb.AppendLine("- Host OS: ``$([System.Runtime.InteropServices.RuntimeInformation]::OSDescription.Trim())``")
@@ -122,6 +125,32 @@ $sb = [System.Text.StringBuilder]::new()
 [void]$sb.AppendLine('| --- | ---: | ---: | ---: |')
 foreach ($r in $results) {
     [void]$sb.AppendLine("| $($r.Name) | $(Format-Size $r.TotalBytes) | $($r.FileCount) | $(Format-Size $r.ExeBytes) |")
+}
+[void]$sb.AppendLine()
+
+[void]$sb.AppendLine('## Windows SDK MakeAppx footprint')
+[void]$sb.AppendLine()
+[void]$sb.AppendLine('The total includes `makeappx.exe` plus the SDK-local DLLs observed loaded by the')
+[void]$sb.AppendLine('comparison harness (`appxpackaging.dll` and `opcservices.dll`). OS DLLs are excluded.')
+[void]$sb.AppendLine()
+[void]$sb.AppendLine('| SDK tool | Total size | Files |')
+[void]$sb.AppendLine('| --- | ---: | --- |')
+foreach ($arch in @('x64', 'arm64')) {
+    $sdkFiles = @('makeappx.exe', 'appxpackaging.dll', 'opcservices.dll') |
+        ForEach-Object { Join-Path (Join-Path $WindowsSdkBin $arch) $_ } |
+        Where-Object { Test-Path $_ -PathType Leaf } |
+        ForEach-Object { Get-Item $_ }
+    if ($sdkFiles.Count -eq 3) {
+        $sdkTotal = ($sdkFiles | Measure-Object Length -Sum).Sum
+        $label = if ($arch -eq 'x64' -and $hostArchitecture -eq 'Arm64') {
+            'MakeAppx SDK tool (x64 binary; emulated on this Arm64 host)'
+        } elseif ($arch -eq 'x64') {
+            'MakeAppx SDK tool (x64 native)'
+        } else {
+            "MakeAppx SDK tool (Arm64$(if ($hostArchitecture -eq 'Arm64') { ' native' } else { ' binary' }))"
+        }
+        [void]$sb.AppendLine("| $label | $(Format-Size $sdkTotal) | $(($sdkFiles.Name -join ', ')) |")
+    }
 }
 [void]$sb.AppendLine()
 
@@ -153,11 +182,9 @@ foreach ($r in $results) {
 [void]$sb.AppendLine('4. Track both totals and the "core packaging" binary size (`MsixCore.Packaging.dll`')
 [void]$sb.AppendLine('   vs. the C++ `msix.dll`) over time in this report.')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('> Note: trimmed self-contained size depends on trimming succeeding for the CLI. On this')
-[void]$sb.AppendLine('> repository the trimmed configuration currently FAILS to publish: the `inspect`, `validate`,')
-[void]$sb.AppendLine('> and `unpack` verbs use reflection-based `System.Text.Json.JsonSerializer.Serialize`, which')
-[void]$sb.AppendLine('> raises trim-analysis errors IL2026 (warnings-as-errors). Making the CLI trim-safe (source-')
-[void]$sb.AppendLine('> generated `JsonSerializerContext`) would unlock a materially smaller self-contained size.')
+[void]$sb.AppendLine('> The CLI uses a source-generated `JsonSerializerContext`; trimmed self-contained publishing')
+[void]$sb.AppendLine('> is expected to succeed. Any failed configuration is omitted above and its final diagnostics')
+[void]$sb.AppendLine('> are printed by this script.')
 
 Set-Content -Path $reportPath -Value $sb.ToString() -Encoding utf8
 Write-Host ""

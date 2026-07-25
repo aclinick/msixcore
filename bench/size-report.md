@@ -1,8 +1,8 @@
 # msixmgr published-size report
 
-Generated: 2026-07-24 19:18:01 -07:00
+Generated: 2026-07-25 08:09:44 -07:00
 
-- Runtime identifier: `win-x64`
+- Runtime identifiers: `win-x64, win-arm64`
 - Configuration: `Release`
 - .NET SDK: `10.0.300`
 - Host OS: `Microsoft Windows 10.0.26300`
@@ -11,32 +11,78 @@ Generated: 2026-07-24 19:18:01 -07:00
 
 | Configuration | Total size | Files | msixmgr host |
 | --- | ---: | ---: | ---: |
-| Framework-dependent (portable) | 748.05 KB | 13 | 159.00 KB |
-| Self-contained (win-x64) | 77.09 MB | 200 | 159.00 KB |
+| Framework-dependent (portable, host architecture) | 1.10 MB | 14 | 137.00 KB |
+| Self-contained (win-x64) | 77.20 MB | 200 | 159.00 KB |
+| Self-contained + trimmed (win-x64) | 22.62 MB | 68 | 159.00 KB |
+| Self-contained (win-arm64) | 86.81 MB | 200 | 137.00 KB |
+| Self-contained + trimmed (win-arm64) | 24.00 MB | 68 | 137.00 KB |
+
+## Windows SDK MakeAppx footprint
+
+The total includes `makeappx.exe` plus the SDK-local DLLs observed loaded by the
+comparison harness (`appxpackaging.dll` and `opcservices.dll`). OS DLLs are excluded.
+
+| SDK tool | Total size | Files |
+| --- | ---: | --- |
+| MakeAppx SDK tool (x64 binary; emulated on this Arm64 host) | 4.55 MB | makeappx.exe, appxpackaging.dll, opcservices.dll |
+| MakeAppx SDK tool (Arm64 native) | 6.39 MB | makeappx.exe, appxpackaging.dll, opcservices.dll |
 
 ## Key assemblies (per configuration)
 
-### Framework-dependent (portable)
+### Framework-dependent (portable, host architecture)
 
 | Assembly | Size |
 | --- | ---: |
-| msixmgr.exe | 159.00 KB |
-| MsixCore.Packaging.dll | 64.50 KB |
-| msixmgr.dll | 26.00 KB |
-| MsixCore.Deployment.dll | 23.50 KB |
-| msixmgr.pdb | 16.03 KB |
-| msixmgr.xml | 3.77 KB |
+| msixmgr.exe | 137.00 KB |
+| MsixCore.Packaging.dll | 89.00 KB |
+| msixmgr.dll | 75.00 KB |
+| msixmgr.pdb | 42.18 KB |
+| MsixCore.Deployment.dll | 24.00 KB |
+| msixmgr.xml | 7.32 KB |
 
 ### Self-contained (win-x64)
 
 | Assembly | Size |
 | --- | ---: |
 | msixmgr.exe | 159.00 KB |
-| MsixCore.Packaging.dll | 64.50 KB |
-| msixmgr.deps.json | 28.78 KB |
-| msixmgr.dll | 26.00 KB |
-| MsixCore.Deployment.dll | 23.50 KB |
-| msixmgr.pdb | 16.03 KB |
+| MsixCore.Packaging.dll | 89.00 KB |
+| msixmgr.dll | 74.50 KB |
+| msixmgr.pdb | 42.21 KB |
+| msixmgr.deps.json | 28.87 KB |
+| MsixCore.Deployment.dll | 24.00 KB |
+
+### Self-contained + trimmed (win-x64)
+
+| Assembly | Size |
+| --- | ---: |
+| msixmgr.exe | 159.00 KB |
+| msixmgr.dll | 71.00 KB |
+| MsixCore.Packaging.dll | 69.50 KB |
+| msixmgr.pdb | 41.09 KB |
+| msixmgr.deps.json | 28.87 KB |
+| MsixCore.Deployment.dll | 8.50 KB |
+
+### Self-contained (win-arm64)
+
+| Assembly | Size |
+| --- | ---: |
+| msixmgr.exe | 137.00 KB |
+| MsixCore.Packaging.dll | 89.00 KB |
+| msixmgr.dll | 74.50 KB |
+| msixmgr.pdb | 42.21 KB |
+| msixmgr.deps.json | 28.88 KB |
+| MsixCore.Deployment.dll | 24.00 KB |
+
+### Self-contained + trimmed (win-arm64)
+
+| Assembly | Size |
+| --- | ---: |
+| msixmgr.exe | 137.00 KB |
+| msixmgr.dll | 71.00 KB |
+| MsixCore.Packaging.dll | 69.50 KB |
+| msixmgr.pdb | 41.09 KB |
+| msixmgr.deps.json | 28.88 KB |
+| MsixCore.Deployment.dll | 8.50 KB |
 
 ## Comparison against the original C++ MSIX Core (future work)
 
@@ -53,9 +99,7 @@ repository, so a direct size comparison cannot be produced here yet. Intended me
 4. Track both totals and the "core packaging" binary size (`MsixCore.Packaging.dll`
    vs. the C++ `msix.dll`) over time in this report.
 
-> Note: trimmed self-contained size depends on trimming succeeding for the CLI. On this
-> repository the trimmed configuration currently FAILS to publish: the `inspect`, `validate`,
-> and `unpack` verbs use reflection-based `System.Text.Json.JsonSerializer.Serialize`, which
-> raises trim-analysis errors IL2026 (warnings-as-errors). Making the CLI trim-safe (source-
-> generated `JsonSerializerContext`) would unlock a materially smaller self-contained size.
+> The CLI uses a source-generated `JsonSerializerContext`; trimmed self-contained publishing
+> is expected to succeed. Any failed configuration is omitted above and its final diagnostics
+> are printed by this script.
 
