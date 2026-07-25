@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace MsixMgr;
@@ -75,12 +74,13 @@ internal sealed record UnpackReport
     public required int ExtractedPartCount { get; init; }
 }
 
-/// <summary>Shared JSON options for CLI report serialization.</summary>
-internal static class ReportJson
+/// <summary>Source-generated JSON metadata for CLI reports.</summary>
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(InspectionReport))]
+[JsonSerializable(typeof(ValidationReport))]
+[JsonSerializable(typeof(UnpackReport))]
+internal sealed partial class ReportJsonContext : JsonSerializerContext
 {
-    public static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 }

@@ -26,7 +26,7 @@ internal static class ValidateCommand
             ValidationReport report = Validate(package);
             if (json)
             {
-                output.WriteLine(JsonSerializer.Serialize(report, ReportJson.Options));
+                output.WriteLine(JsonSerializer.Serialize(report, ReportJsonContext.Default.ValidationReport));
             }
             else
             {

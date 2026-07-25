@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>MsixCore.Packaging</PackageId>
+    <Description>Cross-platform .NET APIs for reading MSIX/APPX packages, manifests, block maps, signatures, and package identity.</Description>
+    <PackageTags>msix;appx;packaging;opc;block-map;signature;cross-platform</PackageTags>
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

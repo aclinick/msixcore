@@ -25,7 +25,7 @@ internal static class InspectCommand
             InspectionReport report = Build(package);
             if (json)
             {
-                output.WriteLine(JsonSerializer.Serialize(report, ReportJson.Options));
+                output.WriteLine(JsonSerializer.Serialize(report, ReportJsonContext.Default.InspectionReport));
             }
             else
             {
