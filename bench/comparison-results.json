@@ -1,12 +1,12 @@
 {
   "Metadata": {
-    "Generated": "2026-07-25T08:32:49.0632368-07:00",
-    "Iterations": 7,
+    "Generated": "2026-07-25T10:12:20.0533574-07:00",
+    "Iterations": 21,
     "WarmupRunsDiscarded": 1,
     "HostOS": "Microsoft Windows 10.0.26300",
     "HostArchitecture": "Arm64",
     "DotNetSdk": "10.0.300",
-    "CliPath": "D:\\source\\msixcore-cmp\\src\\msixmgr\\bin\\Release\\net10.0\\msixmgr.exe",
+    "CliPath": "D:\\source\\msixcore\\src\\msixmgr\\bin\\Release\\net10.0\\msixmgr.exe",
     "RequestedMakeAppxPath": "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\arm64\\makeappx.exe",
     "MeasuredMakeAppxPath": "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\arm64\\makeappx.exe",
     "MakeAppxVersion": "10.0.26100.8249 (WinBuild.160101.0800)",
@@ -31,19 +31,19 @@
   "Corpora": [
     {
       "Name": "small-1MiB-8files",
-      "Root": "D:\\source\\msixcore-cmp\\bench\\results\\corpora\\small-1MiB-8files",
+      "Root": "D:\\source\\msixcore\\bench\\results\\corpora\\small-1MiB-8files",
       "FileCount": 8,
       "PayloadBytes": 1048576
     },
     {
       "Name": "medium-10MiB-64files",
-      "Root": "D:\\source\\msixcore-cmp\\bench\\results\\corpora\\medium-10MiB-64files",
+      "Root": "D:\\source\\msixcore\\bench\\results\\corpora\\medium-10MiB-64files",
       "FileCount": 64,
       "PayloadBytes": 10485760
     },
     {
       "Name": "large-64MiB-128files",
-      "Root": "D:\\source\\msixcore-cmp\\bench\\results\\corpora\\large-64MiB-128files",
+      "Root": "D:\\source\\msixcore\\bench\\results\\corpora\\large-64MiB-128files",
       "FileCount": 128,
       "PayloadBytes": 67108864
     }
@@ -54,165 +54,165 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "MedianMs": 1735.0034,
-      "MinMs": 350.3806,
-      "MaxMs": 3407.3191,
-      "MedianPeakWorkingSetBytes": 87293952.0,
-      "MedianSampledPeakPrivateBytes": 74227712.0
+      "MedianMs": 875.2662,
+      "MinMs": 236.5198,
+      "MaxMs": 2519.9456,
+      "MedianPeakWorkingSetBytes": 87191552.0,
+      "MedianSampledPeakPrivateBytes": 74190848.0
     },
     {
       "Operation": "Pack",
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
-      "MedianMs": 680.581,
-      "MinMs": 571.4299,
-      "MaxMs": 765.278,
-      "MedianPeakWorkingSetBytes": 39051264.0,
-      "MedianSampledPeakPrivateBytes": 15347712.0
+      "MedianMs": 493.2141,
+      "MinMs": 482.2613,
+      "MaxMs": 550.0872,
+      "MedianPeakWorkingSetBytes": 38866944.0,
+      "MedianSampledPeakPrivateBytes": 15228928.0
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "MedianMs": 197.4324,
-      "MinMs": 135.5085,
-      "MaxMs": 215.2922,
-      "MedianPeakWorkingSetBytes": 31473664.0,
-      "MedianSampledPeakPrivateBytes": 15204352.0
+      "MedianMs": 283.47,
+      "MinMs": 209.5727,
+      "MaxMs": 2703.4433,
+      "MedianPeakWorkingSetBytes": 31395840.0,
+      "MedianSampledPeakPrivateBytes": 14979072.0
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "MedianMs": 244.4466,
-      "MinMs": 207.8554,
-      "MaxMs": 253.3463,
-      "MedianPeakWorkingSetBytes": 35225600.0,
-      "MedianSampledPeakPrivateBytes": 11628544.0
+      "MedianMs": 151.4965,
+      "MinMs": 146.6032,
+      "MaxMs": 168.9486,
+      "MedianPeakWorkingSetBytes": 34291712.0,
+      "MedianSampledPeakPrivateBytes": 11579392.0
     },
     {
       "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "MedianMs": 140.3449,
-      "MinMs": 86.4273,
-      "MaxMs": 159.3392,
-      "MedianPeakWorkingSetBytes": 28733440.0,
-      "MedianSampledPeakPrivateBytes": 12587008.0
+      "MedianMs": 86.2208,
+      "MinMs": 77.5142,
+      "MaxMs": 177.6036,
+      "MedianPeakWorkingSetBytes": 28676096.0,
+      "MedianSampledPeakPrivateBytes": 12521472.0
     },
     {
       "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
-      "MedianMs": 106.0554,
-      "MinMs": 95.954,
-      "MaxMs": 150.4939,
-      "MedianPeakWorkingSetBytes": 31776768.0,
-      "MedianSampledPeakPrivateBytes": 8376320.0
+      "MedianMs": 93.562,
+      "MinMs": 84.7172,
+      "MaxMs": 172.3942,
+      "MedianPeakWorkingSetBytes": 30265344.0,
+      "MedianSampledPeakPrivateBytes": 7811072.0
     },
     {
       "Operation": "Unpack",
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "MedianMs": 301.4847,
-      "MinMs": 228.2187,
-      "MaxMs": 368.3628,
-      "MedianPeakWorkingSetBytes": 29466624.0,
-      "MedianSampledPeakPrivateBytes": 13176832.0
+      "MedianMs": 215.9757,
+      "MinMs": 200.0833,
+      "MaxMs": 283.3366,
+      "MedianPeakWorkingSetBytes": 29429760.0,
+      "MedianSampledPeakPrivateBytes": 13193216.0
     },
     {
       "Operation": "Unpack",
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
-      "MedianMs": 206.5225,
-      "MinMs": 133.5948,
-      "MaxMs": 260.0165,
-      "MedianPeakWorkingSetBytes": 24952832.0,
-      "MedianSampledPeakPrivateBytes": 6868992.0
+      "MedianMs": 128.9852,
+      "MinMs": 109.4327,
+      "MaxMs": 164.8333,
+      "MedianPeakWorkingSetBytes": 24993792.0,
+      "MedianSampledPeakPrivateBytes": 6873088.0
     },
     {
       "Operation": "Unpack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "MedianMs": 156.0913,
-      "MinMs": 123.4835,
-      "MaxMs": 199.3027,
-      "MedianPeakWorkingSetBytes": 28950528.0,
-      "MedianSampledPeakPrivateBytes": 12677120.0
+      "MedianMs": 106.2194,
+      "MinMs": 98.7105,
+      "MaxMs": 129.3773,
+      "MedianPeakWorkingSetBytes": 28884992.0,
+      "MedianSampledPeakPrivateBytes": 12693504.0
     },
     {
       "Operation": "Unpack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "MedianMs": 146.4323,
-      "MinMs": 96.6006,
-      "MaxMs": 178.0337,
-      "MedianPeakWorkingSetBytes": 25858048.0,
-      "MedianSampledPeakPrivateBytes": 6606848.0
+      "MedianMs": 78.0969,
+      "MinMs": 72.0727,
+      "MaxMs": 92.6166,
+      "MedianPeakWorkingSetBytes": 25014272.0,
+      "MedianSampledPeakPrivateBytes": 6643712.0
     },
     {
       "Operation": "Unpack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "MedianMs": 146.8291,
-      "MinMs": 100.8001,
-      "MaxMs": 184.2942,
-      "MedianPeakWorkingSetBytes": 28614656.0,
-      "MedianSampledPeakPrivateBytes": 10772480.0
+      "MedianMs": 79.6563,
+      "MinMs": 77.1943,
+      "MaxMs": 94.4516,
+      "MedianPeakWorkingSetBytes": 28553216.0,
+      "MedianSampledPeakPrivateBytes": 12222464.0
     },
     {
       "Operation": "Unpack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
-      "MedianMs": 133.4913,
-      "MinMs": 82.7618,
-      "MaxMs": 166.5745,
-      "MedianPeakWorkingSetBytes": 23801856.0,
-      "MedianSampledPeakPrivateBytes": 6049792.0
+      "MedianMs": 71.4312,
+      "MinMs": 61.2387,
+      "MaxMs": 147.7778,
+      "MedianPeakWorkingSetBytes": 24576000.0,
+      "MedianSampledPeakPrivateBytes": 6299648.0
     },
     {
       "Operation": "Validate",
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
-      "MedianMs": 183.7325,
-      "MinMs": 134.378,
-      "MaxMs": 193.259,
-      "MedianPeakWorkingSetBytes": 35344384.0,
-      "MedianSampledPeakPrivateBytes": 12206080.0
+      "MedianMs": 116.2753,
+      "MinMs": 111.7924,
+      "MaxMs": 124.3972,
+      "MedianPeakWorkingSetBytes": 28864512.0,
+      "MedianSampledPeakPrivateBytes": 8220672.0
     },
     {
       "Operation": "Validate",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "MedianMs": 173.1699,
-      "MinMs": 97.3126,
-      "MaxMs": 181.5565,
-      "MedianPeakWorkingSetBytes": 33058816.0,
-      "MedianSampledPeakPrivateBytes": 11595776.0
+      "MedianMs": 81.2025,
+      "MinMs": 77.4278,
+      "MaxMs": 93.4023,
+      "MedianPeakWorkingSetBytes": 28033024.0,
+      "MedianSampledPeakPrivateBytes": 7446528.0
     },
     {
       "Operation": "Validate",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
-      "MedianMs": 135.6862,
-      "MinMs": 88.9604,
-      "MaxMs": 162.8582,
-      "MedianPeakWorkingSetBytes": 28516352.0,
-      "MedianSampledPeakPrivateBytes": 6864896.0
+      "MedianMs": 74.558,
+      "MinMs": 68.6522,
+      "MaxMs": 116.9214,
+      "MedianPeakWorkingSetBytes": 27774976.0,
+      "MedianSampledPeakPrivateBytes": 6987776.0
     }
   ],
   "RawRuns": [
@@ -222,8 +222,118 @@
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 106.0554,
-      "PeakWorkingSetBytes": 30105600,
+      "ElapsedMs": 92.0655,
+      "PeakWorkingSetBytes": 30322688,
+      "SampledPeakPrivateBytes": 7843840
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 2,
+      "ElapsedMs": 105.495,
+      "PeakWorkingSetBytes": 28712960,
+      "SampledPeakPrivateBytes": 7643136
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 3,
+      "ElapsedMs": 88.8135,
+      "PeakWorkingSetBytes": 31318016,
+      "SampledPeakPrivateBytes": 7852032
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 4,
+      "ElapsedMs": 89.0991,
+      "PeakWorkingSetBytes": 31338496,
+      "SampledPeakPrivateBytes": 7864320
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 5,
+      "ElapsedMs": 94.8124,
+      "PeakWorkingSetBytes": 28794880,
+      "SampledPeakPrivateBytes": 7647232
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 6,
+      "ElapsedMs": 86.5631,
+      "PeakWorkingSetBytes": 29990912,
+      "SampledPeakPrivateBytes": 7794688
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 7,
+      "ElapsedMs": 95.2625,
+      "PeakWorkingSetBytes": 31301632,
+      "SampledPeakPrivateBytes": 7602176
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 103.2091,
+      "PeakWorkingSetBytes": 30306304,
+      "SampledPeakPrivateBytes": 7860224
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 88.3661,
+      "PeakWorkingSetBytes": 31293440,
+      "SampledPeakPrivateBytes": 7798784
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 91.2098,
+      "PeakWorkingSetBytes": 29876224,
+      "SampledPeakPrivateBytes": 7716864
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 84.7172,
+      "PeakWorkingSetBytes": 30101504,
+      "SampledPeakPrivateBytes": 7864320
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 89.7251,
+      "PeakWorkingSetBytes": 30228480,
       "SampledPeakPrivateBytes": 7839744
     },
     {
@@ -231,49 +341,19 @@
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
-      "Run": 2,
-      "ElapsedMs": 109.1009,
-      "PeakWorkingSetBytes": 31776768,
-      "SampledPeakPrivateBytes": 6807552
+      "Run": 13,
+      "ElapsedMs": 88.6155,
+      "PeakWorkingSetBytes": 31289344,
+      "SampledPeakPrivateBytes": 7630848
     },
     {
       "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
-      "Run": 3,
-      "ElapsedMs": 101.2412,
-      "PeakWorkingSetBytes": 31801344,
-      "SampledPeakPrivateBytes": 8441856
-    },
-    {
-      "Operation": "Pack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 4,
-      "ElapsedMs": 150.4939,
-      "PeakWorkingSetBytes": 28790784,
-      "SampledPeakPrivateBytes": 7667712
-    },
-    {
-      "Operation": "Pack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 5,
-      "ElapsedMs": 95.954,
-      "PeakWorkingSetBytes": 31744000,
-      "SampledPeakPrivateBytes": 8376320
-    },
-    {
-      "Operation": "Pack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 6,
-      "ElapsedMs": 106.0441,
-      "PeakWorkingSetBytes": 31801344,
+      "Run": 14,
+      "ElapsedMs": 141.4859,
+      "PeakWorkingSetBytes": 31334400,
       "SampledPeakPrivateBytes": 7892992
     },
     {
@@ -281,10 +361,70 @@
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
-      "Run": 7,
-      "ElapsedMs": 97.3813,
-      "PeakWorkingSetBytes": 31158272,
-      "SampledPeakPrivateBytes": 8445952
+      "Run": 15,
+      "ElapsedMs": 130.84,
+      "PeakWorkingSetBytes": 31301632,
+      "SampledPeakPrivateBytes": 7680000
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 172.3942,
+      "PeakWorkingSetBytes": 31322112,
+      "SampledPeakPrivateBytes": 7876608
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 129.1033,
+      "PeakWorkingSetBytes": 30228480,
+      "SampledPeakPrivateBytes": 7852032
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 132.4501,
+      "PeakWorkingSetBytes": 29237248,
+      "SampledPeakPrivateBytes": 7708672
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 96.3892,
+      "PeakWorkingSetBytes": 28876800,
+      "SampledPeakPrivateBytes": 7671808
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 93.562,
+      "PeakWorkingSetBytes": 30265344,
+      "SampledPeakPrivateBytes": 7872512
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 90.5445,
+      "PeakWorkingSetBytes": 30068736,
+      "SampledPeakPrivateBytes": 7811072
     },
     {
       "Operation": "Pack",
@@ -292,9 +432,9 @@
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
       "Run": 1,
-      "ElapsedMs": 86.4273,
-      "PeakWorkingSetBytes": 28475392,
-      "SampledPeakPrivateBytes": 12767232
+      "ElapsedMs": 83.526,
+      "PeakWorkingSetBytes": 28569600,
+      "SampledPeakPrivateBytes": 12517376
     },
     {
       "Operation": "Pack",
@@ -302,9 +442,9 @@
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
       "Run": 2,
-      "ElapsedMs": 144.302,
-      "PeakWorkingSetBytes": 27738112,
-      "SampledPeakPrivateBytes": 12333056
+      "ElapsedMs": 85.4921,
+      "PeakWorkingSetBytes": 28794880,
+      "SampledPeakPrivateBytes": 12423168
     },
     {
       "Operation": "Pack",
@@ -312,18 +452,8 @@
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
       "Run": 3,
-      "ElapsedMs": 99.6218,
-      "PeakWorkingSetBytes": 28831744,
-      "SampledPeakPrivateBytes": 7471104
-    },
-    {
-      "Operation": "Pack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "MakeAppx",
-      "Run": 4,
-      "ElapsedMs": 109.3153,
-      "PeakWorkingSetBytes": 28848128,
+      "ElapsedMs": 177.6036,
+      "PeakWorkingSetBytes": 28700672,
       "SampledPeakPrivateBytes": 12587008
     },
     {
@@ -331,10 +461,20 @@
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
+      "Run": 4,
+      "ElapsedMs": 83.0198,
+      "PeakWorkingSetBytes": 28725248,
+      "SampledPeakPrivateBytes": 11431936
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
       "Run": 5,
-      "ElapsedMs": 136.5262,
-      "PeakWorkingSetBytes": 24682496,
-      "SampledPeakPrivateBytes": 9863168
+      "ElapsedMs": 79.4881,
+      "PeakWorkingSetBytes": 28676096,
+      "SampledPeakPrivateBytes": 12562432
     },
     {
       "Operation": "Pack",
@@ -342,9 +482,9 @@
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
       "Run": 6,
-      "ElapsedMs": 159.3392,
-      "PeakWorkingSetBytes": 28733440,
-      "SampledPeakPrivateBytes": 12541952
+      "ElapsedMs": 85.3472,
+      "PeakWorkingSetBytes": 28483584,
+      "SampledPeakPrivateBytes": 12853248
     },
     {
       "Operation": "Pack",
@@ -352,179 +492,599 @@
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
       "Run": 7,
-      "ElapsedMs": 140.3449,
-      "PeakWorkingSetBytes": 28147712,
-      "SampledPeakPrivateBytes": 12742656
+      "ElapsedMs": 121.5614,
+      "PeakWorkingSetBytes": 28676096,
+      "SampledPeakPrivateBytes": 12599296
     },
     {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 1,
-      "ElapsedMs": 82.7618,
-      "PeakWorkingSetBytes": 25673728,
-      "SampledPeakPrivateBytes": 5132288
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 2,
-      "ElapsedMs": 134.1864,
-      "PeakWorkingSetBytes": 23777280,
-      "SampledPeakPrivateBytes": 6184960
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 3,
-      "ElapsedMs": 166.5745,
-      "PeakWorkingSetBytes": 21397504,
-      "SampledPeakPrivateBytes": 5767168
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 4,
-      "ElapsedMs": 118.8095,
-      "PeakWorkingSetBytes": 23801856,
-      "SampledPeakPrivateBytes": 6189056
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 5,
-      "ElapsedMs": 133.4913,
-      "PeakWorkingSetBytes": 22855680,
-      "SampledPeakPrivateBytes": 6049792
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 6,
-      "ElapsedMs": 126.3357,
-      "PeakWorkingSetBytes": 21151744,
-      "SampledPeakPrivateBytes": 5709824
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "msixmgr",
-      "Run": 7,
-      "ElapsedMs": 112.2322,
-      "PeakWorkingSetBytes": 25665536,
-      "SampledPeakPrivateBytes": 3710976
-    },
-    {
-      "Operation": "Unpack",
+      "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "Run": 1,
-      "ElapsedMs": 141.6915,
-      "PeakWorkingSetBytes": 25186304,
-      "SampledPeakPrivateBytes": 10371072
+      "Run": 8,
+      "ElapsedMs": 84.8174,
+      "PeakWorkingSetBytes": 28004352,
+      "SampledPeakPrivateBytes": 12316672
     },
     {
-      "Operation": "Unpack",
+      "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "Run": 2,
-      "ElapsedMs": 115.7939,
-      "PeakWorkingSetBytes": 28614656,
-      "SampledPeakPrivateBytes": 12144640
+      "Run": 9,
+      "ElapsedMs": 106.3712,
+      "PeakWorkingSetBytes": 28512256,
+      "SampledPeakPrivateBytes": 12394496
     },
     {
-      "Operation": "Unpack",
+      "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "Run": 3,
-      "ElapsedMs": 108.7978,
-      "PeakWorkingSetBytes": 28659712,
-      "SampledPeakPrivateBytes": 6275072
+      "Run": 10,
+      "ElapsedMs": 89.8428,
+      "PeakWorkingSetBytes": 28778496,
+      "SampledPeakPrivateBytes": 12181504
     },
     {
-      "Operation": "Unpack",
+      "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "Run": 4,
-      "ElapsedMs": 158.878,
-      "PeakWorkingSetBytes": 25600000,
-      "SampledPeakPrivateBytes": 10772480
+      "Run": 11,
+      "ElapsedMs": 109.9401,
+      "PeakWorkingSetBytes": 28618752,
+      "SampledPeakPrivateBytes": 12517376
     },
     {
-      "Operation": "Unpack",
+      "Operation": "Pack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "MakeAppx",
-      "Run": 5,
-      "ElapsedMs": 184.2942,
-      "PeakWorkingSetBytes": 23674880,
-      "SampledPeakPrivateBytes": 9031680
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
-      "Tool": "MakeAppx",
-      "Run": 6,
-      "ElapsedMs": 100.8001,
+      "Run": 12,
+      "ElapsedMs": 95.8792,
       "PeakWorkingSetBytes": 28684288,
-      "SampledPeakPrivateBytes": 9760768
+      "SampledPeakPrivateBytes": 12562432
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 13,
+      "ElapsedMs": 83.644,
+      "PeakWorkingSetBytes": 28577792,
+      "SampledPeakPrivateBytes": 12521472
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 14,
+      "ElapsedMs": 77.5142,
+      "PeakWorkingSetBytes": 27848704,
+      "SampledPeakPrivateBytes": 12435456
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 15,
+      "ElapsedMs": 84.1695,
+      "PeakWorkingSetBytes": 25260032,
+      "SampledPeakPrivateBytes": 10473472
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 16,
+      "ElapsedMs": 87.5799,
+      "PeakWorkingSetBytes": 28692480,
+      "SampledPeakPrivateBytes": 12619776
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 17,
+      "ElapsedMs": 86.2208,
+      "PeakWorkingSetBytes": 28733440,
+      "SampledPeakPrivateBytes": 12451840
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 18,
+      "ElapsedMs": 91.3338,
+      "PeakWorkingSetBytes": 28647424,
+      "SampledPeakPrivateBytes": 12578816
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 19,
+      "ElapsedMs": 91.7718,
+      "PeakWorkingSetBytes": 28602368,
+      "SampledPeakPrivateBytes": 12562432
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 20,
+      "ElapsedMs": 95.2663,
+      "PeakWorkingSetBytes": 28975104,
+      "SampledPeakPrivateBytes": 12820480
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 21,
+      "ElapsedMs": 82.5242,
+      "PeakWorkingSetBytes": 28725248,
+      "SampledPeakPrivateBytes": 12603392
     },
     {
       "Operation": "Unpack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
-      "Tool": "MakeAppx",
-      "Run": 7,
-      "ElapsedMs": 146.8291,
-      "PeakWorkingSetBytes": 28610560,
-      "SampledPeakPrivateBytes": 12406784
-    },
-    {
-      "Operation": "Validate",
-      "Corpus": "small-1MiB-8files",
-      "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 88.9604,
-      "PeakWorkingSetBytes": 28516352,
-      "SampledPeakPrivateBytes": 7782400
+      "ElapsedMs": 71.4312,
+      "PeakWorkingSetBytes": 23273472,
+      "SampledPeakPrivateBytes": 6008832
     },
     {
-      "Operation": "Validate",
+      "Operation": "Unpack",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 2,
-      "ElapsedMs": 162.8582,
-      "PeakWorkingSetBytes": 24334336,
+      "ElapsedMs": 73.0303,
+      "PeakWorkingSetBytes": 18423808,
+      "SampledPeakPrivateBytes": 5271552
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 3,
+      "ElapsedMs": 89.9444,
+      "PeakWorkingSetBytes": 24408064,
+      "SampledPeakPrivateBytes": 6418432
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 4,
+      "ElapsedMs": 125.7549,
+      "PeakWorkingSetBytes": 24555520,
       "SampledPeakPrivateBytes": 6430720
     },
     {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 5,
+      "ElapsedMs": 78.1762,
+      "PeakWorkingSetBytes": 25706496,
+      "SampledPeakPrivateBytes": 5873664
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 6,
+      "ElapsedMs": 74.3404,
+      "PeakWorkingSetBytes": 25698304,
+      "SampledPeakPrivateBytes": 6045696
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 7,
+      "ElapsedMs": 69.97,
+      "PeakWorkingSetBytes": 25722880,
+      "SampledPeakPrivateBytes": 5914624
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 67.2223,
+      "PeakWorkingSetBytes": 24072192,
+      "SampledPeakPrivateBytes": 6221824
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 68.8143,
+      "PeakWorkingSetBytes": 24588288,
+      "SampledPeakPrivateBytes": 6422528
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 147.7778,
+      "PeakWorkingSetBytes": 25690112,
+      "SampledPeakPrivateBytes": 6410240
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 76.273,
+      "PeakWorkingSetBytes": 24526848,
+      "SampledPeakPrivateBytes": 6377472
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 74.9174,
+      "PeakWorkingSetBytes": 24350720,
+      "SampledPeakPrivateBytes": 6299648
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 65.9853,
+      "PeakWorkingSetBytes": 24760320,
+      "SampledPeakPrivateBytes": 6516736
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 70.1614,
+      "PeakWorkingSetBytes": 25669632,
+      "SampledPeakPrivateBytes": 5918720
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 64.2441,
+      "PeakWorkingSetBytes": 24244224,
+      "SampledPeakPrivateBytes": 6279168
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 66.7245,
+      "PeakWorkingSetBytes": 24702976,
+      "SampledPeakPrivateBytes": 6500352
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 87.5584,
+      "PeakWorkingSetBytes": 24576000,
+      "SampledPeakPrivateBytes": 6447104
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 78.6686,
+      "PeakWorkingSetBytes": 25698304,
+      "SampledPeakPrivateBytes": 5947392
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 66.0722,
+      "PeakWorkingSetBytes": 24535040,
+      "SampledPeakPrivateBytes": 6397952
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 67.8469,
+      "PeakWorkingSetBytes": 24887296,
+      "SampledPeakPrivateBytes": 6520832
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 61.2387,
+      "PeakWorkingSetBytes": 24047616,
+      "SampledPeakPrivateBytes": 6266880
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 1,
+      "ElapsedMs": 80.3948,
+      "PeakWorkingSetBytes": 28704768,
+      "SampledPeakPrivateBytes": 12165120
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 2,
+      "ElapsedMs": 80.4225,
+      "PeakWorkingSetBytes": 28549120,
+      "SampledPeakPrivateBytes": 12423168
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 3,
+      "ElapsedMs": 79.6563,
+      "PeakWorkingSetBytes": 28606464,
+      "SampledPeakPrivateBytes": 12152832
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 4,
+      "ElapsedMs": 78.113,
+      "PeakWorkingSetBytes": 28569600,
+      "SampledPeakPrivateBytes": 12439552
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 5,
+      "ElapsedMs": 81.1996,
+      "PeakWorkingSetBytes": 28647424,
+      "SampledPeakPrivateBytes": 12451840
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 6,
+      "ElapsedMs": 85.0036,
+      "PeakWorkingSetBytes": 28344320,
+      "SampledPeakPrivateBytes": 12062720
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 7,
+      "ElapsedMs": 79.514,
+      "PeakWorkingSetBytes": 28405760,
+      "SampledPeakPrivateBytes": 12148736
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 8,
+      "ElapsedMs": 79.9266,
+      "PeakWorkingSetBytes": 28545024,
+      "SampledPeakPrivateBytes": 12165120
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 9,
+      "ElapsedMs": 94.4516,
+      "PeakWorkingSetBytes": 28606464,
+      "SampledPeakPrivateBytes": 12419072
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 10,
+      "ElapsedMs": 85.1834,
+      "PeakWorkingSetBytes": 28545024,
+      "SampledPeakPrivateBytes": 12410880
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 11,
+      "ElapsedMs": 79.0583,
+      "PeakWorkingSetBytes": 28606464,
+      "SampledPeakPrivateBytes": 12414976
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 12,
+      "ElapsedMs": 79.37,
+      "PeakWorkingSetBytes": 27451392,
+      "SampledPeakPrivateBytes": 12201984
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 13,
+      "ElapsedMs": 77.1943,
+      "PeakWorkingSetBytes": 28561408,
+      "SampledPeakPrivateBytes": 12312576
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 14,
+      "ElapsedMs": 87.6287,
+      "PeakWorkingSetBytes": 27832320,
+      "SampledPeakPrivateBytes": 12177408
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 15,
+      "ElapsedMs": 86.4772,
+      "PeakWorkingSetBytes": 27004928,
+      "SampledPeakPrivateBytes": 12152832
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 16,
+      "ElapsedMs": 77.5561,
+      "PeakWorkingSetBytes": 28553216,
+      "SampledPeakPrivateBytes": 11853824
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 17,
+      "ElapsedMs": 78.5275,
+      "PeakWorkingSetBytes": 28340224,
+      "SampledPeakPrivateBytes": 12337152
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 18,
+      "ElapsedMs": 77.2839,
+      "PeakWorkingSetBytes": 28639232,
+      "SampledPeakPrivateBytes": 12140544
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 19,
+      "ElapsedMs": 80.4361,
+      "PeakWorkingSetBytes": 28565504,
+      "SampledPeakPrivateBytes": 12378112
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 20,
+      "ElapsedMs": 78.1483,
+      "PeakWorkingSetBytes": 28430336,
+      "SampledPeakPrivateBytes": 12222464
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "MakeAppx",
+      "Run": 21,
+      "ElapsedMs": 77.9282,
+      "PeakWorkingSetBytes": 28635136,
+      "SampledPeakPrivateBytes": 12435456
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 1,
+      "ElapsedMs": 72.4762,
+      "PeakWorkingSetBytes": 29548544,
+      "SampledPeakPrivateBytes": 6959104
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 2,
+      "ElapsedMs": 71.9586,
+      "PeakWorkingSetBytes": 27721728,
+      "SampledPeakPrivateBytes": 7200768
+    },
+    {
       "Operation": "Validate",
       "Corpus": "small-1MiB-8files",
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 3,
-      "ElapsedMs": 142.0333,
-      "PeakWorkingSetBytes": 24104960,
-      "SampledPeakPrivateBytes": 6316032
+      "ElapsedMs": 68.6522,
+      "PeakWorkingSetBytes": 28475392,
+      "SampledPeakPrivateBytes": 7266304
     },
     {
       "Operation": "Validate",
@@ -532,9 +1092,9 @@
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 4,
-      "ElapsedMs": 134.5331,
-      "PeakWorkingSetBytes": 24068096,
-      "SampledPeakPrivateBytes": 6279168
+      "ElapsedMs": 74.4378,
+      "PeakWorkingSetBytes": 27709440,
+      "SampledPeakPrivateBytes": 7241728
     },
     {
       "Operation": "Validate",
@@ -542,9 +1102,9 @@
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 5,
-      "ElapsedMs": 104.8323,
-      "PeakWorkingSetBytes": 30011392,
-      "SampledPeakPrivateBytes": 5988352
+      "ElapsedMs": 72.1272,
+      "PeakWorkingSetBytes": 26923008,
+      "SampledPeakPrivateBytes": 6991872
     },
     {
       "Operation": "Validate",
@@ -552,9 +1112,9 @@
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 6,
-      "ElapsedMs": 100.4401,
-      "PeakWorkingSetBytes": 29986816,
-      "SampledPeakPrivateBytes": 7692288
+      "ElapsedMs": 74.558,
+      "PeakWorkingSetBytes": 27774976,
+      "SampledPeakPrivateBytes": 7282688
     },
     {
       "Operation": "Validate",
@@ -562,9 +1122,149 @@
       "PayloadBytes": 1048576,
       "Tool": "msixmgr",
       "Run": 7,
-      "ElapsedMs": 135.6862,
-      "PeakWorkingSetBytes": 25206784,
-      "SampledPeakPrivateBytes": 6864896
+      "ElapsedMs": 116.9214,
+      "PeakWorkingSetBytes": 28454912,
+      "SampledPeakPrivateBytes": 7245824
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 78.0316,
+      "PeakWorkingSetBytes": 28311552,
+      "SampledPeakPrivateBytes": 7258112
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 69.206,
+      "PeakWorkingSetBytes": 29573120,
+      "SampledPeakPrivateBytes": 6844416
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 81.2859,
+      "PeakWorkingSetBytes": 26742784,
+      "SampledPeakPrivateBytes": 6987776
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 75.366,
+      "PeakWorkingSetBytes": 26701824,
+      "SampledPeakPrivateBytes": 6979584
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 81.154,
+      "PeakWorkingSetBytes": 26148864,
+      "SampledPeakPrivateBytes": 6983680
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 74.8556,
+      "PeakWorkingSetBytes": 29573120,
+      "SampledPeakPrivateBytes": 6840320
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 75.9711,
+      "PeakWorkingSetBytes": 26558464,
+      "SampledPeakPrivateBytes": 6979584
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 76.8566,
+      "PeakWorkingSetBytes": 29569024,
+      "SampledPeakPrivateBytes": 7274496
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 71.5407,
+      "PeakWorkingSetBytes": 29577216,
+      "SampledPeakPrivateBytes": 6983680
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 69.0242,
+      "PeakWorkingSetBytes": 27803648,
+      "SampledPeakPrivateBytes": 7254016
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 70.6487,
+      "PeakWorkingSetBytes": 27217920,
+      "SampledPeakPrivateBytes": 7200768
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 78.5424,
+      "PeakWorkingSetBytes": 29548544,
+      "SampledPeakPrivateBytes": 6950912
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 72.3129,
+      "PeakWorkingSetBytes": 26820608,
+      "SampledPeakPrivateBytes": 6987776
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "small-1MiB-8files",
+      "PayloadBytes": 1048576,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 80.9776,
+      "PeakWorkingSetBytes": 23846912,
+      "SampledPeakPrivateBytes": 6238208
     },
     {
       "Operation": "Pack",
@@ -572,8 +1272,58 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 253.3463,
-      "PeakWorkingSetBytes": 35225600,
+      "ElapsedMs": 158.5662,
+      "PeakWorkingSetBytes": 34316288,
+      "SampledPeakPrivateBytes": 11599872
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 2,
+      "ElapsedMs": 149.2538,
+      "PeakWorkingSetBytes": 34082816,
+      "SampledPeakPrivateBytes": 11599872
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 3,
+      "ElapsedMs": 150.3778,
+      "PeakWorkingSetBytes": 34185216,
+      "SampledPeakPrivateBytes": 11612160
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 4,
+      "ElapsedMs": 151.4965,
+      "PeakWorkingSetBytes": 34471936,
+      "SampledPeakPrivateBytes": 11603968
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 5,
+      "ElapsedMs": 146.731,
+      "PeakWorkingSetBytes": 35037184,
+      "SampledPeakPrivateBytes": 11558912
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 6,
+      "ElapsedMs": 153.1905,
+      "PeakWorkingSetBytes": 34103296,
       "SampledPeakPrivateBytes": 11571200
     },
     {
@@ -581,29 +1331,39 @@
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "Run": 2,
-      "ElapsedMs": 226.235,
-      "PeakWorkingSetBytes": 35237888,
-      "SampledPeakPrivateBytes": 11718656
+      "Run": 7,
+      "ElapsedMs": 154.9474,
+      "PeakWorkingSetBytes": 33959936,
+      "SampledPeakPrivateBytes": 11579392
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "Run": 3,
-      "ElapsedMs": 248.6212,
-      "PeakWorkingSetBytes": 33759232,
-      "SampledPeakPrivateBytes": 11636736
+      "Run": 8,
+      "ElapsedMs": 147.7545,
+      "PeakWorkingSetBytes": 34381824,
+      "SampledPeakPrivateBytes": 11595776
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "Run": 4,
-      "ElapsedMs": 244.4466,
-      "PeakWorkingSetBytes": 33955840,
+      "Run": 9,
+      "ElapsedMs": 151.4206,
+      "PeakWorkingSetBytes": 34312192,
+      "SampledPeakPrivateBytes": 11579392
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 155.0967,
+      "PeakWorkingSetBytes": 34291712,
       "SampledPeakPrivateBytes": 11591680
     },
     {
@@ -611,30 +1371,110 @@
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "Run": 5,
-      "ElapsedMs": 217.383,
-      "PeakWorkingSetBytes": 35221504,
-      "SampledPeakPrivateBytes": 11534336
+      "Run": 11,
+      "ElapsedMs": 146.6032,
+      "PeakWorkingSetBytes": 34091008,
+      "SampledPeakPrivateBytes": 11567104
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "Run": 6,
-      "ElapsedMs": 234.151,
-      "PeakWorkingSetBytes": 35229696,
-      "SampledPeakPrivateBytes": 11497472
+      "Run": 12,
+      "ElapsedMs": 150.1178,
+      "PeakWorkingSetBytes": 34512896,
+      "SampledPeakPrivateBytes": 11583488
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
-      "Run": 7,
-      "ElapsedMs": 207.8554,
-      "PeakWorkingSetBytes": 34058240,
-      "SampledPeakPrivateBytes": 11628544
+      "Run": 13,
+      "ElapsedMs": 167.8779,
+      "PeakWorkingSetBytes": 35090432,
+      "SampledPeakPrivateBytes": 11575296
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 150.0007,
+      "PeakWorkingSetBytes": 35057664,
+      "SampledPeakPrivateBytes": 11571200
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 158.6253,
+      "PeakWorkingSetBytes": 34066432,
+      "SampledPeakPrivateBytes": 11575296
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 147.9013,
+      "PeakWorkingSetBytes": 35065856,
+      "SampledPeakPrivateBytes": 11538432
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 152.1465,
+      "PeakWorkingSetBytes": 35094528,
+      "SampledPeakPrivateBytes": 11591680
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 150.1941,
+      "PeakWorkingSetBytes": 34181120,
+      "SampledPeakPrivateBytes": 11579392
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 166.9802,
+      "PeakWorkingSetBytes": 33992704,
+      "SampledPeakPrivateBytes": 11554816
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 168.9486,
+      "PeakWorkingSetBytes": 34074624,
+      "SampledPeakPrivateBytes": 11591680
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 167.2009,
+      "PeakWorkingSetBytes": 33939456,
+      "SampledPeakPrivateBytes": 11567104
     },
     {
       "Operation": "Pack",
@@ -642,9 +1482,9 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 1,
-      "ElapsedMs": 170.4388,
-      "PeakWorkingSetBytes": 30765056,
-      "SampledPeakPrivateBytes": 15278080
+      "ElapsedMs": 2319.635,
+      "PeakWorkingSetBytes": 32272384,
+      "SampledPeakPrivateBytes": 14725120
     },
     {
       "Operation": "Pack",
@@ -652,9 +1492,9 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 2,
-      "ElapsedMs": 172.7016,
-      "PeakWorkingSetBytes": 31559680,
-      "SampledPeakPrivateBytes": 14417920
+      "ElapsedMs": 2703.4433,
+      "PeakWorkingSetBytes": 31322112,
+      "SampledPeakPrivateBytes": 14671872
     },
     {
       "Operation": "Pack",
@@ -662,9 +1502,9 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 3,
-      "ElapsedMs": 169.5681,
-      "PeakWorkingSetBytes": 31465472,
-      "SampledPeakPrivateBytes": 14995456
+      "ElapsedMs": 1358.6297,
+      "PeakWorkingSetBytes": 31432704,
+      "SampledPeakPrivateBytes": 15081472
     },
     {
       "Operation": "Pack",
@@ -672,9 +1512,9 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 4,
-      "ElapsedMs": 215.2922,
-      "PeakWorkingSetBytes": 31563776,
-      "SampledPeakPrivateBytes": 15040512
+      "ElapsedMs": 866.7563,
+      "PeakWorkingSetBytes": 31547392,
+      "SampledPeakPrivateBytes": 15032320
     },
     {
       "Operation": "Pack",
@@ -682,29 +1522,169 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 5,
-      "ElapsedMs": 207.1597,
+      "ElapsedMs": 1056.0173,
+      "PeakWorkingSetBytes": 31404032,
+      "SampledPeakPrivateBytes": 14987264
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 6,
+      "ElapsedMs": 267.3874,
+      "PeakWorkingSetBytes": 31461376,
+      "SampledPeakPrivateBytes": 15015936
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 7,
+      "ElapsedMs": 396.8593,
+      "PeakWorkingSetBytes": 31404032,
+      "SampledPeakPrivateBytes": 14782464
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 8,
+      "ElapsedMs": 246.3654,
+      "PeakWorkingSetBytes": 31203328,
+      "SampledPeakPrivateBytes": 14839808
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 9,
+      "ElapsedMs": 283.47,
+      "PeakWorkingSetBytes": 31346688,
+      "SampledPeakPrivateBytes": 14938112
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 10,
+      "ElapsedMs": 397.9362,
       "PeakWorkingSetBytes": 31457280,
-      "SampledPeakPrivateBytes": 15339520
+      "SampledPeakPrivateBytes": 15314944
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 6,
-      "ElapsedMs": 197.4324,
+      "Run": 11,
+      "ElapsedMs": 278.8378,
+      "PeakWorkingSetBytes": 31354880,
+      "SampledPeakPrivateBytes": 14962688
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 12,
+      "ElapsedMs": 274.6533,
+      "PeakWorkingSetBytes": 31379456,
+      "SampledPeakPrivateBytes": 15028224
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 13,
+      "ElapsedMs": 258.5129,
+      "PeakWorkingSetBytes": 31162368,
+      "SampledPeakPrivateBytes": 14991360
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 14,
+      "ElapsedMs": 271.5923,
+      "PeakWorkingSetBytes": 31404032,
+      "SampledPeakPrivateBytes": 15286272
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 15,
+      "ElapsedMs": 284.2806,
+      "PeakWorkingSetBytes": 31449088,
+      "SampledPeakPrivateBytes": 14905344
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 16,
+      "ElapsedMs": 223.1493,
+      "PeakWorkingSetBytes": 31420416,
+      "SampledPeakPrivateBytes": 15499264
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 17,
+      "ElapsedMs": 313.1131,
+      "PeakWorkingSetBytes": 31342592,
+      "SampledPeakPrivateBytes": 14929920
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 18,
+      "ElapsedMs": 209.5727,
+      "PeakWorkingSetBytes": 31371264,
+      "SampledPeakPrivateBytes": 14733312
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 19,
+      "ElapsedMs": 438.7204,
+      "PeakWorkingSetBytes": 31367168,
+      "SampledPeakPrivateBytes": 15249408
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 20,
+      "ElapsedMs": 278.4252,
       "PeakWorkingSetBytes": 31358976,
-      "SampledPeakPrivateBytes": 14503936
+      "SampledPeakPrivateBytes": 14979072
     },
     {
       "Operation": "Pack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 7,
-      "ElapsedMs": 135.5085,
-      "PeakWorkingSetBytes": 31473664,
-      "SampledPeakPrivateBytes": 15204352
+      "Run": 21,
+      "ElapsedMs": 213.5156,
+      "PeakWorkingSetBytes": 31395840,
+      "SampledPeakPrivateBytes": 14848000
     },
     {
       "Operation": "Unpack",
@@ -712,9 +1692,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 96.6006,
-      "PeakWorkingSetBytes": 25858048,
-      "SampledPeakPrivateBytes": 6053888
+      "ElapsedMs": 83.9633,
+      "PeakWorkingSetBytes": 25014272,
+      "SampledPeakPrivateBytes": 6660096
     },
     {
       "Operation": "Unpack",
@@ -722,9 +1702,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 2,
-      "ElapsedMs": 105.9274,
-      "PeakWorkingSetBytes": 25862144,
-      "SampledPeakPrivateBytes": 6762496
+      "ElapsedMs": 72.0727,
+      "PeakWorkingSetBytes": 24760320,
+      "SampledPeakPrivateBytes": 6631424
     },
     {
       "Operation": "Unpack",
@@ -732,9 +1712,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 3,
-      "ElapsedMs": 146.4323,
-      "PeakWorkingSetBytes": 24453120,
-      "SampledPeakPrivateBytes": 6516736
+      "ElapsedMs": 79.1171,
+      "PeakWorkingSetBytes": 25808896,
+      "SampledPeakPrivateBytes": 6758400
     },
     {
       "Operation": "Unpack",
@@ -742,9 +1722,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 4,
-      "ElapsedMs": 110.6767,
-      "PeakWorkingSetBytes": 25870336,
-      "SampledPeakPrivateBytes": 6721536
+      "ElapsedMs": 91.8819,
+      "PeakWorkingSetBytes": 24997888,
+      "SampledPeakPrivateBytes": 6766592
     },
     {
       "Operation": "Unpack",
@@ -752,9 +1732,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 5,
-      "ElapsedMs": 98.2397,
-      "PeakWorkingSetBytes": 24657920,
-      "SampledPeakPrivateBytes": 6602752
+      "ElapsedMs": 87.3328,
+      "PeakWorkingSetBytes": 24813568,
+      "SampledPeakPrivateBytes": 6660096
     },
     {
       "Operation": "Unpack",
@@ -762,9 +1742,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 6,
-      "ElapsedMs": 157.7879,
-      "PeakWorkingSetBytes": 23691264,
-      "SampledPeakPrivateBytes": 6123520
+      "ElapsedMs": 78.3666,
+      "PeakWorkingSetBytes": 25886720,
+      "SampledPeakPrivateBytes": 6541312
     },
     {
       "Operation": "Unpack",
@@ -772,9 +1752,149 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 7,
-      "ElapsedMs": 178.0337,
-      "PeakWorkingSetBytes": 24694784,
-      "SampledPeakPrivateBytes": 6606848
+      "ElapsedMs": 77.9914,
+      "PeakWorkingSetBytes": 24743936,
+      "SampledPeakPrivateBytes": 6615040
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 78.0969,
+      "PeakWorkingSetBytes": 24752128,
+      "SampledPeakPrivateBytes": 6643712
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 75.7462,
+      "PeakWorkingSetBytes": 24727552,
+      "SampledPeakPrivateBytes": 6615040
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 81.2759,
+      "PeakWorkingSetBytes": 24743936,
+      "SampledPeakPrivateBytes": 6619136
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 82.2514,
+      "PeakWorkingSetBytes": 25505792,
+      "SampledPeakPrivateBytes": 6742016
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 72.9036,
+      "PeakWorkingSetBytes": 25907200,
+      "SampledPeakPrivateBytes": 6701056
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 82.3847,
+      "PeakWorkingSetBytes": 24719360,
+      "SampledPeakPrivateBytes": 6615040
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 74.5069,
+      "PeakWorkingSetBytes": 24768512,
+      "SampledPeakPrivateBytes": 6615040
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 76.6015,
+      "PeakWorkingSetBytes": 25018368,
+      "SampledPeakPrivateBytes": 6782976
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 75.8159,
+      "PeakWorkingSetBytes": 24674304,
+      "SampledPeakPrivateBytes": 6569984
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 75.7059,
+      "PeakWorkingSetBytes": 25927680,
+      "SampledPeakPrivateBytes": 6565888
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 75.5645,
+      "PeakWorkingSetBytes": 25903104,
+      "SampledPeakPrivateBytes": 6488064
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 76.4845,
+      "PeakWorkingSetBytes": 25047040,
+      "SampledPeakPrivateBytes": 6737920
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 92.6166,
+      "PeakWorkingSetBytes": 25907200,
+      "SampledPeakPrivateBytes": 6746112
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 79.0353,
+      "PeakWorkingSetBytes": 25903104,
+      "SampledPeakPrivateBytes": 6705152
     },
     {
       "Operation": "Unpack",
@@ -782,9 +1902,9 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 1,
-      "ElapsedMs": 190.05,
-      "PeakWorkingSetBytes": 28827648,
-      "SampledPeakPrivateBytes": 12607488
+      "ElapsedMs": 121.0447,
+      "PeakWorkingSetBytes": 28807168,
+      "SampledPeakPrivateBytes": 12623872
     },
     {
       "Operation": "Unpack",
@@ -792,8 +1912,38 @@
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
       "Run": 2,
-      "ElapsedMs": 132.3047,
-      "PeakWorkingSetBytes": 28962816,
+      "ElapsedMs": 107.2007,
+      "PeakWorkingSetBytes": 28839936,
+      "SampledPeakPrivateBytes": 12701696
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 3,
+      "ElapsedMs": 98.7105,
+      "PeakWorkingSetBytes": 28880896,
+      "SampledPeakPrivateBytes": 12701696
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 4,
+      "ElapsedMs": 104.3196,
+      "PeakWorkingSetBytes": 28876800,
+      "SampledPeakPrivateBytes": 12689408
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 5,
+      "ElapsedMs": 101.4434,
+      "PeakWorkingSetBytes": 28946432,
       "SampledPeakPrivateBytes": 12693504
     },
     {
@@ -801,19 +1951,69 @@
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 3,
-      "ElapsedMs": 123.4835,
-      "PeakWorkingSetBytes": 28864512,
-      "SampledPeakPrivateBytes": 12603392
+      "Run": 6,
+      "ElapsedMs": 125.1655,
+      "PeakWorkingSetBytes": 28987392,
+      "SampledPeakPrivateBytes": 12730368
     },
     {
       "Operation": "Unpack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 4,
-      "ElapsedMs": 199.3027,
-      "PeakWorkingSetBytes": 28950528,
+      "Run": 7,
+      "ElapsedMs": 111.3902,
+      "PeakWorkingSetBytes": 28626944,
+      "SampledPeakPrivateBytes": 12558336
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 8,
+      "ElapsedMs": 110.1056,
+      "PeakWorkingSetBytes": 28807168,
+      "SampledPeakPrivateBytes": 12619776
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 9,
+      "ElapsedMs": 110.7282,
+      "PeakWorkingSetBytes": 28958720,
+      "SampledPeakPrivateBytes": 12685312
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 10,
+      "ElapsedMs": 102.8692,
+      "PeakWorkingSetBytes": 28889088,
+      "SampledPeakPrivateBytes": 12705792
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 11,
+      "ElapsedMs": 103.6111,
+      "PeakWorkingSetBytes": 28884992,
+      "SampledPeakPrivateBytes": 12697600
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 12,
+      "ElapsedMs": 103.538,
+      "PeakWorkingSetBytes": 28889088,
       "SampledPeakPrivateBytes": 12718080
     },
     {
@@ -821,30 +2021,90 @@
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 5,
-      "ElapsedMs": 156.0913,
-      "PeakWorkingSetBytes": 28725248,
-      "SampledPeakPrivateBytes": 12578816
+      "Run": 13,
+      "ElapsedMs": 107.9503,
+      "PeakWorkingSetBytes": 28958720,
+      "SampledPeakPrivateBytes": 12697600
     },
     {
       "Operation": "Unpack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 6,
-      "ElapsedMs": 137.0921,
-      "PeakWorkingSetBytes": 29020160,
-      "SampledPeakPrivateBytes": 12677120
+      "Run": 14,
+      "ElapsedMs": 103.5412,
+      "PeakWorkingSetBytes": 28880896,
+      "SampledPeakPrivateBytes": 12705792
     },
     {
       "Operation": "Unpack",
       "Corpus": "medium-10MiB-64files",
       "PayloadBytes": 10485760,
       "Tool": "MakeAppx",
-      "Run": 7,
-      "ElapsedMs": 128.8467,
+      "Run": 15,
+      "ElapsedMs": 105.5026,
+      "PeakWorkingSetBytes": 28880896,
+      "SampledPeakPrivateBytes": 12705792
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 16,
+      "ElapsedMs": 113.5179,
+      "PeakWorkingSetBytes": 28905472,
+      "SampledPeakPrivateBytes": 12644352
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 17,
+      "ElapsedMs": 104.7165,
       "PeakWorkingSetBytes": 28852224,
-      "SampledPeakPrivateBytes": 12595200
+      "SampledPeakPrivateBytes": 12693504
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 18,
+      "ElapsedMs": 106.2194,
+      "PeakWorkingSetBytes": 28958720,
+      "SampledPeakPrivateBytes": 12693504
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 19,
+      "ElapsedMs": 129.3773,
+      "PeakWorkingSetBytes": 28946432,
+      "SampledPeakPrivateBytes": 12689408
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 20,
+      "ElapsedMs": 105.1001,
+      "PeakWorkingSetBytes": 28925952,
+      "SampledPeakPrivateBytes": 12713984
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "MakeAppx",
+      "Run": 21,
+      "ElapsedMs": 108.385,
+      "PeakWorkingSetBytes": 28663808,
+      "SampledPeakPrivateBytes": 12566528
     },
     {
       "Operation": "Validate",
@@ -852,9 +2112,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 97.3126,
-      "PeakWorkingSetBytes": 33914880,
-      "SampledPeakPrivateBytes": 11595776
+      "ElapsedMs": 77.6117,
+      "PeakWorkingSetBytes": 29851648,
+      "SampledPeakPrivateBytes": 7450624
     },
     {
       "Operation": "Validate",
@@ -862,9 +2122,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 2,
-      "ElapsedMs": 165.8552,
-      "PeakWorkingSetBytes": 25718784,
-      "SampledPeakPrivateBytes": 6950912
+      "ElapsedMs": 78.357,
+      "PeakWorkingSetBytes": 29827072,
+      "SampledPeakPrivateBytes": 7434240
     },
     {
       "Operation": "Validate",
@@ -872,9 +2132,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 3,
-      "ElapsedMs": 156.4278,
-      "PeakWorkingSetBytes": 30388224,
-      "SampledPeakPrivateBytes": 9879552
+      "ElapsedMs": 88.0511,
+      "PeakWorkingSetBytes": 29827072,
+      "SampledPeakPrivateBytes": 7446528
     },
     {
       "Operation": "Validate",
@@ -882,9 +2142,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 4,
-      "ElapsedMs": 101.9206,
-      "PeakWorkingSetBytes": 33914880,
-      "SampledPeakPrivateBytes": 11563008
+      "ElapsedMs": 82.4311,
+      "PeakWorkingSetBytes": 28033024,
+      "SampledPeakPrivateBytes": 7520256
     },
     {
       "Operation": "Validate",
@@ -892,9 +2152,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 5,
-      "ElapsedMs": 173.1699,
-      "PeakWorkingSetBytes": 26767360,
-      "SampledPeakPrivateBytes": 7041024
+      "ElapsedMs": 85.9816,
+      "PeakWorkingSetBytes": 27922432,
+      "SampledPeakPrivateBytes": 7442432
     },
     {
       "Operation": "Validate",
@@ -902,9 +2162,9 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 6,
-      "ElapsedMs": 177.4991,
-      "PeakWorkingSetBytes": 33058816,
-      "SampledPeakPrivateBytes": 11632640
+      "ElapsedMs": 79.3967,
+      "PeakWorkingSetBytes": 26361856,
+      "SampledPeakPrivateBytes": 7049216
     },
     {
       "Operation": "Validate",
@@ -912,9 +2172,149 @@
       "PayloadBytes": 10485760,
       "Tool": "msixmgr",
       "Run": 7,
-      "ElapsedMs": 181.5565,
-      "PeakWorkingSetBytes": 32481280,
-      "SampledPeakPrivateBytes": 11698176
+      "ElapsedMs": 90.17,
+      "PeakWorkingSetBytes": 24141824,
+      "SampledPeakPrivateBytes": 6356992
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 77.5132,
+      "PeakWorkingSetBytes": 28098560,
+      "SampledPeakPrivateBytes": 7520256
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 86.6709,
+      "PeakWorkingSetBytes": 28684288,
+      "SampledPeakPrivateBytes": 7524352
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 82.5847,
+      "PeakWorkingSetBytes": 29822976,
+      "SampledPeakPrivateBytes": 7426048
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 93.4023,
+      "PeakWorkingSetBytes": 27922432,
+      "SampledPeakPrivateBytes": 7430144
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 80.2909,
+      "PeakWorkingSetBytes": 28549120,
+      "SampledPeakPrivateBytes": 7532544
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 86.2913,
+      "PeakWorkingSetBytes": 27922432,
+      "SampledPeakPrivateBytes": 7454720
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 80.3192,
+      "PeakWorkingSetBytes": 28745728,
+      "SampledPeakPrivateBytes": 7495680
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 79.3371,
+      "PeakWorkingSetBytes": 27910144,
+      "SampledPeakPrivateBytes": 7401472
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 80.4137,
+      "PeakWorkingSetBytes": 29827072,
+      "SampledPeakPrivateBytes": 7274496
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 80.0567,
+      "PeakWorkingSetBytes": 27930624,
+      "SampledPeakPrivateBytes": 7413760
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 81.2025,
+      "PeakWorkingSetBytes": 29839360,
+      "SampledPeakPrivateBytes": 7417856
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 82.9318,
+      "PeakWorkingSetBytes": 27983872,
+      "SampledPeakPrivateBytes": 7450624
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 77.4278,
+      "PeakWorkingSetBytes": 27938816,
+      "SampledPeakPrivateBytes": 7446528
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "medium-10MiB-64files",
+      "PayloadBytes": 10485760,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 86.8344,
+      "PeakWorkingSetBytes": 28028928,
+      "SampledPeakPrivateBytes": 7516160
     },
     {
       "Operation": "Pack",
@@ -922,9 +2322,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 765.278,
-      "PeakWorkingSetBytes": 40226816,
-      "SampledPeakPrivateBytes": 16404480
+      "ElapsedMs": 501.9369,
+      "PeakWorkingSetBytes": 39817216,
+      "SampledPeakPrivateBytes": 15249408
     },
     {
       "Operation": "Pack",
@@ -932,9 +2332,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 2,
-      "ElapsedMs": 650.9574,
-      "PeakWorkingSetBytes": 39051264,
-      "SampledPeakPrivateBytes": 15347712
+      "ElapsedMs": 498.1497,
+      "PeakWorkingSetBytes": 38850560,
+      "SampledPeakPrivateBytes": 15261696
     },
     {
       "Operation": "Pack",
@@ -942,9 +2342,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 3,
-      "ElapsedMs": 680.581,
-      "PeakWorkingSetBytes": 39051264,
-      "SampledPeakPrivateBytes": 15405056
+      "ElapsedMs": 493.2141,
+      "PeakWorkingSetBytes": 38715392,
+      "SampledPeakPrivateBytes": 14753792
     },
     {
       "Operation": "Pack",
@@ -952,9 +2352,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 4,
-      "ElapsedMs": 690.2814,
-      "PeakWorkingSetBytes": 38068224,
-      "SampledPeakPrivateBytes": 14913536
+      "ElapsedMs": 495.8742,
+      "PeakWorkingSetBytes": 39796736,
+      "SampledPeakPrivateBytes": 15220736
     },
     {
       "Operation": "Pack",
@@ -962,9 +2362,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 5,
-      "ElapsedMs": 653.3227,
-      "PeakWorkingSetBytes": 38985728,
-      "SampledPeakPrivateBytes": 15339520
+      "ElapsedMs": 507.4311,
+      "PeakWorkingSetBytes": 38805504,
+      "SampledPeakPrivateBytes": 15224832
     },
     {
       "Operation": "Pack",
@@ -972,9 +2372,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 6,
-      "ElapsedMs": 612.8639,
-      "PeakWorkingSetBytes": 38772736,
-      "SampledPeakPrivateBytes": 15200256
+      "ElapsedMs": 540.6564,
+      "PeakWorkingSetBytes": 37810176,
+      "SampledPeakPrivateBytes": 14807040
     },
     {
       "Operation": "Pack",
@@ -982,9 +2382,149 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 7,
-      "ElapsedMs": 571.4299,
-      "PeakWorkingSetBytes": 38989824,
-      "SampledPeakPrivateBytes": 15343616
+      "ElapsedMs": 482.2613,
+      "PeakWorkingSetBytes": 39817216,
+      "SampledPeakPrivateBytes": 15241216
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 502.5103,
+      "PeakWorkingSetBytes": 38850560,
+      "SampledPeakPrivateBytes": 15249408
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 491.0429,
+      "PeakWorkingSetBytes": 38821888,
+      "SampledPeakPrivateBytes": 15228928
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 482.4316,
+      "PeakWorkingSetBytes": 39837696,
+      "SampledPeakPrivateBytes": 15253504
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 489.9198,
+      "PeakWorkingSetBytes": 38809600,
+      "SampledPeakPrivateBytes": 15237120
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 487.457,
+      "PeakWorkingSetBytes": 38846464,
+      "SampledPeakPrivateBytes": 15192064
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 491.5749,
+      "PeakWorkingSetBytes": 37781504,
+      "SampledPeakPrivateBytes": 14782464
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 503.3582,
+      "PeakWorkingSetBytes": 39817216,
+      "SampledPeakPrivateBytes": 15241216
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 490.3891,
+      "PeakWorkingSetBytes": 39145472,
+      "SampledPeakPrivateBytes": 15568896
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 501.1017,
+      "PeakWorkingSetBytes": 37752832,
+      "SampledPeakPrivateBytes": 14757888
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 490.2284,
+      "PeakWorkingSetBytes": 38866944,
+      "SampledPeakPrivateBytes": 15228928
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 489.4073,
+      "PeakWorkingSetBytes": 39804928,
+      "SampledPeakPrivateBytes": 15228928
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 497.2785,
+      "PeakWorkingSetBytes": 39804928,
+      "SampledPeakPrivateBytes": 15241216
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 492.8478,
+      "PeakWorkingSetBytes": 39014400,
+      "SampledPeakPrivateBytes": 15462400
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 550.0872,
+      "PeakWorkingSetBytes": 39804928,
+      "SampledPeakPrivateBytes": 15228928
     },
     {
       "Operation": "Pack",
@@ -992,9 +2532,9 @@
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
       "Run": 1,
-      "ElapsedMs": 350.3806,
-      "PeakWorkingSetBytes": 87351296,
-      "SampledPeakPrivateBytes": 74264576
+      "ElapsedMs": 236.5198,
+      "PeakWorkingSetBytes": 87220224,
+      "SampledPeakPrivateBytes": 74248192
     },
     {
       "Operation": "Pack",
@@ -1002,8 +2542,28 @@
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
       "Run": 2,
-      "ElapsedMs": 901.8873,
-      "PeakWorkingSetBytes": 87293952,
+      "ElapsedMs": 238.7859,
+      "PeakWorkingSetBytes": 87191552,
+      "SampledPeakPrivateBytes": 74207232
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 3,
+      "ElapsedMs": 246.0489,
+      "PeakWorkingSetBytes": 87154688,
+      "SampledPeakPrivateBytes": 74190848
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 4,
+      "ElapsedMs": 268.8396,
+      "PeakWorkingSetBytes": 87224320,
       "SampledPeakPrivateBytes": 74227712
     },
     {
@@ -1011,19 +2571,89 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "Run": 3,
-      "ElapsedMs": 2731.6922,
-      "PeakWorkingSetBytes": 87293952,
-      "SampledPeakPrivateBytes": 74211328
+      "Run": 5,
+      "ElapsedMs": 238.9389,
+      "PeakWorkingSetBytes": 87093248,
+      "SampledPeakPrivateBytes": 74039296
     },
     {
       "Operation": "Pack",
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "Run": 4,
-      "ElapsedMs": 3407.3191,
-      "PeakWorkingSetBytes": 87277568,
+      "Run": 6,
+      "ElapsedMs": 240.9728,
+      "PeakWorkingSetBytes": 87281664,
+      "SampledPeakPrivateBytes": 74321920
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 7,
+      "ElapsedMs": 255.7492,
+      "PeakWorkingSetBytes": 87109632,
+      "SampledPeakPrivateBytes": 74072064
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 8,
+      "ElapsedMs": 241.5789,
+      "PeakWorkingSetBytes": 87097344,
+      "SampledPeakPrivateBytes": 74084352
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 9,
+      "ElapsedMs": 1712.9509,
+      "PeakWorkingSetBytes": 87228416,
+      "SampledPeakPrivateBytes": 74223616
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 10,
+      "ElapsedMs": 1761.0049,
+      "PeakWorkingSetBytes": 87134208,
+      "SampledPeakPrivateBytes": 74162176
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 11,
+      "ElapsedMs": 2519.9456,
+      "PeakWorkingSetBytes": 87117824,
+      "SampledPeakPrivateBytes": 74117120
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 12,
+      "ElapsedMs": 1802.7088,
+      "PeakWorkingSetBytes": 87117824,
+      "SampledPeakPrivateBytes": 74104832
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 13,
+      "ElapsedMs": 1384.2536,
+      "PeakWorkingSetBytes": 87089152,
       "SampledPeakPrivateBytes": 74035200
     },
     {
@@ -1031,19 +2661,39 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "Run": 5,
-      "ElapsedMs": 1735.0034,
-      "PeakWorkingSetBytes": 87302144,
-      "SampledPeakPrivateBytes": 74256384
+      "Run": 14,
+      "ElapsedMs": 1129.6639,
+      "PeakWorkingSetBytes": 87113728,
+      "SampledPeakPrivateBytes": 74088448
     },
     {
       "Operation": "Pack",
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "Run": 6,
-      "ElapsedMs": 991.5146,
-      "PeakWorkingSetBytes": 87175168,
+      "Run": 15,
+      "ElapsedMs": 935.0498,
+      "PeakWorkingSetBytes": 87224320,
+      "SampledPeakPrivateBytes": 74252288
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 16,
+      "ElapsedMs": 875.2662,
+      "PeakWorkingSetBytes": 87228416,
+      "SampledPeakPrivateBytes": 74248192
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 17,
+      "ElapsedMs": 938.0711,
+      "PeakWorkingSetBytes": 87121920,
       "SampledPeakPrivateBytes": 74108928
     },
     {
@@ -1051,10 +2701,40 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "Run": 7,
-      "ElapsedMs": 1075.5956,
-      "PeakWorkingSetBytes": 87207936,
-      "SampledPeakPrivateBytes": 74133504
+      "Run": 18,
+      "ElapsedMs": 883.6739,
+      "PeakWorkingSetBytes": 87199744,
+      "SampledPeakPrivateBytes": 74215424
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 19,
+      "ElapsedMs": 872.9812,
+      "PeakWorkingSetBytes": 87392256,
+      "SampledPeakPrivateBytes": 74416128
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 20,
+      "ElapsedMs": 806.3235,
+      "PeakWorkingSetBytes": 87261184,
+      "SampledPeakPrivateBytes": 74272768
+    },
+    {
+      "Operation": "Pack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 21,
+      "ElapsedMs": 966.0139,
+      "PeakWorkingSetBytes": 87228416,
+      "SampledPeakPrivateBytes": 74186752
     },
     {
       "Operation": "Unpack",
@@ -1062,48 +2742,8 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 205.5812,
-      "PeakWorkingSetBytes": 24899584,
-      "SampledPeakPrivateBytes": 6832128
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "large-64MiB-128files",
-      "PayloadBytes": 67108864,
-      "Tool": "msixmgr",
-      "Run": 2,
-      "ElapsedMs": 178.5222,
-      "PeakWorkingSetBytes": 24879104,
-      "SampledPeakPrivateBytes": 6782976
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "large-64MiB-128files",
-      "PayloadBytes": 67108864,
-      "Tool": "msixmgr",
-      "Run": 3,
-      "ElapsedMs": 143.7443,
-      "PeakWorkingSetBytes": 26087424,
-      "SampledPeakPrivateBytes": 6922240
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "large-64MiB-128files",
-      "PayloadBytes": 67108864,
-      "Tool": "msixmgr",
-      "Run": 4,
-      "ElapsedMs": 248.0771,
-      "PeakWorkingSetBytes": 24829952,
-      "SampledPeakPrivateBytes": 6733824
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "large-64MiB-128files",
-      "PayloadBytes": 67108864,
-      "Tool": "msixmgr",
-      "Run": 5,
-      "ElapsedMs": 260.0165,
-      "PeakWorkingSetBytes": 24899584,
+      "ElapsedMs": 118.334,
+      "PeakWorkingSetBytes": 24965120,
       "SampledPeakPrivateBytes": 6844416
     },
     {
@@ -1111,9 +2751,189 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
+      "Run": 2,
+      "ElapsedMs": 158.5048,
+      "PeakWorkingSetBytes": 26107904,
+      "SampledPeakPrivateBytes": 6836224
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 3,
+      "ElapsedMs": 128.9852,
+      "PeakWorkingSetBytes": 25149440,
+      "SampledPeakPrivateBytes": 7000064
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 4,
+      "ElapsedMs": 109.4327,
+      "PeakWorkingSetBytes": 24981504,
+      "SampledPeakPrivateBytes": 6909952
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 5,
+      "ElapsedMs": 126.4037,
+      "PeakWorkingSetBytes": 24981504,
+      "SampledPeakPrivateBytes": 6918144
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
       "Run": 6,
-      "ElapsedMs": 206.5225,
-      "PeakWorkingSetBytes": 24952832,
+      "ElapsedMs": 121.4439,
+      "PeakWorkingSetBytes": 25952256,
+      "SampledPeakPrivateBytes": 6971392
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 7,
+      "ElapsedMs": 118.8151,
+      "PeakWorkingSetBytes": 26107904,
+      "SampledPeakPrivateBytes": 6938624
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 130.0281,
+      "PeakWorkingSetBytes": 25137152,
+      "SampledPeakPrivateBytes": 7016448
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 138.2485,
+      "PeakWorkingSetBytes": 25239552,
+      "SampledPeakPrivateBytes": 6950912
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 127.869,
+      "PeakWorkingSetBytes": 24924160,
+      "SampledPeakPrivateBytes": 6856704
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 127.8958,
+      "PeakWorkingSetBytes": 24993792,
+      "SampledPeakPrivateBytes": 6864896
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 139.2301,
+      "PeakWorkingSetBytes": 24948736,
+      "SampledPeakPrivateBytes": 6807552
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 140.8218,
+      "PeakWorkingSetBytes": 24977408,
+      "SampledPeakPrivateBytes": 6864896
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 131.617,
+      "PeakWorkingSetBytes": 25227264,
+      "SampledPeakPrivateBytes": 6942720
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 146.3895,
+      "PeakWorkingSetBytes": 26087424,
+      "SampledPeakPrivateBytes": 6819840
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 135.8221,
+      "PeakWorkingSetBytes": 24989696,
+      "SampledPeakPrivateBytes": 6909952
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 118.8602,
+      "PeakWorkingSetBytes": 25194496,
+      "SampledPeakPrivateBytes": 7004160
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 114.0871,
+      "PeakWorkingSetBytes": 24965120,
+      "SampledPeakPrivateBytes": 6852608
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 113.1899,
+      "PeakWorkingSetBytes": 26128384,
+      "SampledPeakPrivateBytes": 6873088
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 164.8333,
+      "PeakWorkingSetBytes": 24948736,
       "SampledPeakPrivateBytes": 6868992
     },
     {
@@ -1121,10 +2941,10 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
-      "Run": 7,
-      "ElapsedMs": 133.5948,
-      "PeakWorkingSetBytes": 26066944,
-      "SampledPeakPrivateBytes": 6909952
+      "Run": 21,
+      "ElapsedMs": 135.8665,
+      "PeakWorkingSetBytes": 24883200,
+      "SampledPeakPrivateBytes": 6758400
     },
     {
       "Operation": "Unpack",
@@ -1132,9 +2952,9 @@
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
       "Run": 1,
-      "ElapsedMs": 295.6329,
-      "PeakWorkingSetBytes": 29487104,
-      "SampledPeakPrivateBytes": 13209600
+      "ElapsedMs": 283.3366,
+      "PeakWorkingSetBytes": 29474816,
+      "SampledPeakPrivateBytes": 13197312
     },
     {
       "Operation": "Unpack",
@@ -1142,9 +2962,9 @@
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
       "Run": 2,
-      "ElapsedMs": 294.779,
-      "PeakWorkingSetBytes": 29343744,
-      "SampledPeakPrivateBytes": 13111296
+      "ElapsedMs": 242.5522,
+      "PeakWorkingSetBytes": 29380608,
+      "SampledPeakPrivateBytes": 13197312
     },
     {
       "Operation": "Unpack",
@@ -1152,9 +2972,9 @@
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
       "Run": 3,
-      "ElapsedMs": 314.1845,
-      "PeakWorkingSetBytes": 29466624,
-      "SampledPeakPrivateBytes": 13172736
+      "ElapsedMs": 203.4903,
+      "PeakWorkingSetBytes": 29433856,
+      "SampledPeakPrivateBytes": 13230080
     },
     {
       "Operation": "Unpack",
@@ -1162,8 +2982,28 @@
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
       "Run": 4,
-      "ElapsedMs": 228.2187,
-      "PeakWorkingSetBytes": 29396992,
+      "ElapsedMs": 215.4015,
+      "PeakWorkingSetBytes": 29401088,
+      "SampledPeakPrivateBytes": 13193216
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 5,
+      "ElapsedMs": 206.4768,
+      "PeakWorkingSetBytes": 29294592,
+      "SampledPeakPrivateBytes": 13148160
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 6,
+      "ElapsedMs": 203.0437,
+      "PeakWorkingSetBytes": 29278208,
       "SampledPeakPrivateBytes": 13107200
     },
     {
@@ -1171,30 +3011,150 @@
       "Corpus": "large-64MiB-128files",
       "PayloadBytes": 67108864,
       "Tool": "MakeAppx",
-      "Run": 5,
-      "ElapsedMs": 238.3097,
-      "PeakWorkingSetBytes": 29560832,
-      "SampledPeakPrivateBytes": 13185024
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "large-64MiB-128files",
-      "PayloadBytes": 67108864,
-      "Tool": "MakeAppx",
-      "Run": 6,
-      "ElapsedMs": 368.3628,
-      "PeakWorkingSetBytes": 29458432,
-      "SampledPeakPrivateBytes": 13176832
-    },
-    {
-      "Operation": "Unpack",
-      "Corpus": "large-64MiB-128files",
-      "PayloadBytes": 67108864,
-      "Tool": "MakeAppx",
       "Run": 7,
-      "ElapsedMs": 301.4847,
+      "ElapsedMs": 224.9098,
+      "PeakWorkingSetBytes": 29450240,
+      "SampledPeakPrivateBytes": 13135872
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 8,
+      "ElapsedMs": 256.64,
+      "PeakWorkingSetBytes": 29478912,
+      "SampledPeakPrivateBytes": 13193216
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 9,
+      "ElapsedMs": 200.0833,
+      "PeakWorkingSetBytes": 29487104,
+      "SampledPeakPrivateBytes": 13217792
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 10,
+      "ElapsedMs": 223.8575,
+      "PeakWorkingSetBytes": 29401088,
+      "SampledPeakPrivateBytes": 13193216
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 11,
+      "ElapsedMs": 210.2368,
+      "PeakWorkingSetBytes": 29413376,
+      "SampledPeakPrivateBytes": 13180928
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 12,
+      "ElapsedMs": 208.6921,
+      "PeakWorkingSetBytes": 29466624,
+      "SampledPeakPrivateBytes": 13254656
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 13,
+      "ElapsedMs": 241.7611,
+      "PeakWorkingSetBytes": 29429760,
+      "SampledPeakPrivateBytes": 13205504
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 14,
+      "ElapsedMs": 216.491,
+      "PeakWorkingSetBytes": 29466624,
+      "SampledPeakPrivateBytes": 13197312
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 15,
+      "ElapsedMs": 222.1294,
+      "PeakWorkingSetBytes": 29462528,
+      "SampledPeakPrivateBytes": 13144064
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 16,
+      "ElapsedMs": 208.0704,
+      "PeakWorkingSetBytes": 29491200,
+      "SampledPeakPrivateBytes": 13197312
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 17,
+      "ElapsedMs": 215.9757,
       "PeakWorkingSetBytes": 29433856,
-      "SampledPeakPrivateBytes": 13156352
+      "SampledPeakPrivateBytes": 13189120
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 18,
+      "ElapsedMs": 209.4281,
+      "PeakWorkingSetBytes": 29413376,
+      "SampledPeakPrivateBytes": 13193216
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 19,
+      "ElapsedMs": 203.2198,
+      "PeakWorkingSetBytes": 29265920,
+      "SampledPeakPrivateBytes": 13107200
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 20,
+      "ElapsedMs": 267.1844,
+      "PeakWorkingSetBytes": 29396992,
+      "SampledPeakPrivateBytes": 13193216
+    },
+    {
+      "Operation": "Unpack",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "MakeAppx",
+      "Run": 21,
+      "ElapsedMs": 227.6933,
+      "PeakWorkingSetBytes": 29323264,
+      "SampledPeakPrivateBytes": 13164544
     },
     {
       "Operation": "Validate",
@@ -1202,9 +3162,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 1,
-      "ElapsedMs": 172.2708,
-      "PeakWorkingSetBytes": 32440320,
-      "SampledPeakPrivateBytes": 11796480
+      "ElapsedMs": 115.3329,
+      "PeakWorkingSetBytes": 29630464,
+      "SampledPeakPrivateBytes": 8216576
     },
     {
       "Operation": "Validate",
@@ -1212,9 +3172,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 2,
-      "ElapsedMs": 193.259,
-      "PeakWorkingSetBytes": 33644544,
-      "SampledPeakPrivateBytes": 13033472
+      "ElapsedMs": 111.8502,
+      "PeakWorkingSetBytes": 28819456,
+      "SampledPeakPrivateBytes": 8286208
     },
     {
       "Operation": "Validate",
@@ -1222,9 +3182,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 3,
-      "ElapsedMs": 134.5602,
-      "PeakWorkingSetBytes": 35352576,
-      "SampledPeakPrivateBytes": 11792384
+      "ElapsedMs": 116.3523,
+      "PeakWorkingSetBytes": 28676096,
+      "SampledPeakPrivateBytes": 8126464
     },
     {
       "Operation": "Validate",
@@ -1232,9 +3192,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 4,
-      "ElapsedMs": 134.378,
-      "PeakWorkingSetBytes": 35373056,
-      "SampledPeakPrivateBytes": 11804672
+      "ElapsedMs": 113.5096,
+      "PeakWorkingSetBytes": 29552640,
+      "SampledPeakPrivateBytes": 8220672
     },
     {
       "Operation": "Validate",
@@ -1242,9 +3202,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 5,
-      "ElapsedMs": 187.3456,
-      "PeakWorkingSetBytes": 33644544,
-      "SampledPeakPrivateBytes": 13029376
+      "ElapsedMs": 116.1532,
+      "PeakWorkingSetBytes": 30601216,
+      "SampledPeakPrivateBytes": 8241152
     },
     {
       "Operation": "Validate",
@@ -1252,9 +3212,9 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 6,
-      "ElapsedMs": 136.8808,
-      "PeakWorkingSetBytes": 35344384,
-      "SampledPeakPrivateBytes": 11763712
+      "ElapsedMs": 124.3972,
+      "PeakWorkingSetBytes": 28676096,
+      "SampledPeakPrivateBytes": 8114176
     },
     {
       "Operation": "Validate",
@@ -1262,9 +3222,149 @@
       "PayloadBytes": 67108864,
       "Tool": "msixmgr",
       "Run": 7,
-      "ElapsedMs": 183.7325,
-      "PeakWorkingSetBytes": 32849920,
-      "SampledPeakPrivateBytes": 12206080
+      "ElapsedMs": 118.0528,
+      "PeakWorkingSetBytes": 29716480,
+      "SampledPeakPrivateBytes": 8253440
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 8,
+      "ElapsedMs": 118.7205,
+      "PeakWorkingSetBytes": 28737536,
+      "SampledPeakPrivateBytes": 8204288
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 9,
+      "ElapsedMs": 122.6721,
+      "PeakWorkingSetBytes": 29093888,
+      "SampledPeakPrivateBytes": 8261632
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 10,
+      "ElapsedMs": 116.2753,
+      "PeakWorkingSetBytes": 28655616,
+      "SampledPeakPrivateBytes": 8142848
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 11,
+      "ElapsedMs": 115.951,
+      "PeakWorkingSetBytes": 29392896,
+      "SampledPeakPrivateBytes": 8278016
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 12,
+      "ElapsedMs": 122.6253,
+      "PeakWorkingSetBytes": 28692480,
+      "SampledPeakPrivateBytes": 8159232
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 13,
+      "ElapsedMs": 114.4767,
+      "PeakWorkingSetBytes": 30552064,
+      "SampledPeakPrivateBytes": 8114176
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 14,
+      "ElapsedMs": 122.1055,
+      "PeakWorkingSetBytes": 28684288,
+      "SampledPeakPrivateBytes": 8146944
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 15,
+      "ElapsedMs": 114.8625,
+      "PeakWorkingSetBytes": 28725248,
+      "SampledPeakPrivateBytes": 8241152
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 16,
+      "ElapsedMs": 113.257,
+      "PeakWorkingSetBytes": 30601216,
+      "SampledPeakPrivateBytes": 8249344
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 17,
+      "ElapsedMs": 113.8506,
+      "PeakWorkingSetBytes": 28864512,
+      "SampledPeakPrivateBytes": 8273920
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 18,
+      "ElapsedMs": 118.1633,
+      "PeakWorkingSetBytes": 28876800,
+      "SampledPeakPrivateBytes": 8257536
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 19,
+      "ElapsedMs": 111.7924,
+      "PeakWorkingSetBytes": 28704768,
+      "SampledPeakPrivateBytes": 8171520
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 20,
+      "ElapsedMs": 118.5238,
+      "PeakWorkingSetBytes": 29343744,
+      "SampledPeakPrivateBytes": 8286208
+    },
+    {
+      "Operation": "Validate",
+      "Corpus": "large-64MiB-128files",
+      "PayloadBytes": 67108864,
+      "Tool": "msixmgr",
+      "Run": 21,
+      "ElapsedMs": 120.6729,
+      "PeakWorkingSetBytes": 28688384,
+      "SampledPeakPrivateBytes": 8138752
     }
   ]
 }
