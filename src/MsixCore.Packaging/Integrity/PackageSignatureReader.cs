@@ -72,6 +72,7 @@ public static class PackageSignatureReader
         return new PackageSignature
         {
             SubjectName = certificate.SubjectName.Name,
+            SubjectNameRawData = certificate.SubjectName.RawData,
             IssuerName = certificate.IssuerName.Name,
             Thumbprint = certificate.Thumbprint,
             NotBefore = certificate.NotBefore,
