@@ -17,6 +17,11 @@ Each test case lists a fixture (the package/manifest to synthesize) and the asse
 should be minimal, generated deterministically, and committed under a `fixtures/` tree so they run in
 Linux CI (the whole reader is cross-platform).
 
+> **Status refresh (post Phase 5/6 merge):** the install engine (P1-5) and the publisher-DN matching
+> defect (P0-2, [#12](https://github.com/aclinick/msixcore/issues/12)) are now **resolved**; those
+> sections are retained as *regression* test suites and re-scoped to what remains. `CodeIntegrity.cat`
+> footprint handling and OPC percent-decoding also landed (see P0-4/P0-5).
+
 ---
 
 ## P0 — Correctness & security of existing features
@@ -39,19 +44,25 @@ Ref: [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/m
 - **TC-P0-1d (regression guard):** Assert `ValidationReport.SignatureBindingVerified == false` today
   so the "not an authenticity guarantee" contract is locked until binding lands.
 
-### P0-2. Publisher/subject DN comparison can false-mismatch on DER encoding
-**Gap:** `PackageSignature.MatchesPublisher` compares `X500DistinguishedName(manifestPublisher).RawData`
-to the signer subject's `RawData`. Re-encoding the manifest string can pick a different ASN.1 string
-type (UTF8String vs PrintableString) than the certificate used, producing a false "does not match"
-even for a legitimately-matching package. **Filed as a bug** (see bottom).
+### P0-2. Publisher/subject DN comparison — RESOLVED ([#12](https://github.com/aclinick/msixcore/issues/12))
+**Was:** `MatchesPublisher` re-encoded the manifest string and byte-compared DER, so a certificate
+whose subject used a different ASN.1 string type (e.g. `PrintableString` vs `UTF8String`) produced a
+false "does not match" for a legitimately-signed package.
+**Fixed:** `PackageSignatureReader` now captures `SubjectNameRawData` (the certificate's original
+subject DER), and `MatchesPublisher` decodes both DNs into RDNs and compares each RDN's attribute
+**type (OID)** and **decoded value**, so the result is independent of the underlying string encoding
+and faithful to RDN order. These test cases become **regression guards**:
 
-**Test cases:**
+**Test cases (regression):**
 - **TC-P0-2a:** Manifest `Publisher="CN=Contoso"` + certificate whose subject `CN=Contoso` is encoded
   as `PrintableString`. Assert `MatchesPublisher` returns `true`.
 - **TC-P0-2b:** Same CN encoded as `UTF8String`. Assert `true`.
 - **TC-P0-2c (true mismatch):** Manifest `CN=Contoso` vs signer `CN=Contoso2`. Assert `false`.
 - **TC-P0-2d (multi-RDN order/spacing):** `CN=Contoso, O=Contoso, C=US` with reordered/space
-  variations that are semantically equal. Assert `true`.
+  variations. Assert equal when the RDN sequence matches; assert `false` when RDN **order** differs
+  (order is significant in a DN).
+- **TC-P0-2e (multi-valued RDN):** A DN with a multi-valued RDN (e.g. `CN=A+OU=B`) exercises the
+  raw-encoding fallback path; assert correct equal/not-equal outcome.
 
 ### P0-3. Block-map compressed `Size` (LFH) is parsed but unenforced
 **Gap:** `BlockMapBlock.CompressedSize` is read but never checked against the ZIP local file header,
@@ -66,15 +77,19 @@ Ref: [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview)
 - **TC-P0-3c (empty file):** Zero-byte file (`Size="0"`, no `Block`). Assert valid (regression guard —
   the current verifier handles this correctly).
 
-### P0-4. `[Content_Types].xml` is never parsed/validated
-**Gap:** Content-types map is excluded from block-map coverage but never validated, so a package can
-omit required default/override content types or declare parts with no content type.
+### P0-4. `[Content_Types].xml` is never parsed/validated (catalog footprint now handled)
+**Gap:** The content-types map is still never parsed, so a package can omit required default/override
+content types or declare parts with no content type. (Related progress: `AppxMetadata/CodeIntegrity.cat`
+is now recognized as a footprint part and excluded from block-map coverage in `BlockMapVerifier`,
+though the catalog itself is not verified.)
 Ref: [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview).
 
 **Test cases:**
 - **TC-P0-4a:** Package missing `[Content_Types].xml`. Assert a diagnostic (today: silently ignored).
 - **TC-P0-4b:** Payload part with an extension not covered by any `Default`/`Override`. Assert a
   content-type coverage error.
+- **TC-P0-4c (regression):** Package containing `AppxMetadata/CodeIntegrity.cat` passes block-map
+  coverage (the catalog is a footprint part, not listed in the block map).
 
 ### P0-5. OPC hardening regression guards (already implemented — lock them in)
 **Gap:** none functionally, but the security-critical part-name rules deserve explicit corpus tests.
@@ -88,6 +103,10 @@ Ref: [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview).
 - **TC-P0-5e (loose symlink):** Directory package with a symlink escaping root. Assert skipped/rejected.
 - **TC-P0-5f (XXE):** Manifest/block map with a DOCTYPE + external entity. Assert parse fails safely
   (DTD prohibited) and no network/file fetch occurs.
+- **TC-P0-5g (percent-encoded part name):** Entry `foo%21.txt` canonicalizes to `foo!.txt` and is
+  found by that logical name (`OpcPackage.TryCanonicalizePartName`).
+- **TC-P0-5h (encoded separator/traversal/control):** Entries `a%2fb`, `%2e%2e/evil`, and `x%00y`
+  are each rejected as invalid part names (decoding must not smuggle in a boundary/traversal/NUL).
 
 ---
 
@@ -144,20 +163,36 @@ can report them, before OS registration. Ref:
 - **TC-P1-4f:** `desktop:Extension` shortcut / `windows.fullTrustProcess` → assert parsed.
 - **TC-P1-4g (round-trip):** Package with several extensions; `inspect --json` lists them all.
 
-### P1-5. Install engine: extract → stage → commit
-**Gap:** `AddPackage`/`RemovePackage` throw `NotImplementedException`; no extraction/staging.
-Ref: [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview).
+### P1-5. Install engine — IMPLEMENTED; remaining: pluggable handlers, version policy, OS integration
+**Done:** `AddPackage`/`RemovePackage` now run a real extract → stage → commit pipeline
+(`PackageManager.RunAdd`/`RunRemove`) over `IPackageStore`. `FileSystemPackageStore` implements
+`CreateStagingLocation`/`Commit` (move-aside backup + atomic promote + rollback) and `Delete`; the
+block map is verified **before** commit; progress is surfaced via `IMsixResponse`/`InstallationStep`;
+`PackageExtractor` provides containment-checked loose extraction. The test cases below are now
+**runnable regression tests**. Ref:
+[Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview).
 
-**Test cases:**
-- **TC-P1-5a:** `AddPackage` (ExtractOnly) unpacks all block-map files to the store, hashes match, and
-  the package becomes discoverable via `FindPackage`.
+**Test cases (regression — should pass today):**
+- **TC-P1-5a:** `AddPackage` unpacks all block-map files to the store, hashes match, and the package
+  becomes discoverable via `FindPackage`.
 - **TC-P1-5b:** `AddPackage` verifies the block map **before** commit; a tampered package leaves the
-  store unchanged (transactional rollback).
-- **TC-P1-5c:** `RemovePackage` deletes the install root and the package is no longer found.
-- **TC-P1-5d:** Re-add same full name → idempotent/higher-version replace; lower version rejected
-  unless `ForceApplicationShutdown`-style override.
-- **TC-P1-5e:** Handler pipeline runs handlers in order on add and reverse on remove (use a fake
-  handler to record call order).
+  store unchanged and the pre-existing install (if any) intact (rollback).
+- **TC-P1-5c:** `RemovePackage` deletes the install root; the package is no longer found; removing a
+  non-installed full name reports failure.
+- **TC-P1-5d:** Re-add an already-installed full name without `ForceApplicationShutdown` fails; with
+  it, the reinstall succeeds.
+- **TC-P1-5e (cancellation):** Cancelling mid-extraction leaves no committed install and cleans up the
+  staging directory.
+
+**Remaining gaps (still open):**
+- **TC-P1-5f (pluggable handlers):** Extraction is inlined in `RunAdd`, not run through
+  `IPackageHandler` handlers ordered on add / reversed on remove. Assert (future) a fake handler's
+  call order once the pipeline is wired.
+- **TC-P1-5g (version/downgrade policy):** Installing an **older** version over a newer one should be
+  blocked by policy (today only presence, not version, is checked). Assert downgrade is rejected
+  unless explicitly forced.
+- **TC-P1-5h (cross-process store lock):** Concurrent commits from **separate processes** over one
+  store root (tracked as issue #14) — assert no torn install once addressed.
 
 ### P1-6. Richer VisualElements / capability categorization
 **Gap:** VisualElements omits many logos/tiles; capabilities aren't categorized by type/namespace.
@@ -222,8 +257,14 @@ result). Negative fixtures assert the specific exception type/message.
 
 ## Bugs filed against `aclinick/msixcore`
 
-- **P0-2 (publisher DN encoding):** filed as
-  [aclinick/msixcore#12](https://github.com/aclinick/msixcore/issues/12).
-  Documents that `PackageSignature.MatchesPublisher` can report a false mismatch when the manifest
-  `Publisher` string re-encodes to a different ASN.1 string type than the signer certificate's
-  subject, causing `validate` to wrongly flag a legitimately-signed package.
+- **P0-2 (publisher DN encoding):** [aclinick/msixcore#12](https://github.com/aclinick/msixcore/issues/12)
+  — **FIXED/merged**. `PackageSignature.MatchesPublisher` now compares decoded RDNs from the
+  certificate's raw subject bytes (encoding- and order-faithful), eliminating the false-mismatch that
+  wrongly flagged legitimately-signed packages. Retained above as regression test cases TC-P0-2a…e.
+- **Cross-process store coordination:** tracked as issue #14 (referenced in
+  `FileSystemPackageStore`); the in-process promotion lock does not coordinate separate processes over
+  a shared store root. See TC-P1-5h.
+
+No new defects were found during this refresh: the merged Phase 5/6 code (install engine, extractor,
+OPC percent-decoding, catalog footprint handling, DN matching) verifies cleanly against its own tests
+and the spec expectations documented here.

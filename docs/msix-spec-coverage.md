@@ -15,24 +15,32 @@ MSIX/APPX format and manifest-schema documentation.
 Legend: **yes** = implemented and exercised; **partial** = present but incomplete or not wired into
 the public read path; **no** = not implemented.
 
+> **Refreshed after merging `origin/main` (Phase 5/6 deployment engine).** The port now has a working
+> cross-platform **install engine** (extract → stage → commit with rollback), a `PackageExtractor`,
+> the `msixmgr unpack` verb, and the publisher-DN matching bug ([#12](https://github.com/aclinick/msixcore/issues/12))
+> is **fixed**. Counts below reflect the merged state.
+
 ## Summary counts
 
 | Area | yes | partial | no | rows |
 | --- | --- | --- | --- | --- |
-| Container / OPC | 3 | 1 | 3 | 7 |
+| Container / OPC | 4 | 2 | 2 | 8 |
 | Manifest (AppxManifest.xml) | 7 | 2 | 7 | 16 |
 | Extensions | 0 | 0 | 11 | 11 |
 | Block map | 5 | 1 | 1 | 7 |
 | Signature | 4 | 0 | 5 | 9 |
 | Bundles | 1 | 1 | 4 | 6 |
 | Package kinds | 1 | 2 | 4 | 7 |
-| Deployment | 4 | 1 | 7 | 12 |
-| **Total** | **25** | **8** | **42** | **75** |
+| Deployment | 9 | 2 | 3 | 14 |
+| **Total** | **31** | **10** | **37** | **78** |
 
-**Headline:** the port is a solid, security-conscious **single-package reader/validator** (OPC +
-manifest identity + block map + CMS-envelope signature reading) but does **not** yet cover modern
-MSIX surface area: manifest extensions, most manifest namespaces beyond identity/properties, bundle
-resolution, non-main package kinds, deep signature binding/trust, or actual install/OS-integration.
+**Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
+OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
+CMS-envelope signature reading + faithful publisher-DN matching, plus a transactional
+extract/stage/commit/rollback install/uninstall engine and loose-layout extraction. It still does
+**not** cover: manifest extensions, most manifest namespaces beyond identity/properties, framework/
+dependency resolution, bundle detection/resolution, non-main package kinds, deep signature
+binding/trust, or OS-integration handlers (shortcuts, ARP, file-type/protocol registration).
 
 Key doc references (full list per row): MSIX package format overview
 <https://learn.microsoft.com/en-us/windows/msix/overview>; package manifest schema reference
@@ -49,9 +57,10 @@ signing overview <https://learn.microsoft.com/en-us/windows/msix/package/signing
 | Open OPC ZIP container from file/stream | [MSIX overview – package is a ZIP/OPC container](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixCore.Packaging/Opc/OpcPackage.cs` | Backed by `System.IO.Compression.ZipArchive`; read-only, cross-platform. |
 | Loose / unpacked directory layout | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixCore.Packaging/Opc/DirectoryOpcPackage.cs` | Reads an unpacked package dir; skips reparse points; enforces root containment. |
 | OPC part-name rules (no rooting, no `..`, no dup, case-insensitive equivalence) | [OPC / MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `OpcPackage.IsValidPartName`, `OpcPackage` ctor | Also a zip-slip defense; duplicate/equivalent part names rejected. |
+| Percent-encoded part-name canonicalization (`%21`→`!`, reject encoded separators/control chars) | [OPC physical model](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `OpcPackage.TryCanonicalizePartName` | Decodes each segment to the logical name used by the block map/manifest; re-validates after decode to defeat `%2e%2e`→`..` traversal. |
 | Zip64 / large packages | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | partial | `OpcPackage.cs` | Inherited from `ZipArchive` (which supports Zip64); not explicitly tested by the port. |
 | `[Content_Types].xml` parsing / content-type validation | [OPC content types](https://learn.microsoft.com/en-us/windows/msix/overview) | no | `OpcPartNames.ContentTypes` (constant only) | The part name is known and excluded from block-map coverage, but the content-types map is never parsed or validated against payload parts. |
-| `AppxMetadata/` folder (e.g. `CodeIntegrity.cat`) | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | Not recognized or validated. |
+| `AppxMetadata/` footprint parts (e.g. `CodeIntegrity.cat`) | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | partial | `OpcPartNames.CodeIntegrityCatalog`, `BlockMapVerifier.ExcludedParts` | Recognized as a footprint part and excluded from block-map coverage, but the catalog is not parsed or verified. |
 | Encrypted packages (`.eappx`/`.emsix`) | [Package encryption](https://learn.microsoft.com/en-us/windows/msix/overview) | no | — | Not supported. |
 
 ---
@@ -115,7 +124,7 @@ Reference: [MSIX overview – AppxBlockMap.xml](https://learn.microsoft.com/en-u
 | HashMethod SHA-256/384/512 | [Block map hash](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `BlockMapParser.ParseHashMethod` | Missing/unknown method rejected. |
 | Per-block uncompressed hash verification (64 KiB blocks) | [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `BlockMapVerifier.VerifyContent` | Streams uncompressed content via `IncrementalHash`-equivalent per-block hashing. |
 | Total-size verification per file | [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `BlockMapVerifier.VerifyContent` | Rejects short/long files. |
-| Coverage: payload parts ↔ block-map files (both directions) | [Package integrity](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `BlockMapVerifier.CheckCoverage` | Excludes `[Content_Types].xml`, `AppxBlockMap.xml`, `AppxSignature.p7x`. |
+| Coverage: payload parts ↔ block-map files (both directions) | [Package integrity](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `BlockMapVerifier.CheckCoverage` | Excludes footprint parts `[Content_Types].xml`, `AppxBlockMap.xml`, `AppxSignature.p7x`, and `AppxMetadata/CodeIntegrity.cat`. |
 | Per-block compressed `Size` (LFH stored size) validation | [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview) | partial | `BlockMapParser` (parses `Size`) | Compressed size is parsed into `BlockMapBlock.CompressedSize` but never enforced against the ZIP local file header. |
 | Local file header / offset binding used by MSIX signing | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | Not validated (relevant to the AXBM digest, see §5). |
 
@@ -131,7 +140,7 @@ Reference: [Sign an MSIX package](https://learn.microsoft.com/en-us/windows/msix
 | Read `.p7x`, strip `PKCX` magic | [AppxSignature.p7x](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `PackageSignatureReader.StripMagic` | Rejects a file missing the 4-byte identifier. |
 | Decode CMS / extract primary signer certificate | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `PackageSignatureReader.Read` | Uses `SignedCms` (OpenSSL-backed on Linux); subject/issuer/thumbprint/validity surfaced. |
 | CMS envelope integrity (`CheckSignature(verifySignatureOnly:true)`) | [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `PackageSignatureReader.Read` | Asserts the CMS digest/signature are internally consistent — **not** authenticity. |
-| Publisher (`Identity/@Publisher`) equals signer subject DN | [Publisher = signing subject](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `PackageSignature.MatchesPublisher` | Compares canonicalized X.500 DNs; see gap doc re: DER-encoding false mismatch risk. |
+| Publisher (`Identity/@Publisher`) equals signer subject DN | [Publisher = signing subject](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `PackageSignature.MatchesPublisher` (+ `SubjectNameRawData`) | Fixed ([#12](https://github.com/aclinick/msixcore/issues/12)): decodes RDNs from the certificate's original subject DER and compares attribute type + decoded value, so it is faithful to ASN.1 string encoding (`PrintableString` vs `UTF8String`) and RDN order — no more false mismatches. |
 | APPX indirect-data digest binding (AXPC/AXCT/AXBM/AXCI/AXCF SIP headers) | [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | **Explicitly not implemented** (documented in `PackageSignature` / `ValidateCommand`). The signature is not verified to actually bind the block map/content — the core authenticity gap. |
 | Certificate trust-chain evaluation | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | Intentionally separate; no chain/root policy. |
 | Timestamp countersignature validation | [Timestamping](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | Not read. |
@@ -178,16 +187,18 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 | --- | --- | --- | --- | --- |
 | Query: FindPackage / FindPackageByFamilyName / FindPackages (wildcard) | [PackageManager API parity](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `Deployment/PackageManager.cs` | Wildcard match over the store; careful disposal. |
 | Get package info from a file | [PackageManager API](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `PackageManager.GetMsixPackageInfo` | Opens an `MsixPackage`. |
-| Enumerate installed (loose) packages | — | yes | `Deployment/FileSystemPackageStore.cs` | Treats any subdir with `AppxManifest.xml` as installed. |
+| Enumerate installed (loose) packages | — | yes | `Deployment/FileSystemPackageStore.cs` | Treats any non-reserved subdir with `AppxManifest.xml` as installed; skips `.`-prefixed staging/backup dirs. |
 | Resolve entry-point execution info | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `Deployment/InstalledPackage.cs` | Resolves first app with an `Executable`; guards against path traversal. |
-| Add / install (extract → stage → commit) | [Deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | no | `PackageManager.AddPackage` throws `NotImplementedException` | Deferred to "Phase 5". No extraction engine. |
-| Remove / uninstall | [Deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | no | `PackageManager.RemovePackage` throws | Deferred. |
-| Handler pipeline (extraction + OS integration) | [Original MSIX Core handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | partial | `Deployment/Handlers/IPackageHandler.cs` | Interface + `PackageDeploymentContext` only; no handler implementations. |
+| Loose extraction (unpack) with traversal + symlink/junction containment | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `Deployment/PackageExtractor.cs` | Pure managed; rejects reparse-point escapes (including a dangling link and a reparse-point root) and out-of-root part paths; cooperative cancellation. |
+| Add / install (extract → stage → commit) | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `PackageManager.RunAdd`, `FileSystemPackageStore.Commit` | Verifies the block map **before** commit; extracts to a `.staging` dir; async via `IMsixResponse`. `ExtractOnly` skips the (future) OS-integration step. |
+| Remove / uninstall | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `PackageManager.RunRemove`, `FileSystemPackageStore.Delete` | Deletes the install root; errors if not installed. |
+| Transactional staging + rollback | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `FileSystemPackageStore.CommitLocked` | Move-aside backup + atomic promote; restores the prior install if promotion fails; per-destination lock. Cross-**process** coordination is a known gap (tracked as issue #14). |
+| Async progress / status reporting | [DeploymentResult](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentresult) | yes | `Deployment/MsixResponse.cs`, `InstallationStep.cs`, `SynchronousProgress.cs` | Reports staged progress (Started → GetPackageInformation → Extraction → Integration → Completed) and a completion task. |
+| Handler pipeline (extraction + OS integration) | [Original MSIX Core handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | partial | `Deployment/Handlers/IPackageHandler.cs` | Interface + `PackageDeploymentContext` exist; extraction is currently inlined in `RunAdd` rather than run through pluggable handlers, and no OS-integration handlers are registered. |
+| Version / downgrade policy; `ForceApplicationShutdown` | [DeploymentOptions](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentoptions) | partial | `PackageManager.RunAdd` | `ForceApplicationShutdown` now gates reinstall over an existing full name; there is no version comparison / downgrade-blocking policy yet. |
 | OS integration: Start Menu shortcuts | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | — |
 | OS integration: Add/Remove Programs registration | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | — |
 | OS integration: file-type / protocol registration | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | Depends on manifest extension parsing (§3), also missing. |
-| Transactional staging + rollback | [Deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | no | — | — |
-| Version/downgrade policy; `ForceApplicationShutdown` semantics | [DeploymentOptions](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentoptions) | no | `Deployment/DeploymentOptions.cs` | Flags defined; not honored (no install engine). Note: the `ForceApplicationShutdown` XML doc comment describes version override — a doc mismatch. |
 
 ---
 
@@ -199,5 +210,8 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
   envelope integrity and publisher/subject agreement. It **explicitly warns** that signature binding
   (APPX indirect-data digests) and certificate trust are not verified, so a pass is an *integrity*
   verdict, not an *authenticity* one. CI-friendly exit codes (0 ok, 1 fail, 2 usage).
-
-No `add`/`remove`/`bundle`/`extract` verbs exist yet, consistent with the reader-only status above.
+- `unpack` (`UnpackCommand.cs`): extracts a package to a loose layout via `PackageExtractor`
+  (`unpack <path> -Destination <dir> [--json]`), cross-platform, no install/OS integration.
+- `PackageManager.AddPackage` / `RemovePackage` are now **implemented** (see §8) but not yet wired to
+  dedicated `msixmgr` verbs; the `-AddPackage`/`-RemovePackage`/`-FindPackage` flags remain the
+  documented (parity) surface.
