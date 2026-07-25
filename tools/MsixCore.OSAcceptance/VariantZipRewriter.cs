@@ -147,30 +147,60 @@ internal static class VariantZipRewriter
     private static List<Entry> ReadEntries(byte[] archive)
     {
         int eocd = FindEocd(archive);
-        uint centralSize = ReadUInt32(archive, eocd + 12);
-        uint centralOffset = ReadUInt32(archive, eocd + 16);
-        int position = checked((int)centralOffset);
-        int centralEnd = checked(position + (int)centralSize);
+        long centralSize;
+        long centralOffset;
+
+        uint centralSize32 = ReadUInt32(archive, eocd + 12);
+        uint centralOffset32 = ReadUInt32(archive, eocd + 16);
+
+        if (centralSize32 == uint.MaxValue || centralOffset32 == uint.MaxValue
+            || ReadUInt16(archive, eocd + 8) == ushort.MaxValue
+            || ReadUInt16(archive, eocd + 10) == ushort.MaxValue)
+        {
+            // Classic EOCD has sentinel values — resolve from ZIP64 EOCD.
+            (centralSize, centralOffset) = ReadZip64CentralDirectory(archive, eocd);
+        }
+        else
+        {
+            centralSize = centralSize32;
+            centralOffset = centralOffset32;
+        }
+
+        long position = centralOffset;
+        long centralEnd = position + centralSize;
         var entries = new List<Entry>();
         while (position < centralEnd)
         {
-            if (ReadUInt32(archive, position) != CentralHeaderSignature)
+            int pos = checked((int)position);
+            if (ReadUInt32(archive, pos) != CentralHeaderSignature)
             {
-                throw new InvalidDataException($"Expected central directory header at 0x{position:X}.");
+                throw new InvalidDataException($"Expected central directory header at 0x{pos:X}.");
             }
 
-            ushort flags = ReadUInt16(archive, position + 8);
-            ushort method = ReadUInt16(archive, position + 10);
-            ushort lastModTime = ReadUInt16(archive, position + 12);
-            ushort lastModDate = ReadUInt16(archive, position + 14);
-            uint crc32 = ReadUInt32(archive, position + 16);
-            uint compressedSize = ReadUInt32(archive, position + 20);
-            uint uncompressedSize = ReadUInt32(archive, position + 24);
-            ushort nameLength = ReadUInt16(archive, position + 28);
-            ushort extraLength = ReadUInt16(archive, position + 30);
-            ushort commentLength = ReadUInt16(archive, position + 32);
-            uint localOffset = ReadUInt32(archive, position + 42);
-            byte[] nameBytes = archive.AsSpan(position + 46, nameLength).ToArray();
+            ushort flags = ReadUInt16(archive, pos + 8);
+            ushort method = ReadUInt16(archive, pos + 10);
+            ushort lastModTime = ReadUInt16(archive, pos + 12);
+            ushort lastModDate = ReadUInt16(archive, pos + 14);
+            uint crc32 = ReadUInt32(archive, pos + 16);
+            uint compressedSize32 = ReadUInt32(archive, pos + 20);
+            uint uncompressedSize32 = ReadUInt32(archive, pos + 24);
+            ushort nameLength = ReadUInt16(archive, pos + 28);
+            ushort extraLength = ReadUInt16(archive, pos + 30);
+            ushort commentLength = ReadUInt16(archive, pos + 32);
+            uint localOffset32 = ReadUInt32(archive, pos + 42);
+            byte[] nameBytes = archive.AsSpan(pos + 46, nameLength).ToArray();
+
+            // Resolve ZIP64 extra field if sentinel values present.
+            long compressedSize = compressedSize32;
+            long uncompressedSize = uncompressedSize32;
+            long localOffset = localOffset32;
+            if (extraLength > 0)
+            {
+                ResolveZip64Extra(
+                    archive.AsSpan(pos + 46 + nameLength, extraLength),
+                    compressedSize32, uncompressedSize32, localOffset32,
+                    ref compressedSize, ref uncompressedSize, ref localOffset);
+            }
 
             int local = checked((int)localOffset);
             if (ReadUInt32(archive, local) != LocalHeaderSignature)
@@ -189,13 +219,76 @@ internal static class VariantZipRewriter
                 lastModTime,
                 lastModDate,
                 crc32,
-                compressedSize,
-                uncompressedSize,
+                checked((uint)compressedSize),
+                checked((uint)uncompressedSize),
                 compressedData));
             position += 46 + nameLength + extraLength + commentLength;
         }
 
         return entries;
+    }
+
+    private static (long CentralSize, long CentralOffset) ReadZip64CentralDirectory(byte[] archive, int eocd)
+    {
+        if (eocd < 20)
+        {
+            throw new InvalidDataException("ZIP64 EOCD locator not found.");
+        }
+
+        int locatorOffset = eocd - 20;
+        if (ReadUInt32(archive, locatorOffset) != Zip64LocatorSignature)
+        {
+            throw new InvalidDataException("ZIP64 EOCD locator not found.");
+        }
+
+        long zip64EocdOffset = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(
+            archive.AsSpan(locatorOffset + 8, 8)));
+        int z64 = checked((int)zip64EocdOffset);
+        if (ReadUInt32(archive, z64) != Zip64EocdSignature)
+        {
+            throw new InvalidDataException("ZIP64 EOCD record is malformed.");
+        }
+
+        long centralSize = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(archive.AsSpan(z64 + 40, 8)));
+        long centralOffset = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(archive.AsSpan(z64 + 48, 8)));
+        return (centralSize, centralOffset);
+    }
+
+    private static void ResolveZip64Extra(
+        ReadOnlySpan<byte> extra,
+        uint compressedSize32,
+        uint uncompressedSize32,
+        uint localOffset32,
+        ref long compressedSize,
+        ref long uncompressedSize,
+        ref long localOffset)
+    {
+        int pos = 0;
+        while (pos + 4 <= extra.Length)
+        {
+            ushort id = BinaryPrimitives.ReadUInt16LittleEndian(extra.Slice(pos, 2));
+            ushort size = BinaryPrimitives.ReadUInt16LittleEndian(extra.Slice(pos + 2, 2));
+            if (id == 0x0001 && pos + 4 + size <= extra.Length)
+            {
+                int fieldPos = pos + 4;
+                if (uncompressedSize32 == uint.MaxValue && fieldPos + 8 <= pos + 4 + size)
+                {
+                    uncompressedSize = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(extra.Slice(fieldPos, 8)));
+                    fieldPos += 8;
+                }
+                if (compressedSize32 == uint.MaxValue && fieldPos + 8 <= pos + 4 + size)
+                {
+                    compressedSize = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(extra.Slice(fieldPos, 8)));
+                    fieldPos += 8;
+                }
+                if (localOffset32 == uint.MaxValue && fieldPos + 8 <= pos + 4 + size)
+                {
+                    localOffset = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(extra.Slice(fieldPos, 8)));
+                }
+                return;
+            }
+            pos += 4 + size;
+        }
     }
 
     private static int FindEocd(byte[] archive)

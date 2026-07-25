@@ -94,8 +94,8 @@ internal static class BlockMapWriter
             return new CompressedBlockMapFile(
                 new BlockMapFile { Name = name, Size = uncompressedSize, Blocks = blocks },
                 crc32.Value,
-                ToUInt32(compressedSize, "compressed size"),
-                ToUInt32(uncompressedSize, "uncompressed size"));
+                compressedSize,
+                uncompressedSize);
         }
         finally
         {
@@ -187,16 +187,6 @@ internal static class BlockMapWriter
         return Convert.ToBase64String(hash);
     }
 
-    private static uint ToUInt32(long value, string description)
-    {
-        if (value < 0 || value > uint.MaxValue)
-        {
-            throw new NotSupportedException($"ZIP entry {description} exceeds the non-ZIP64 limit.");
-        }
-
-        return (uint)value;
-    }
-
     private static XmlWriterSettings CreateSettings() => new()
     {
         Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
@@ -210,5 +200,5 @@ internal sealed record AuthoredBlockMapFile(BlockMapFile File, int LocalFileHead
 internal sealed record CompressedBlockMapFile(
     BlockMapFile File,
     uint Crc32,
-    uint CompressedSize,
-    uint UncompressedSize);
+    long CompressedSize,
+    long UncompressedSize);
