@@ -37,14 +37,25 @@ public sealed class OpcPackage : IOpcPackage
                     $"The package contains an invalid OPC part name: '{entry.FullName}'.");
             }
 
-            // OPC forbids equivalent (including case-insensitively equal) part names.
-            if (!_entriesByPart.TryAdd(entry.FullName, entry))
+            // OPC part names are percent-encoded in the ZIP (e.g. '!' -> '%21'), but the block map,
+            // manifest, and file system all use the decoded logical name. Canonicalize to the decoded
+            // form so lookups and coverage checks line up. Decode each '/'-delimited segment on its own
+            // and reject an encoded separator ('%2f'/'%5c') so it can't smuggle in a new path boundary,
+            // then re-validate because decoding can reintroduce traversal segments (e.g. '%2e%2e' -> '..').
+            if (!TryCanonicalizePartName(entry.FullName, out string partName) || !IsValidPartName(partName))
             {
                 throw new InvalidDataException(
-                    $"The package contains a duplicate OPC part name: '{entry.FullName}'.");
+                    $"The package contains an invalid OPC part name: '{entry.FullName}'.");
             }
 
-            _partNames.Add(entry.FullName);
+            // OPC forbids equivalent (including case-insensitively equal) part names.
+            if (!_entriesByPart.TryAdd(partName, entry))
+            {
+                throw new InvalidDataException(
+                    $"The package contains a duplicate OPC part name: '{partName}'.");
+            }
+
+            _partNames.Add(partName);
         }
     }
 
@@ -124,6 +135,44 @@ public sealed class OpcPackage : IOpcPackage
 
     /// <inheritdoc/>
     public void Dispose() => _archive.Dispose();
+
+    /// <summary>
+    /// Percent-decodes a raw ZIP entry name into its canonical OPC logical part name. OPC stores part
+    /// names percent-encoded (UTF-8), so <c>%21</c> becomes <c>!</c> and <c>%20</c> becomes a space,
+    /// matching the unencoded names used by the block map and manifest. Each <c>/</c>-delimited segment
+    /// is decoded independently; a segment that decodes to contain a <c>/</c> or <c>\</c> (an encoded
+    /// separator, which OPC forbids) causes this to return <see langword="false"/>.
+    /// </summary>
+    internal static bool TryCanonicalizePartName(string rawName, out string canonical)
+    {
+        string[] segments = rawName.Split('/');
+        for (int i = 0; i < segments.Length; i++)
+        {
+            string decoded = Uri.UnescapeDataString(segments[i]);
+            if (decoded.Contains('/') || decoded.Contains('\\'))
+            {
+                canonical = string.Empty;
+                return false;
+            }
+
+            // Reject control characters (e.g. NUL from '%00'), which are invalid in OPC part names and
+            // would otherwise pass validation only to surface later as an ArgumentException from the
+            // filesystem path APIs during extraction.
+            foreach (char c in decoded)
+            {
+                if (char.IsControl(c))
+                {
+                    canonical = string.Empty;
+                    return false;
+                }
+            }
+
+            segments[i] = decoded;
+        }
+
+        canonical = string.Join('/', segments);
+        return true;
+    }
 
     /// <summary>
     /// Leniently normalizes a caller-supplied part name for lookup: backslashes become forward
