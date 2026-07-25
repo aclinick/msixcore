@@ -2,6 +2,8 @@
   <Folder Name="/src/">
     <Project Path="src/MsixCore.Deployment/MsixCore.Deployment.csproj" />
     <Project Path="src/MsixCore.Packaging/MsixCore.Packaging.csproj" />
+    <Project Path="src/MsixCore.Studio.Core/MsixCore.Studio.Core.csproj" />
+    <Project Path="src/MsixCore.Studio/MsixCore.Studio.csproj" />
     <Project Path="src/msixmgr/msixmgr.csproj" />
   </Folder>
   <Folder Name="/bench/">
@@ -11,6 +13,7 @@
     <Project Path="tests/MsixCore.Deployment.Tests/MsixCore.Deployment.Tests.csproj" />
     <Project Path="tests/MsixCore.Corpus.Tests/MsixCore.Corpus.Tests.csproj" />
     <Project Path="tests/MsixCore.Packaging.Tests/MsixCore.Packaging.Tests.csproj" />
+    <Project Path="tests/MsixCore.Studio.Tests/MsixCore.Studio.Tests.csproj" />
     <Project Path="tests/msixmgr.Tests/msixmgr.Tests.csproj" />
   </Folder>
 </Solution>
