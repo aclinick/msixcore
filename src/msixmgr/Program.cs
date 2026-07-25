@@ -45,18 +45,20 @@ public static class Program
     public static int Main(string[] args)
         => Run(args, Console.Out, Console.Error);
 
+    // CLI output contract: command results, including JSON, are written to stdout. Future human
+    // progress or diagnostics must go to stderr, or be suppressed under --json, and never stdout.
     internal static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter error)
     {
         if (args.Count == 0 || IsHelp(args[0]))
         {
             PrintUsage(output);
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
 
         if (IsVersion(args[0]))
         {
             output.WriteLine(GetVersion());
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
 
         CliVerb? verb = Array.Find(
@@ -64,9 +66,14 @@ public static class Program
             candidate => candidate.Matches(args[0]));
         if (verb is null)
         {
-            error.WriteLine($"msixmgr: unknown verb '{args[0]}'.");
-            error.WriteLine("Run 'msixmgr --help' for usage.");
-            return 2;
+            CliContract.WriteError(
+                output,
+                error,
+                CliContract.HasJsonFlag(args),
+                "msixmgr",
+                $"unknown verb '{args[0]}'.",
+                "Run 'msixmgr --help' for usage.");
+            return CliContract.ExitCodes.Usage;
         }
 
         return verb.Run(args.Skip(1).ToArray(), output, error);

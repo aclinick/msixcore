@@ -15,9 +15,14 @@ internal static class UnpackCommand
     {
         if (!TryParse(args, out string? path, out string? destination, out bool json, out string? parseError))
         {
-            error.WriteLine($"msixmgr unpack: {parseError}");
-            error.WriteLine("Usage: msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]");
-            return 2;
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr unpack",
+                parseError!,
+                "Usage: msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
@@ -41,12 +46,12 @@ internal static class UnpackCommand
                 output.WriteLine($"Extracted {files} parts to {Path.GetFullPath(destination!)}");
             }
 
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            error.WriteLine($"msixmgr unpack: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr unpack", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 

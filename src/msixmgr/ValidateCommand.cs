@@ -15,9 +15,14 @@ internal static class ValidateCommand
     {
         if (!TryParse(args, out string? path, out bool json, out string? parseError))
         {
-            error.WriteLine($"msixmgr validate: {parseError}");
-            error.WriteLine("Usage: msixmgr validate <package-file-or-directory> [--json]");
-            return 2;
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr validate",
+                parseError!,
+                "Usage: msixmgr validate <package-file-or-directory> [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
@@ -33,12 +38,12 @@ internal static class ValidateCommand
                 WriteText(report, output);
             }
 
-            return report.IsValid ? 0 : 1;
+            return report.IsValid ? CliContract.ExitCodes.Success : CliContract.ExitCodes.NegativeVerdict;
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            error.WriteLine($"msixmgr validate: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr validate", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 

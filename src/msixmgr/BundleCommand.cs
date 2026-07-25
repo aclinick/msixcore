@@ -20,11 +20,15 @@ internal static class BundleCommand
             out bool json,
             out string? parseError))
         {
-            error.WriteLine($"msixmgr bundle: {parseError}");
-            error.WriteLine(
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr bundle",
+                parseError!,
                 "Usage: msixmgr bundle <package.msix>... -o|--output <file.msixbundle> "
-                + "[--version <a.b.c.d>] [--overwrite] [--json]");
-            return 2;
+                    + "[--version <a.b.c.d>] [--overwrite] [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
@@ -48,7 +52,7 @@ internal static class BundleCommand
                 output.WriteLine($"Identity: {result.Identity.PackageFullName}");
             }
 
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
         catch (Exception ex) when (
             ex is IOException
@@ -57,8 +61,8 @@ internal static class BundleCommand
                 or ArgumentException
                 or InvalidOperationException)
         {
-            error.WriteLine($"msixmgr bundle: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr bundle", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 

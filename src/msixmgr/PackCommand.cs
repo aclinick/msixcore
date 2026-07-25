@@ -20,9 +20,14 @@ internal static class PackCommand
             out bool json,
             out string? parseError))
         {
-            error.WriteLine($"msixmgr pack: {parseError}");
-            error.WriteLine("Usage: msixmgr pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]");
-            return 2;
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr pack",
+                parseError!,
+                "Usage: msixmgr pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
@@ -49,13 +54,13 @@ internal static class PackCommand
                 output.WriteLine($"Identity: {result.Identity.PackageFullName}");
             }
 
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
         catch (Exception ex) when (
             ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
         {
-            error.WriteLine($"msixmgr pack: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr pack", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 
