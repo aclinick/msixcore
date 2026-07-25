@@ -20,7 +20,10 @@ The app uses MVVM with CommunityToolkit.Mvvm:
 - `MainPage` creates the view model and assigns it as the XAML data context.
 - `StoragePicker` uses Uno's cross-platform `Windows.Storage.Pickers` implementation and performs
   the WinAppSDK window initialization required on Windows.
-- `MainWindowViewModel` owns picker commands, loading state, errors, and presentation models.
+- `MsixCore.Studio.Core` targets plain `net10.0` and contains `MainWindowViewModel`, picker contracts,
+  and presentation records with no Uno, XAML, or WinAppSDK dependencies.
+- `MainWindowViewModel` owns picker commands, loading state, errors, and presentation models, so its
+  package-file and loose-directory flows run in platform-neutral CI tests.
 - `MsixPackage.Open` / `OpenDirectory` are used on a worker thread, and the package is disposed after
   an immutable snapshot has been produced.
 - Packaging and deployment projects are referenced directly; no library code is copied.

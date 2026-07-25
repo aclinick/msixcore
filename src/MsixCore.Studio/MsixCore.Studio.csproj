@@ -41,6 +41,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MsixCore.Deployment\MsixCore.Deployment.csproj" />
     <ProjectReference Include="..\MsixCore.Packaging\MsixCore.Packaging.csproj" />
+    <ProjectReference Include="..\MsixCore.Studio.Core\MsixCore.Studio.Core.csproj" />
   </ItemGroup>
 
 </Project>

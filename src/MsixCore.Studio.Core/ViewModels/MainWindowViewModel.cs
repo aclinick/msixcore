@@ -60,7 +60,13 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
     public partial string BlockMapStatus { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial bool? IsBlockMapValid { get; set; }
+
+    [ObservableProperty]
     public partial string SignatureStatus { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial PackageSignatureItem? Signature { get; set; }
 
     [ObservableProperty]
     public partial string SignatureSubject { get; set; } = string.Empty;
@@ -132,15 +138,15 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
 
     public async Task LoadPackageAsync(string path, bool isDirectory)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
         IsBusy = true;
         HasError = false;
         ErrorMessage = string.Empty;
-        StatusMessage = $"Reading {Path.GetFileName(path)}…";
+        StatusMessage = "Reading package…";
 
         try
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            StatusMessage = $"Reading {Path.GetFileName(path)}…";
             PackageSnapshot snapshot = await Task.Run(() => PackageSnapshot.Load(path, isDirectory));
             Apply(snapshot);
             StatusMessage = $"Loaded {snapshot.IdentityName}";
@@ -170,6 +176,8 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
         PublisherDisplayName = snapshot.PublisherDisplayName;
         FrameworkStatus = snapshot.FrameworkStatus;
         BlockMapStatus = snapshot.BlockMapStatus;
+        IsBlockMapValid = snapshot.IsBlockMapValid;
+        Signature = snapshot.Signature;
         SignatureStatus = snapshot.SignatureStatus;
         SignatureSubject = snapshot.SignatureSubject;
         SignatureIssuer = snapshot.SignatureIssuer;
@@ -187,6 +195,8 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
     {
         HasPackage = false;
         SourcePath = string.Empty;
+        IsBlockMapValid = null;
+        Signature = null;
         Capabilities.Clear();
         Applications.Clear();
         BlockMapFiles.Clear();
@@ -238,6 +248,10 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
 
         public required string BlockMapStatus { get; init; }
 
+        public required bool? IsBlockMapValid { get; init; }
+
+        public required PackageSignatureItem? Signature { get; init; }
+
         public required string SignatureStatus { get; init; }
 
         public required string SignatureSubject { get; init; }
@@ -260,7 +274,7 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
 
             AppxManifest manifest = package.Manifest;
             PackageIdentity identity = package.Identity;
-            (IReadOnlyList<BlockMapFileItem> files, string blockMapStatus) = ReadBlockMap(package);
+            (IReadOnlyList<BlockMapFileItem> files, string blockMapStatus, bool? isBlockMapValid) = ReadBlockMap(package);
             SignatureSnapshot signature = ReadSignature(package, identity.Publisher);
 
             return new PackageSnapshot
@@ -279,6 +293,8 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                 Applications = manifest.Applications.Select(ToApplicationItem).ToArray(),
                 BlockMapFiles = files,
                 BlockMapStatus = blockMapStatus,
+                IsBlockMapValid = isBlockMapValid,
+                Signature = signature.Signature,
                 SignatureStatus = signature.Status,
                 SignatureSubject = signature.Subject,
                 SignatureIssuer = signature.Issuer,
@@ -296,7 +312,7 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                 ValueOrDash(application.Executable),
                 ValueOrDash(application.EntryPoint));
 
-        private static (IReadOnlyList<BlockMapFileItem> Files, string Status) ReadBlockMap(MsixPackage package)
+        private static (IReadOnlyList<BlockMapFileItem> Files, string Status, bool? IsValid) ReadBlockMap(MsixPackage package)
         {
             try
             {
@@ -317,11 +333,11 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                 string status = verification.IsValid
                     ? $"Valid — {files.Length} file(s) verified with {blockMap.HashMethod}."
                     : BuildVerificationFailure(verification);
-                return (files, status);
+                return (files, status, verification.IsValid);
             }
             catch (Exception ex)
             {
-                return ([], $"Unavailable — {ex.Message}");
+                return ([], $"Unavailable — {ex.Message}", null);
             }
         }
 
@@ -347,14 +363,24 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                     return SignatureSnapshot.Unsigned;
                 }
 
-                return new SignatureSnapshot(
-                    "Signed",
+                var item = new PackageSignatureItem(
                     signature.SubjectName,
                     signature.IssuerName,
                     signature.Thumbprint,
-                    $"{signature.NotBefore:u} — {signature.NotAfter:u}",
-                    signature.IsCmsIntegrityValid ? "Valid" : "Invalid",
-                    signature.MatchesPublisher(publisher) ? "Matches" : "Does not match");
+                    signature.NotBefore,
+                    signature.NotAfter,
+                    signature.IsCmsIntegrityValid,
+                    signature.MatchesPublisher(publisher));
+
+                return new SignatureSnapshot(
+                    item,
+                    "Signed",
+                    item.SubjectName,
+                    item.IssuerName,
+                    item.Thumbprint,
+                    $"{item.NotBefore:u} — {item.NotAfter:u}",
+                    item.IsCmsIntegrityValid ? "Valid" : "Invalid",
+                    item.MatchesPublisher ? "Matches" : "Does not match");
             }
             catch (Exception ex)
             {
@@ -367,6 +393,7 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
     }
 
     private sealed record SignatureSnapshot(
+        PackageSignatureItem? Signature,
         string Status,
         string Subject,
         string Issuer,
@@ -376,9 +403,9 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
         string PublisherMatch)
     {
         public static SignatureSnapshot Unsigned { get; } =
-            new("Unsigned package", "—", "—", "—", "—", "Not applicable", "Not applicable");
+            new(null, "Unsigned package", "—", "—", "—", "—", "Not applicable", "Not applicable");
 
         public static SignatureSnapshot Malformed(string error) =>
-            new($"Signature could not be read — {error}", "—", "—", "—", "—", "Unknown", "Unknown");
+            new(null, $"Signature could not be read — {error}", "—", "—", "—", "—", "Unknown", "Unknown");
     }
 }
