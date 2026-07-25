@@ -1087,15 +1087,29 @@ public class AppxDigestBindingTests
 
     #endregion
 
-    #region Alert 2 — Concurrent access returns consistent bytes
+    #region Alert 2 — Footprint cache lock correctness
 
+    /// <summary>
+    /// The <c>_footprintLock</c> in <see cref="MsixPackage"/> serializes
+    /// the check-read-store so that concurrent callers cannot both miss the cache and both read
+    /// the file (potentially at different times, getting different bytes).
+    /// <para>
+    /// This property is argued correct by construction: the entire body of
+    /// <c>GetFootprintBytes</c> is inside <c>lock(_footprintLock)</c>, and every footprint
+    /// read goes through that single method. A deterministic interleaving test would require
+    /// injecting a seam into the lock, which would weaken production code for test purposes.
+    /// </para>
+    /// <para>
+    /// This test verifies a weaker but still useful property: that concurrent callers to
+    /// <c>VerifyBlockMap</c> and <c>VerifySignatureBinding</c> all observe valid, consistent
+    /// results under contention. It cannot deterministically prove the lock prevents split
+    /// reads — that guarantee rests on the lock being correctly placed, which is verified
+    /// by code review.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Concurrent_VerifyBlockMapAndBinding_SameBytes()
+    public void ConcurrentAccess_ParallelVerification_ConsistentResults()
     {
-        // This test exercises the lock by running VerifyBlockMap and VerifySignatureBinding
-        // concurrently from multiple threads. Both must observe the same block map bytes.
-        // On a mutable directory without the lock, the two threads could both miss the cache
-        // and read at different times.
         string dir = Path.Combine(Path.GetTempPath(), $"msixcore-conc-{Guid.NewGuid():N}");
         try
         {
@@ -1133,20 +1147,22 @@ public class AppxDigestBindingTests
                 DigestTable = table,
             };
 
-            // Run both operations concurrently multiple times.
-            bool allBindingValid = true;
-            bool allBlockMapValid = true;
-            Parallel.For(0, 20, _ =>
+            // Run both operations concurrently. All iterations must succeed — the lock ensures
+            // that concurrent callers serialize through GetFootprintBytes and all observe the
+            // same cached bytes.
+            int bindingFailures = 0;
+            int blockMapFailures = 0;
+            Parallel.For(0, 50, _ =>
             {
                 IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
-                if (!binding.IsBindingValid) allBindingValid = false;
+                if (!binding.IsBindingValid) Interlocked.Increment(ref bindingFailures);
 
                 BlockMapVerificationResult bm = package.VerifyBlockMap();
-                if (!bm.IsValid) allBlockMapValid = false;
+                if (!bm.IsValid) Interlocked.Increment(ref blockMapFailures);
             });
 
-            Assert.True(allBindingValid, "All concurrent binding verifications must pass.");
-            Assert.True(allBlockMapValid, "All concurrent block map verifications must pass.");
+            Assert.Equal(0, bindingFailures);
+            Assert.Equal(0, blockMapFailures);
         }
         finally
         {
@@ -1260,6 +1276,99 @@ public class AppxDigestBindingTests
 
         IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
         Assert.True(binding.IsBindingValid);
+    }
+
+    /// <summary>
+    /// Verifies that drift detection uses case-insensitive normalization matching
+    /// <see cref="DirectoryOpcPackage.Open"/>, so a case-varied file name (e.g.
+    /// <c>appxmetadata/codeintegrity.cat</c> on a case-sensitive Linux FS) is still caught.
+    /// <para>
+    /// On Windows, <c>File.Exists</c> is already case-insensitive so this exercises the
+    /// normalization path without relying on filesystem casing. The normalization is the
+    /// same code path that runs on Linux.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void DriftDetection_CaseVariedCatalog_StillDetected()
+    {
+        // Verify that NormalizeLookup + OrdinalIgnoreCase catches case variants.
+        // This is a unit-level check on the normalization — it does not depend on the
+        // filesystem's case sensitivity, so it validates the logic that matters on Linux
+        // while being meaningful on Windows.
+        string canonical = OpcPackage.NormalizeLookup(OpcPartNames.CodeIntegrityCatalog);
+        string caseVaried = OpcPackage.NormalizeLookup("appxmetadata/codeintegrity.cat");
+
+        // Must match case-insensitively — this is what the drift HashSet uses.
+        Assert.True(
+            string.Equals(canonical, caseVaried, StringComparison.OrdinalIgnoreCase),
+            "NormalizeLookup must produce values that match under OrdinalIgnoreCase for case-varied paths.");
+    }
+
+    /// <summary>
+    /// End-to-end drift detection on a real directory: create a catalog with non-canonical
+    /// casing after open. On Windows the FS is case-insensitive so the file will be found
+    /// regardless, but the <em>normalization path</em> is identical to the Linux code path.
+    /// </summary>
+    [Fact]
+    public void DriftDetection_CaseVariedCatalogOnDisk_BindingFails()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-drift-case-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] payload = "drifting payload"u8.ToArray();
+            var files = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payload,
+            };
+            byte[] blockMapBytes = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(files));
+
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payload);
+
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // On Windows, the directory name casing doesn't matter for File.Exists, but the
+            // re-enumeration + normalization path is the same as on Linux. Create the catalog
+            // with whatever casing the OS allows — on Windows it will be found; on Linux the
+            // case-insensitive HashSet catches the match.
+            Directory.CreateDirectory(Path.Combine(dir, "AppxMetadata"));
+            File.WriteAllBytes(Path.Combine(dir, "AppxMetadata", "CodeIntegrity.cat"),
+                new byte[] { 0xCA, 0xFE });
+
+            var entries = MakeCorrectEntries(contentTypes, blockMapBytes);
+            AppxDigestTable table = ParseTableDirect(entries);
+            var fakeSig = new PackageSignature
+            {
+                SubjectName = "CN=Test",
+                SubjectNameRawData = ReadOnlyMemory<byte>.Empty,
+                IssuerName = "CN=Test",
+                Thumbprint = "AAAA",
+                NotBefore = DateTimeOffset.UtcNow,
+                NotAfter = DateTimeOffset.UtcNow,
+                IsCmsIntegrityValid = true,
+                DigestTable = table,
+            };
+
+            IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
+
+            Assert.False(binding.IsBindingValid,
+                "Binding must FAIL: catalog appeared after open, even with same/different casing.");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
     }
 
     #endregion

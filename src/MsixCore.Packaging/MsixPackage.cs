@@ -162,9 +162,15 @@ public sealed class MsixPackage : IPackage
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>Container packages (<c>.msix</c>/<c>.appx</c>):</strong> the underlying ZIP
-    /// archive is opened once from a single stream. The single-read-single-hash guarantee is
-    /// unconditional — no concurrent modification is possible.
+    /// <strong>Container packages (<c>.msix</c>/<c>.appx</c>) opened from a file:</strong> the
+    /// underlying ZIP archive is opened once from a single file stream. The single-read-single-hash
+    /// guarantee is unconditional — no concurrent modification is possible.
+    /// </para>
+    /// <para>
+    /// <strong>Container packages opened from a caller-supplied <see cref="Stream"/>:</strong>
+    /// the guarantee depends on the caller providing an immutable, exclusively-owned stream.
+    /// A writable, shared, or custom <see cref="Stream"/> can change underneath verification,
+    /// reducing the guarantee to best-effort — equivalent to the directory case.
     /// </para>
     /// <para>
     /// <strong>Loose directory packages:</strong> validation is best-effort against a
@@ -240,14 +246,24 @@ public sealed class MsixPackage : IPackage
     /// message if drift is detected, or <see langword="null"/> if safe.
     /// </summary>
     /// <remarks>
-    /// Container-backed packages (<c>.msix</c>/<c>.appx</c> files) are inherently safe — the
-    /// ZIP archive is a single immutable stream. This check only applies to loose directories.
+    /// <para>
+    /// Container-backed packages (<c>.msix</c>/<c>.appx</c> files opened from a file we control)
+    /// are inherently safe — the ZIP archive is a single immutable stream. This check only
+    /// applies to loose directories.
+    /// </para>
+    /// <para>
+    /// The live directory is re-enumerated at verification time using the same normalization
+    /// (<see cref="OpcPackage.NormalizeLookup"/>) and case-insensitive comparison as
+    /// <see cref="DirectoryOpcPackage.Open"/>. This prevents case-variation bypasses on
+    /// case-sensitive filesystems (e.g. Linux), where <c>File.Exists</c> with one canonical
+    /// spelling would miss <c>appxmetadata/codeintegrity.cat</c>.
+    /// </para>
     /// </remarks>
     private string? DetectFootprintDrift()
     {
         if (_opc is not DirectoryOpcPackage dirPkg)
         {
-            return null; // Container packages: no drift possible.
+            return null; // Container packages: no drift possible from the archive.
         }
 
         // Footprint parts that binding verification cares about.
@@ -259,22 +275,84 @@ public sealed class MsixPackage : IPackage
         ];
 
         string root = dirPkg.RootDirectory;
+
+        // Re-enumerate the live directory using the same normalization as
+        // DirectoryOpcPackage.Open, so we catch files regardless of casing.
+        // If re-enumeration fails (e.g. concurrent IO), fail closed.
+        HashSet<string> liveNormalized;
+        try
+        {
+            liveNormalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string fullPath in EnumerateLiveFiles(root))
+            {
+                string relative = Path.GetRelativePath(root, fullPath)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                if (Path.AltDirectorySeparatorChar != '/')
+                {
+                    relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
+                }
+
+                liveNormalized.Add(OpcPackage.NormalizeLookup(relative));
+            }
+        }
+        catch (IOException ex)
+        {
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Binding cannot be trusted.";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Binding cannot be trusted.";
+        }
+
         foreach (string partName in footprintParts)
         {
+            string normalized = OpcPackage.NormalizeLookup(partName);
+
             if (_opc.ContainsPart(partName))
             {
-                continue; // Was present at open time — already in the snapshot, fine.
+                continue; // Was present at open time — already in the snapshot.
             }
 
-            // Check if the file now exists on the live filesystem.
-            string fullPath = Path.Combine(root, partName.Replace('/', Path.DirectorySeparatorChar));
-            if (File.Exists(fullPath))
+            // File appeared after open (any casing).
+            if (liveNormalized.Contains(normalized))
             {
                 return $"Footprint part '{partName}' was absent when the package was opened but now exists on disk — the directory has been modified. Binding cannot be trusted.";
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Non-recursively-symlink-safe file enumerator matching the same traversal rules as
+    /// <see cref="DirectoryOpcPackage.Open"/>: skips symlinks/reparse points.
+    /// </summary>
+    private static IEnumerable<string> EnumerateLiveFiles(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            string current = pending.Pop();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(current))
+            {
+                var attributes = File.GetAttributes(entry);
+                if (attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
+
+                if (attributes.HasFlag(FileAttributes.Directory))
+                {
+                    pending.Push(entry);
+                }
+                else
+                {
+                    yield return entry;
+                }
+            }
+        }
     }
 
     /// <summary>

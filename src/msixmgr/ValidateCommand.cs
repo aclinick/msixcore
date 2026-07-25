@@ -219,7 +219,27 @@ internal static class ValidateCommand
         }
         else if (r.SignatureBindingVerified == true)
         {
-            signature = "CMS envelope ok, binding verified (AXCT/AXBM/AXCI; AXPC/AXCD not verified; trust NOT verified)";
+            // Derive the verified/not-verified tag lists from actual results.
+            var verified = new List<string>();
+            var notVerified = new List<string>();
+            if (r.BindingDigests is not null)
+            {
+                foreach (BindingDigestReport d in r.BindingDigests)
+                {
+                    if (string.Equals(d.Status, "Valid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        verified.Add(d.Tag);
+                    }
+                    else if (string.Equals(d.Status, "NotVerified", StringComparison.OrdinalIgnoreCase))
+                    {
+                        notVerified.Add(d.Tag);
+                    }
+                }
+            }
+
+            string verifiedStr = verified.Count > 0 ? string.Join("/", verified) : "none";
+            string notVerifiedStr = notVerified.Count > 0 ? $"; {string.Join("/", notVerified)} not verified" : "";
+            signature = $"CMS envelope ok, binding verified ({verifiedStr}{notVerifiedStr}; trust NOT verified)";
         }
         else if (r.SignatureBindingVerified == false)
         {
