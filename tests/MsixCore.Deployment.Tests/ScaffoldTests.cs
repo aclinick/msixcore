@@ -19,14 +19,4 @@ public class ScaffoldTests
         Assert.True((int)InstallationStep.Started < (int)InstallationStep.Extraction);
         Assert.True((int)InstallationStep.Extraction < (int)InstallationStep.Completed);
     }
-
-    [Fact]
-    public void PackageManager_AddRemove_NotYetImplemented_UntilPhase5()
-    {
-        var manager = new PackageManager();
-
-        // Contract guards: flip to real behavior in Phase 5 (deployment engine).
-        Assert.Throws<NotImplementedException>(() => manager.AddPackage("nonexistent.msix"));
-        Assert.Throws<NotImplementedException>(() => manager.RemovePackage("Contoso.MyApp_1.0.0.0_x64__abc"));
-    }
 }

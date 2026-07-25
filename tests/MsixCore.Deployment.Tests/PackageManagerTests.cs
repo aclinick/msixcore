@@ -126,4 +126,84 @@ public class PackageManagerTests : IDisposable
         Assert.Throws<ArgumentException>(() => manager.FindPackages(""));
         Assert.Throws<ArgumentException>(() => manager.GetMsixPackageInfo(""));
     }
+
+    [Fact]
+    public async Task AddPackage_InstallsAndBecomesQueryable_ThenRemove()
+    {
+        string msix = PackedMsixBuilder.Create(_root, "app.msix");
+        string expectedFullName;
+        using (MsixPackage probe = MsixPackage.Open(msix))
+        {
+            expectedFullName = probe.Identity.PackageFullName;
+        }
+
+        var store = new FileSystemPackageStore(Path.Combine(_root, "store"));
+        var manager = new PackageManager(store);
+
+        IMsixResponse add = manager.AddPackage(msix);
+        await add.Completion;
+
+        Assert.Equal(InstallationStep.Completed, add.Status);
+        Assert.True(store.Contains(expectedFullName));
+        using (IInstalledPackage? found = manager.FindPackage(expectedFullName))
+        {
+            Assert.NotNull(found);
+            Assert.Equal(expectedFullName, found!.Identity.PackageFullName);
+        }
+
+        IMsixResponse remove = manager.RemovePackage(expectedFullName);
+        await remove.Completion;
+
+        Assert.Equal(InstallationStep.Completed, remove.Status);
+        Assert.False(store.Contains(expectedFullName));
+        Assert.Null(manager.FindPackage(expectedFullName));
+    }
+
+    [Fact]
+    public async Task AddPackage_CorruptBlockMap_Fails()
+    {
+        string msix = PackedMsixBuilder.Create(_root, "bad.msix", validBlockMap: false);
+        var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
+
+        IMsixResponse add = manager.AddPackage(msix);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => add.Completion);
+        Assert.Equal(InstallationStep.Error, add.Status);
+        Assert.NotNull(add.Failure);
+    }
+
+    [Fact]
+    public async Task AddPackage_AlreadyInstalled_Fails()
+    {
+        string msix = PackedMsixBuilder.Create(_root, "app.msix");
+        var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
+
+        await manager.AddPackage(msix).Completion;
+        IMsixResponse second = manager.AddPackage(msix);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => second.Completion);
+    }
+
+    [Fact]
+    public async Task AddPackage_AlreadyInstalled_WithForce_Succeeds()
+    {
+        string msix = PackedMsixBuilder.Create(_root, "app.msix");
+        var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
+
+        await manager.AddPackage(msix).Completion;
+        IMsixResponse second = manager.AddPackage(msix, DeploymentOptions.ForceApplicationShutdown);
+
+        await second.Completion;
+        Assert.Equal(InstallationStep.Completed, second.Status);
+    }
+
+    [Fact]
+    public async Task RemovePackage_NotInstalled_Fails()
+    {
+        var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
+
+        IMsixResponse remove = manager.RemovePackage("Nope.NotHere_9.9.9.9_x64__zzzzzzzzzzzzz");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => remove.Completion);
+    }
 }

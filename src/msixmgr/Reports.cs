@@ -67,6 +67,14 @@ internal sealed record ValidationReport
     public IReadOnlyList<string> Warnings { get; init; } = [];
 }
 
+/// <summary>Machine-readable result of the <c>unpack</c> verb.</summary>
+internal sealed record UnpackReport
+{
+    public required string Destination { get; init; }
+
+    public required int ExtractedPartCount { get; init; }
+}
+
 /// <summary>Shared JSON options for CLI report serialization.</summary>
 internal static class ReportJson
 {
