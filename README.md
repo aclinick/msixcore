@@ -32,10 +32,11 @@ as a modern, memory-safe, **cross-platform** library and CLI.
   `PackageSignatureReader`), and identity (`PackageFullName` /
   `PackageFamilyName`).
 - **`MsixCore.Deployment`** — install/uninstall/query engine over an
-  `IPackageStore`, with a handler pipeline and cross-platform payload extraction
-  (`PackageExtractor`). `PackageManager.AddPackage`/`RemovePackage` are
-  implemented (transactional install with rollback); OS integration (shortcuts,
-  registry, file-type associations) is guarded to the relevant platform.
+  `IPackageStore`, with cross-platform payload extraction (`PackageExtractor`) and a
+  *planned* handler pipeline (interfaces defined, not yet wired).
+  `PackageManager.AddPackage`/`RemovePackage` are implemented (transactional install
+  with rollback); OS integration (shortcuts, registry, file-type associations) is a
+  later phase.
 - **`msixmgr`** — command-line tool. `inspect`, `validate`, and `unpack` are
   implemented; the remaining deployment verbs (`-AddPackage`, `-RemovePackage`,
   `-FindPackage`) are advertised in help and reach the CLI in a later phase.

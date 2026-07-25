@@ -232,7 +232,7 @@ The extracted layout can be re-validated (a round-trip integrity check):
 ```console
 $ dotnet $DLL validate ./out
 INTEGRITY OK      Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
-  Block map : ok (3 files)
+  Block map : ok (2 files)
   Signature : unsigned
   note:  package is unsigned; integrity is self-asserted by its own block map only.
 ```

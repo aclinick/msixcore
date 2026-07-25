@@ -178,11 +178,13 @@ part-name rules.
   `Cancel()` backed by a linked `CancellationTokenSource`. Progress after a
   terminal transition is ignored. `SynchronousProgress<T>` delivers the engine's
   progress callbacks inline and in order.
-- **`IPackageHandler` / `PackageDeploymentContext`** define the add/remove
-  pipeline: handlers run in order on add and in reverse on remove, each guarded
-  by `IsApplicable` so OS-integration steps (shortcuts, registry, associations)
-  only run on their platform. Extraction is the cross-platform step;
-  Windows OS-integration handlers land in a later phase.
+- **`IPackageHandler` / `PackageDeploymentContext`** define a *planned* add/remove
+  handler pipeline — an extension point where handlers would run in order on add
+  and in reverse on remove, each guarded by `IsApplicable` so OS-integration steps
+  (shortcuts, registry, associations) only run on their platform. These interfaces
+  are declared but **not yet invoked**: `PackageManager` currently performs
+  extraction/commit (add) and delete (remove) directly. Wiring the pipeline and the
+  Windows OS-integration handlers lands in a later phase.
 - **`DeploymentOptions`** is a `[Flags]` enum (`None`, `ForceApplicationShutdown`,
   `ExtractOnly`).
 
