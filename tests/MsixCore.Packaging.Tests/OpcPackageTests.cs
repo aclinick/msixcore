@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using MsixCore.Packaging.Authoring;
 using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Packaging.Tests;
@@ -179,6 +180,36 @@ public class OpcPackageTests
         Assert.False(OpcPackage.IsValidPartName(string.Empty));
         Assert.True(OpcPackage.IsValidPartName("AppxManifest.xml"));
         Assert.True(OpcPackage.IsValidPartName("AppxMetadata/AppxBundleManifest.xml"));
+    }
+
+    [Fact]
+    public void IsValidPartName_RejectsUnpairedSurrogates()
+    {
+        // Strict UTF-8 encoding of the part name would otherwise throw only once the package is
+        // being written, turning a validation failure into a late EncoderFallbackException.
+        Assert.False(OpcPackage.IsValidPartName("\uD800.txt"));
+        Assert.False(OpcPackage.IsValidPartName("\uDC00.txt"));
+        Assert.False(OpcPackage.IsValidPartName("dir/\uD800.txt"));
+        Assert.False(OpcPackage.IsValidPartName("\uD800\uD800.txt"));
+        Assert.False(OpcPackage.IsValidPartName("trailing\uD83D"));
+        Assert.True(OpcPackage.IsValidPartName("\uD83D\uDE00.txt"));
+        Assert.True(OpcPackage.IsValidPartName("dir/\uD83D\uDE00.txt"));
+    }
+
+    [Fact]
+    public void EncodeSegment_ValidatedNames_NeverThrow()
+    {
+        foreach (string candidate in new[] { "\uD800.txt", "\uDC00.txt", "\uD83D\uDE00.txt", "é.txt" })
+        {
+            if (OpcPackage.IsValidPartName(candidate))
+            {
+                Assert.NotNull(OpcPartNameEncoder.Encode(candidate));
+            }
+            else
+            {
+                Assert.Throws<EncoderFallbackException>(() => OpcPartNameEncoder.Encode(candidate));
+            }
+        }
     }
 
     [Fact]
