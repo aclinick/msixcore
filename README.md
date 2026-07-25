@@ -45,7 +45,7 @@ as a modern, memory-safe, **cross-platform** library and CLI.
 ## Status
 
 Under active, **phased** development. Each phase lands as its own reviewed PR
-with full test coverage (currently 353 passing tests). The reader
+with full test coverage (currently 354 passing tests). The reader
 (OPC → manifest → block map → signature → identity), the deployment **engine**
 (transactional add/remove driving `IMsixResponse`, cross-platform extraction,
 and query), package authoring, and the `unpack`/`pack` CLI verbs are
