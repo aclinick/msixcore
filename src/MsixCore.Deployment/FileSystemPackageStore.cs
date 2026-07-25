@@ -110,14 +110,42 @@ public sealed class FileSystemPackageStore : IPackageStore
     {
         ArgumentException.ThrowIfNullOrEmpty(stagingLocation);
         string destination = GetInstallLocation(packageFullName);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
 
+        // Move any existing installation aside (rather than deleting it) so a failed promotion can be
+        // rolled back instead of destroying the previously-installed package. The backup name starts
+        // with '.' so it is excluded from EnumeratePackages while it exists.
+        string? backup = null;
         if (Directory.Exists(destination))
         {
-            Directory.Delete(destination, recursive: true);
+            backup = Path.Combine(_root, "." + packageFullName + ".bak-" + Guid.NewGuid().ToString("N"));
+            Directory.Move(destination, backup);
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        Directory.Move(stagingLocation, destination);
+        try
+        {
+            Directory.Move(stagingLocation, destination);
+        }
+        catch
+        {
+            // Promotion failed: restore the previous installation, if any.
+            if (backup is not null)
+            {
+                if (Directory.Exists(destination))
+                {
+                    Directory.Delete(destination, recursive: true);
+                }
+
+                Directory.Move(backup, destination);
+            }
+
+            throw;
+        }
+
+        if (backup is not null && Directory.Exists(backup))
+        {
+            Directory.Delete(backup, recursive: true);
+        }
     }
 
     private static string ValidateFolderName(string packageFullName)

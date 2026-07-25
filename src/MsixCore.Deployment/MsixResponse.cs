@@ -12,6 +12,8 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly CancellationTokenSource _cts;
+    private readonly object _gate = new();
+    private bool _terminal;
 
     public MsixResponse(CancellationToken externalCancellation)
     {
@@ -38,26 +40,60 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
     /// <summary>Updates the coarse stage, percentage, and status text and raises a progress event.</summary>
     public void Report(InstallationStep step, float percentage, string statusText)
     {
-        Status = step;
-        Percentage = Math.Clamp(percentage, 0f, 100f);
-        StatusText = statusText;
-        ProgressChanged?.Invoke(this, this);
+        lock (_gate)
+        {
+            // Ignore progress after a terminal transition so a late (e.g. asynchronously-posted)
+            // update can never move a completed/failed response back to an in-progress state.
+            if (_terminal)
+            {
+                return;
+            }
+
+            Status = step;
+            Percentage = Math.Clamp(percentage, 0f, 100f);
+            StatusText = statusText;
+        }
+
+        RaiseProgress();
     }
 
     /// <summary>Marks the operation as successfully completed.</summary>
     public void Complete()
     {
-        Report(InstallationStep.Completed, 100f, "Completed.");
+        lock (_gate)
+        {
+            if (_terminal)
+            {
+                return;
+            }
+
+            _terminal = true;
+            Status = InstallationStep.Completed;
+            Percentage = 100f;
+            StatusText = "Completed.";
+        }
+
+        // Settle the completion source before notifying so a throwing subscriber can never leave
+        // Completion permanently pending.
         _completion.TrySetResult();
+        RaiseProgress();
     }
 
     /// <summary>Marks the operation as failed (or cancelled) and completes the task accordingly.</summary>
     public void Fail(Exception failure)
     {
-        Failure = failure;
-        Status = InstallationStep.Error;
-        StatusText = failure.Message;
-        ProgressChanged?.Invoke(this, this);
+        lock (_gate)
+        {
+            if (_terminal)
+            {
+                return;
+            }
+
+            _terminal = true;
+            Failure = failure;
+            Status = InstallationStep.Error;
+            StatusText = failure.Message;
+        }
 
         if (failure is OperationCanceledException)
         {
@@ -66,6 +102,20 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
         else
         {
             _completion.TrySetException(failure);
+        }
+
+        RaiseProgress();
+    }
+
+    private void RaiseProgress()
+    {
+        try
+        {
+            ProgressChanged?.Invoke(this, this);
+        }
+        catch
+        {
+            // Observer faults must not disrupt the deployment engine or strand the completion task.
         }
     }
 

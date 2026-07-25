@@ -212,6 +212,8 @@ public class OpcPackageTests
     [InlineData("foo/%2e%2e/bar.xml")]   // nested ".." via encoding
     [InlineData("%2frooted.xml")]        // leading "/" via encoding
     [InlineData("dir%5cfile.xml")]       // backslash via encoding
+    [InlineData("dir%2ffile.xml")]       // encoded path separator within a segment
+    [InlineData("a%2Fb/c.xml")]          // encoded separator (uppercase hex)
     public void Open_TraversalViaPercentEncoding_ThrowsInvalidData(string encodedName)
     {
         using MemoryStream zip = CreateZip((encodedName, "<x/>"));
