@@ -7,5 +7,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/MsixCore.Deployment.Tests/MsixCore.Deployment.Tests.csproj" />
     <Project Path="tests/MsixCore.Packaging.Tests/MsixCore.Packaging.Tests.csproj" />
+    <Project Path="tests/msixmgr.Tests/msixmgr.Tests.csproj" />
   </Folder>
 </Solution>

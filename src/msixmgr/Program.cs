@@ -25,9 +25,18 @@ public static class Program
             return 0;
         }
 
-        Console.Error.WriteLine($"msixmgr: verb '{args[0]}' is not implemented yet (lands in Phase 7).");
-        Console.Error.WriteLine("Run 'msixmgr --help' for usage.");
-        return 2;
+        string[] rest = args[1..];
+        switch (args[0])
+        {
+            case "inspect":
+                return InspectCommand.Run(rest, Console.Out, Console.Error);
+            case "validate":
+                return ValidateCommand.Run(rest, Console.Out, Console.Error);
+            default:
+                Console.Error.WriteLine($"msixmgr: verb '{args[0]}' is not implemented yet.");
+                Console.Error.WriteLine("Run 'msixmgr --help' for usage.");
+                return 2;
+        }
     }
 
     private static bool IsHelp(string arg) =>
@@ -49,11 +58,15 @@ public static class Program
               msixmgr <verb> [options]
 
             Verbs (implemented incrementally):
+              inspect <path> [--json]     Show package identity and metadata.
+              validate <path> [--json]    Verify integrity (block map + signature); CI exit code.
               -AddPackage <path>          Install an MSIX/APPX package.
               -RemovePackage <fullName>   Uninstall a package by full name.
               -FindPackage <pattern>      Query installed packages (supports * and ?).
               -Unpack <path> -Destination <dir>
                                           Extract a package without installing.
+
+            <path> may be a package file (.msix/.appx) or an unpacked directory.
 
             Options:
               -h, --help                  Show this help.
