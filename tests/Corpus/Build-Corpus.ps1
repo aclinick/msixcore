@@ -699,8 +699,8 @@ $records.Add([ordered]@{
     kind                = 'bundle'
     looseDir            = $null
     packedFile          = 'packed/bundle-multiarch.msixbundle'
-    expectedSupported   = $false
-    windowsOracle       = [ordered]@{ verdict = 'not-attempted'; reason = 'Bundle applicability is not implemented in the reader; a fixture is provided for future phases.' }
+    expectedSupported   = $true
+    windowsOracle       = [ordered]@{ verdict = 'not-attempted'; reason = 'Bundle reading is supported; target applicability selection is not yet implemented.' }
     expected            = $null
     isSignedLoose       = $false
     isSignedPacked      = $bundleSigned
@@ -708,7 +708,7 @@ $records.Add([ordered]@{
     blockMapValidLoose  = $null
     blockMapValidPacked = $null
     packedKnownBug      = $null
-    notes               = 'Bundle applicability is not implemented in the reader; opening its manifest as an app manifest throws InvalidDataException (documented current behavior).'
+    notes               = 'Open with MsixBundle; opening through MsixPackage throws MsixPackageTypeException. Applicability selection is not implemented.'
     _oracleExpect       = 'not-attempted'
     _oracleReason       = ''
     _oracleRegister     = $false

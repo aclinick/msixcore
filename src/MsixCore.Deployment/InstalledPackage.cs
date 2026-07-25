@@ -1,6 +1,4 @@
 using MsixCore.Packaging;
-using MsixCore.Packaging.Manifest;
-
 namespace MsixCore.Deployment;
 
 /// <summary>
@@ -9,46 +7,94 @@ namespace MsixCore.Deployment;
 /// </summary>
 public sealed class InstalledPackage : IInstalledPackage
 {
-    private readonly MsixPackage _package;
+    private readonly InstalledPackageInfo _info;
+    private readonly Lazy<MsixPackage> _package;
     private readonly Lazy<ExecutionInfo?> _executionInfo;
     private bool _disposed;
 
-    private InstalledPackage(MsixPackage package, string installedLocation)
+    private InstalledPackage(InstalledPackageInfo info)
     {
-        _package = package;
-        InstalledLocation = installedLocation;
+        _info = info;
+        _package = new Lazy<MsixPackage>(info.OpenPackage);
         _executionInfo = new Lazy<ExecutionInfo?>(ResolveExecutionInfo);
     }
 
     /// <inheritdoc/>
-    public string InstalledLocation { get; }
+    public string InstalledLocation
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _info.InstalledLocation;
+        }
+    }
 
     /// <inheritdoc/>
-    public PackageIdentity Identity => _package.Identity;
+    public PackageIdentity Identity
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _info.Identity;
+        }
+    }
 
     /// <inheritdoc/>
-    public string DisplayName => _package.DisplayName;
+    public string DisplayName
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _info.DisplayName;
+        }
+    }
 
     /// <inheritdoc/>
-    public string PublisherDisplayName => _package.PublisherDisplayName;
+    public string PublisherDisplayName
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _info.PublisherDisplayName;
+        }
+    }
 
     /// <inheritdoc/>
-    public IReadOnlyList<string> Capabilities => _package.Capabilities;
+    public IReadOnlyList<string> Capabilities
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _info.Capabilities;
+        }
+    }
 
     /// <inheritdoc/>
-    public ExecutionInfo? ExecutionInfo => _executionInfo.Value;
+    public ExecutionInfo? ExecutionInfo
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _executionInfo.Value;
+        }
+    }
 
     /// <summary>Opens the installed package from its unpacked directory.</summary>
     /// <param name="directory">The directory containing the unpacked package.</param>
     /// <returns>An open <see cref="InstalledPackage"/>.</returns>
     public static InstalledPackage OpenDirectory(string directory)
     {
-        MsixPackage package = MsixPackage.OpenDirectory(directory);
-        return new InstalledPackage(package, package.Opc is Packaging.Opc.DirectoryOpcPackage dir ? dir.RootDirectory : directory);
+        return new InstalledPackage(InstalledPackageInfo.ReadFromDirectory(directory));
     }
 
+    internal static InstalledPackage FromInfo(InstalledPackageInfo info) => new(info);
+
     /// <inheritdoc/>
-    public Stream? OpenLogo() => _package.OpenLogo();
+    public Stream? OpenLogo()
+    {
+        ThrowIfDisposed();
+        return _package.Value.OpenLogo();
+    }
 
     /// <inheritdoc/>
     public void Dispose()
@@ -59,14 +105,15 @@ public sealed class InstalledPackage : IInstalledPackage
         }
 
         _disposed = true;
-        _package.Dispose();
+        if (_package.IsValueCreated)
+        {
+            _package.Value.Dispose();
+        }
     }
 
     private ExecutionInfo? ResolveExecutionInfo()
     {
-        ManifestApplication? app = _package.Manifest.Applications
-            .FirstOrDefault(a => !string.IsNullOrEmpty(a.Executable));
-        if (app?.Executable is not { Length: > 0 } executable)
+        if (_info.ExecutablePath is not { Length: > 0 } executable)
         {
             return null;
         }
@@ -100,4 +147,6 @@ public sealed class InstalledPackage : IInstalledPackage
 
     private static bool IsWindowsDrivePath(string path) =>
         path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':';
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }

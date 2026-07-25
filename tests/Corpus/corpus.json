@@ -1097,10 +1097,10 @@
       "kind": "bundle",
       "looseDir": null,
       "packedFile": "packed/bundle-multiarch.msixbundle",
-      "expectedSupported": false,
+      "expectedSupported": true,
       "windowsOracle": {
         "verdict": "not-attempted",
-        "reason": "Bundle applicability is not implemented in the reader; a fixture is provided for future phases."
+        "reason": "Bundle reading is supported; target applicability selection is not yet implemented."
       },
       "expected": null,
       "isSignedLoose": false,
@@ -1109,7 +1109,7 @@
       "blockMapValidLoose": null,
       "blockMapValidPacked": null,
       "packedKnownBug": null,
-      "notes": "Bundle applicability is not implemented in the reader; opening its manifest as an app manifest throws InvalidDataException (documented current behavior)."
+      "notes": "Open with MsixBundle; opening through MsixPackage throws MsixPackageTypeException. Applicability selection is not implemented."
     }
   ]
 }

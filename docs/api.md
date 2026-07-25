@@ -39,9 +39,10 @@ directory.
 
 | Member | Description |
 |--------|-------------|
-| `static MsixPackage Open(string path)` | Open a `.msix`/`.appx` (or bundle) file. |
+| `static MsixPackage Open(string path)` | Open a `.msix`/`.appx`; throws `MsixPackageTypeException` for a bundle. |
 | `static MsixPackage Open(Stream stream, bool leaveOpen = false)` | Open from a seekable stream. |
 | `static MsixPackage OpenDirectory(string directory)` | Open an unpacked ("loose") layout. |
+| `static bool IsBundle(string path)` | Detect an `.msixbundle`/`.appxbundle` container. |
 | `IOpcPackage Opc { get; }` | The underlying OPC/ZIP container. |
 | `AppxManifest Manifest { get; }` | Parsed `AppxManifest.xml` (lazy). |
 | `BlockMap BlockMap { get; }` | Parsed `AppxBlockMap.xml` (lazy). |
@@ -53,6 +54,11 @@ directory.
 | `PackageSignature? ReadSignature()` | Read signer identity/CMS status, or `null` if unsigned. |
 | `Stream? OpenLogo()` | Open the package logo, or `null`. |
 | `void Dispose()` | Release the underlying container. |
+
+### `MsixBundle` (sealed class)
+
+Explicit bundle reader: `Open(string)` / `Open(Stream, bool)`, `Opc`, `Manifest`,
+`Identity`, `Packages`, and `Dispose()`.
 
 ### `IPackage` (interface, `IDisposable`)
 
@@ -125,7 +131,7 @@ publisher hash used in family/full names.
 | `BlockMapFile` | record | `Name`, `Size`, `Blocks`. |
 | `BlockMapBlock` | record | `Hash` (base64), `CompressedSize?`. |
 | `BlockMapHashMethod` | enum | `Sha256`, `Sha384`, `Sha512`. |
-| `BlockMapVerifier` | static class | `Verify(IOpcPackage, BlockMap)` → `BlockMapVerificationResult`. |
+| `BlockMapVerifier` | static class | `Verify(...)`, `VerifyCoverage(...)`, and `VerifyAndCopy(...)` for one-pass extraction validation. |
 | `BlockMapVerificationResult` | record | `IsValid`, `Files`, `CoverageErrors`. |
 | `BlockMapFileResult` | record | `Name`, `IsValid`, `Error?`. |
 | `PackageSignatureReader` | static class | `Read(Stream)` / `Read(byte[])` → `PackageSignature`. |
@@ -158,6 +164,7 @@ Cross-platform extraction of an OPC package to a loose directory. Powers the
 | Member | Description |
 |--------|-------------|
 | `static void Extract(IOpcPackage package, string destination, IProgress<float>? progress = null, CancellationToken = default)` | Extract all parts under `destination`, reporting 0–100 progress. Throws `InvalidDataException` if a part escapes the destination or a symlink/junction (incl. dangling, or the root itself) is on the path. |
+| `static BlockMapVerificationResult ExtractAndVerify(IOpcPackage package, BlockMap blockMap, string destination, ...)` | Extract and hash each payload in the same read. |
 
 ### `IPackageStore` / `FileSystemPackageStore` (sealed class)
 
@@ -166,12 +173,13 @@ implements it over a store root.
 
 | Member | Description |
 |--------|-------------|
-| `IReadOnlyList<IInstalledPackage> EnumeratePackages()` | Enumerate installed packages (caller disposes each). Skips `.`-prefixed internal dirs. |
+| `IReadOnlyList<InstalledPackageInfo> EnumeratePackages()` | Enumerate manifest metadata without indexing payload files. |
+| `InstalledPackageInfo? FindByFullName(...) / FindByFamilyName(...)` | Targeted metadata lookup. Family lookup is deterministic. |
 | `string GetInstallLocation(string packageFullName)` | The (possibly not-yet-existing) install directory for a package. |
 | `bool Contains(string packageFullName)` | Whether a package is currently installed. |
 | `void Delete(string packageFullName)` | Remove an installed package's payload (no-op if absent). |
 | `string CreateStagingLocation()` | Create a fresh empty staging directory to extract into. |
-| `void Commit(string stagingLocation, string packageFullName)` | Transactionally promote staging to the install location: move existing aside, promote, roll back on failure; serialized per destination. |
+| `void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options)` | Flush and promote verified staging with fail-closed policy, a cross-process lock, and an integrity-checked, phase-aware crash-recovery journal. |
 | `FileSystemPackageStore(string rootDirectory)` | Store rooted at a directory. |
 | `static FileSystemPackageStore CreateDefault()` | Store under `LocalApplicationData/MsixCore/Packages`. |
 | `string RootDirectory { get; }` | Absolute store root. |
@@ -182,6 +190,11 @@ implements it over a store root.
 `static InstalledPackage OpenDirectory(string directory)`; exposes
 `InstalledLocation`, `Identity`, `DisplayName`, `PublisherDisplayName`,
 `Capabilities`, `ExecutionInfo`, `OpenLogo()`, `Dispose()`.
+
+### `InstalledPackageInfo` (sealed record)
+
+Non-disposable identity and manifest metadata. `OpenPackage()` opens payload
+content only when requested.
 
 ### `IMsixResponse` (interface)
 
@@ -198,7 +211,8 @@ inline `SynchronousProgress<T>` reporter are `internal` implementation details.
 
 ### `DeploymentOptions` (flags enum)
 
-`None = 0`, `ForceApplicationShutdown = 1`, `ExtractOnly = 2`.
+`None = 0`, `ForceApplicationShutdown = 1`, `ExtractOnly = 2`,
+`ForceReinstall = 4`, `AllowDowngrade = 8`.
 
 ### Handlers — `MsixCore.Deployment.Handlers`
 

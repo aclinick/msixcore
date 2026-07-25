@@ -11,10 +11,15 @@ namespace MsixCore.Deployment;
 public interface IPackageStore
 {
     /// <summary>
-    /// Enumerates the installed packages. Each returned package is owned by the caller and must be
-    /// disposed.
+    /// Enumerates installed-package metadata without indexing package payload files.
     /// </summary>
-    IReadOnlyList<IInstalledPackage> EnumeratePackages();
+    IReadOnlyList<InstalledPackageInfo> EnumeratePackages();
+
+    /// <summary>Finds installed-package metadata by exact package full name.</summary>
+    InstalledPackageInfo? FindByFullName(string packageFullName);
+
+    /// <summary>Finds installed-package metadata by package family name.</summary>
+    InstalledPackageInfo? FindByFamilyName(string packageFamilyName);
 
     /// <summary>
     /// Returns the directory where the given package's payload lives (or would live). The directory
@@ -40,6 +45,7 @@ public interface IPackageStore
     /// install location for the given package, replacing any existing payload.
     /// </summary>
     /// <param name="stagingLocation">A staging directory previously created by this store.</param>
-    /// <param name="packageFullName">The package full name to install as.</param>
-    void Commit(string stagingLocation, string packageFullName);
+    /// <param name="package">Metadata read from the verified staging layout.</param>
+    /// <param name="options">Options controlling version replacement policy.</param>
+    void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options);
 }

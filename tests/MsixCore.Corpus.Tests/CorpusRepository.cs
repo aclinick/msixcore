@@ -39,7 +39,7 @@ public static class CorpusRepository
             .Where(f => f.PackedFile is not null && string.Equals(f.Kind, "package", StringComparison.Ordinal))
             .Select(f => new object[] { f.Id });
 
-    /// <summary>Every bundle fixture (documented as not-yet-supported by the reader).</summary>
+    /// <summary>Every bundle fixture.</summary>
     public static IEnumerable<object[]> BundleCases() =>
         Document.Fixtures
             .Where(f => string.Equals(f.Kind, "bundle", StringComparison.Ordinal))

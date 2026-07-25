@@ -57,6 +57,74 @@ public static class BlockMapVerifier
         };
     }
 
+    /// <summary>
+    /// Verifies one block-mapped file while copying its uncompressed bytes to another stream.
+    /// </summary>
+    public static BlockMapFileResult VerifyAndCopy(
+        Stream content,
+        Stream destination,
+        BlockMapHashMethod hashMethod,
+        BlockMapFile file,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(file);
+
+        HashAlgorithmName algorithm = ToAlgorithmName(hashMethod);
+        byte[] buffer = new byte[BlockMap.BlockSize];
+        long totalRead = 0;
+        int blockIndex = 0;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int filled = ReadBlock(content, buffer, cancellationToken);
+            if (filled == 0)
+            {
+                break;
+            }
+
+            if (blockIndex >= file.Blocks.Count)
+            {
+                return Invalid(file.Name, "the file contains more data than the block map declares.");
+            }
+
+            byte[] hash = CryptographicOperations.HashData(algorithm, buffer.AsSpan(0, filled));
+            string actual = Convert.ToBase64String(hash);
+            if (!string.Equals(actual, file.Blocks[blockIndex].Hash, StringComparison.Ordinal))
+            {
+                return Invalid(file.Name, $"block {blockIndex} hash mismatch.");
+            }
+
+            destination.Write(buffer, 0, filled);
+            totalRead += filled;
+            blockIndex++;
+        }
+
+        if (blockIndex != file.Blocks.Count)
+        {
+            return Invalid(file.Name, $"the block map declares {file.Blocks.Count} block(s) but the file has {blockIndex}.");
+        }
+
+        if (totalRead != file.Size)
+        {
+            return Invalid(file.Name, $"size mismatch: block map declares {file.Size} bytes but the file has {totalRead}.");
+        }
+
+        return new BlockMapFileResult { Name = file.Name, IsValid = true };
+    }
+
+    /// <summary>Checks that the block map and package contain the same payload files.</summary>
+    public static IReadOnlyList<string> VerifyCoverage(IOpcPackage package, BlockMap blockMap)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        ArgumentNullException.ThrowIfNull(blockMap);
+        return CheckCoverage(
+            package,
+            new HashSet<string>(blockMap.Files.Select(static file => file.Name), StringComparer.OrdinalIgnoreCase));
+    }
+
     private static BlockMapFileResult VerifyFile(IOpcPackage package, BlockMapHashMethod hashMethod, BlockMapFile file)
     {
         if (!package.ContainsPart(file.Name))
@@ -81,53 +149,15 @@ public static class BlockMapVerifier
 
     private static BlockMapFileResult VerifyContent(Stream content, BlockMapHashMethod hashMethod, BlockMapFile file)
     {
-        HashAlgorithmName algorithm = ToAlgorithmName(hashMethod);
-        byte[] buffer = new byte[BlockMap.BlockSize];
-        long totalRead = 0;
-        int blockIndex = 0;
-
-        while (true)
-        {
-            int filled = ReadBlock(content, buffer);
-            if (filled == 0)
-            {
-                break;
-            }
-
-            if (blockIndex >= file.Blocks.Count)
-            {
-                return Invalid(file.Name, "the file contains more data than the block map declares.");
-            }
-
-            byte[] hash = CryptographicOperations.HashData(algorithm, buffer.AsSpan(0, filled));
-            string actual = Convert.ToBase64String(hash);
-            if (!string.Equals(actual, file.Blocks[blockIndex].Hash, StringComparison.Ordinal))
-            {
-                return Invalid(file.Name, $"block {blockIndex} hash mismatch.");
-            }
-
-            totalRead += filled;
-            blockIndex++;
-        }
-
-        if (blockIndex != file.Blocks.Count)
-        {
-            return Invalid(file.Name, $"the block map declares {file.Blocks.Count} block(s) but the file has {blockIndex}.");
-        }
-
-        if (totalRead != file.Size)
-        {
-            return Invalid(file.Name, $"size mismatch: block map declares {file.Size} bytes but the file has {totalRead}.");
-        }
-
-        return new BlockMapFileResult { Name = file.Name, IsValid = true };
+        return VerifyAndCopy(content, Stream.Null, hashMethod, file);
     }
 
-    private static int ReadBlock(Stream stream, byte[] buffer)
+    private static int ReadBlock(Stream stream, byte[] buffer, CancellationToken cancellationToken = default)
     {
         int filled = 0;
         while (filled < buffer.Length)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             int read = stream.Read(buffer, filled, buffer.Length - filled);
             if (read == 0)
             {

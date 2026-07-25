@@ -1,5 +1,7 @@
 using System.IO.Compression;
 using System.Text;
+using MsixCore.Packaging;
+using MsixCore.Packaging.Integrity;
 using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Deployment.Tests;
@@ -142,6 +144,31 @@ public class PackageExtractorTests : IDisposable
         Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, dest));
     }
 
+    [Fact]
+    public void ExtractAndVerify_ReadsEachPayloadPartOnce()
+    {
+        string packagePath = PackedMsixBuilder.Create(
+            _root,
+            "single-read.msix",
+            extraParts: new Dictionary<string, byte[]>
+            {
+                ["Assets/Logo.png"] = new byte[BlockMap.BlockSize + 17],
+            });
+        using MsixPackage package = MsixPackage.Open(packagePath);
+        BlockMap blockMap = package.BlockMap;
+        using var counting = new CountingOpcPackage(package.Opc);
+
+        BlockMapVerificationResult result = PackageExtractor.ExtractAndVerify(
+            counting,
+            blockMap,
+            Path.Combine(_root, "verified"));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(1, counting.OpenCounts[OpcPartNames.AppxManifest]);
+        Assert.Equal(1, counting.OpenCounts["Assets/Logo.png"]);
+        Assert.All(blockMap.Files, mapped => Assert.Contains(result.Files, result => result.Name == mapped.Name));
+    }
+
     /// <summary>A hostile <see cref="IOpcPackage"/> that returns a traversing part name.</summary>
     private sealed class EscapingOpcPackage : IOpcPackage
     {
@@ -150,6 +177,25 @@ public class PackageExtractorTests : IDisposable
         public bool ContainsPart(string partName) => true;
 
         public Stream OpenPart(string partName) => new MemoryStream(Encoding.UTF8.GetBytes("x"));
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class CountingOpcPackage(IOpcPackage inner) : IOpcPackage
+    {
+        public Dictionary<string, int> OpenCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyCollection<string> PartNames => inner.PartNames;
+
+        public bool ContainsPart(string partName) => inner.ContainsPart(partName);
+
+        public Stream OpenPart(string partName)
+        {
+            OpenCounts[partName] = OpenCounts.GetValueOrDefault(partName) + 1;
+            return inner.OpenPart(partName);
+        }
 
         public void Dispose()
         {

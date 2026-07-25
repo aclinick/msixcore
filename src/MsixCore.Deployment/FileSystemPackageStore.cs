@@ -1,6 +1,8 @@
-using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
+using System.Text.Json;
 using MsixCore.Packaging;
-using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Deployment;
 
@@ -15,14 +17,27 @@ public sealed class FileSystemPackageStore : IPackageStore
     public const string DefaultStoreFolderName = "MsixCore/Packages";
 
     private readonly string _root;
+    private readonly Func<string, IEnumerable<string>> _enumerateDirectories;
+    private readonly IDurableFileSystem _fileSystem;
 
     /// <summary>Creates a store rooted at the given directory (created on demand).</summary>
     /// <param name="rootDirectory">The store-root directory that holds unpacked package folders.</param>
     /// <exception cref="ArgumentException"><paramref name="rootDirectory"/> is null or empty.</exception>
     public FileSystemPackageStore(string rootDirectory)
+        : this(rootDirectory, Directory.EnumerateDirectories, DurableFileSystem.Instance)
+    {
+    }
+
+    internal FileSystemPackageStore(
+        string rootDirectory,
+        Func<string, IEnumerable<string>> enumerateDirectories,
+        IDurableFileSystem? fileSystem = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(rootDirectory);
+        ArgumentNullException.ThrowIfNull(enumerateDirectories);
         _root = Path.GetFullPath(rootDirectory);
+        _enumerateDirectories = enumerateDirectories;
+        _fileSystem = fileSystem ?? DurableFileSystem.Instance;
     }
 
     /// <summary>The absolute store-root directory.</summary>
@@ -38,54 +53,60 @@ public sealed class FileSystemPackageStore : IPackageStore
 
     /// <summary>The store subdirectory used for in-progress extraction; excluded from enumeration.</summary>
     private const string StagingFolderName = ".staging";
-
-    // Serializes the move-aside / promote / rollback sequence per install location so two concurrent
-    // commits of the same package cannot interleave — otherwise one commit's rollback could delete the
-    // other commit's already-promoted installation. Keyed by absolute destination path (process-wide)
-    // so it also covers separate store instances over the same root. NOTE: this guards a single process
-    // only; cross-process coordination over a shared store root is tracked separately (see issue #14).
-    private static readonly ConcurrentDictionary<string, object> PromotionGates =
-        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    internal const string CommitLockFileName = ".commit.lock";
+    internal const string CommitJournalFileName = ".commit-transaction.json";
 
     /// <inheritdoc/>
-    public IReadOnlyList<IInstalledPackage> EnumeratePackages()
+    public IReadOnlyList<InstalledPackageInfo> EnumeratePackages()
     {
-        if (!Directory.Exists(_root))
-        {
-            return [];
-        }
+        using FileStream storeLock = AcquireCommitLock();
+        RecoverIncompleteCommitLocked();
+        return EnumeratePackagesLocked();
+    }
 
-        var packages = new List<IInstalledPackage>();
-        try
+    private List<InstalledPackageInfo> EnumeratePackagesLocked()
+    {
+        var packages = new List<InstalledPackageInfo>();
+        foreach (string directory in EnumeratePackageDirectories())
         {
-            foreach (string directory in Directory.EnumerateDirectories(_root))
+            try
             {
-                // Skip reserved/internal directories (e.g. staging) so partial installs aren't listed.
-                if (Path.GetFileName(directory).StartsWith('.'))
-                {
-                    continue;
-                }
-
-                if (!ContainsManifest(directory))
-                {
-                    continue;
-                }
-
-                packages.Add(InstalledPackage.OpenDirectory(directory));
+                packages.Add(InstalledPackageInfo.ReadFromDirectory(directory));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                continue;
             }
         }
-        catch
-        {
-            // Dispose anything opened before the failure to avoid leaks, then rethrow.
-            foreach (IInstalledPackage package in packages)
-            {
-                package.Dispose();
-            }
 
-            throw;
-        }
+        return packages
+            .OrderBy(static package => package.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
-        return packages;
+    /// <inheritdoc/>
+    public InstalledPackageInfo? FindByFullName(string packageFullName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFullName);
+        using FileStream storeLock = AcquireCommitLock();
+        RecoverIncompleteCommitLocked();
+        return FindByFullNameLocked(packageFullName);
+    }
+
+    /// <inheritdoc/>
+    public InstalledPackageInfo? FindByFamilyName(string packageFamilyName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFamilyName);
+        using FileStream storeLock = AcquireCommitLock();
+        RecoverIncompleteCommitLocked();
+        return EnumeratePackageInfos()
+            .Where(package => string.Equals(
+                package.Identity.PackageFamilyName,
+                packageFamilyName,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static package => package.Identity.Version)
+            .ThenBy(static package => package.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
     }
 
     /// <inheritdoc/>
@@ -93,12 +114,19 @@ public sealed class FileSystemPackageStore : IPackageStore
         Path.Combine(_root, ValidateFolderName(packageFullName));
 
     /// <inheritdoc/>
-    public bool Contains(string packageFullName) =>
-        ContainsManifest(GetInstallLocation(packageFullName));
+    public bool Contains(string packageFullName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFullName);
+        using FileStream storeLock = AcquireCommitLock();
+        RecoverIncompleteCommitLocked();
+        return FindByFullNameLocked(packageFullName) is not null;
+    }
 
     /// <inheritdoc/>
     public void Delete(string packageFullName)
     {
+        using FileStream storeLock = AcquireCommitLock();
+        RecoverIncompleteCommitLocked();
         string location = GetInstallLocation(packageFullName);
         if (Directory.Exists(location))
         {
@@ -115,67 +143,466 @@ public sealed class FileSystemPackageStore : IPackageStore
     }
 
     /// <inheritdoc/>
-    public void Commit(string stagingLocation, string packageFullName)
+    public void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options)
     {
         ArgumentException.ThrowIfNullOrEmpty(stagingLocation);
-        string destination = GetInstallLocation(packageFullName);
+        ArgumentNullException.ThrowIfNull(package);
+        string staging = ValidateStagingLocation(stagingLocation, package);
+        using FileStream storeLock = AcquireCommitLock();
+        RecoverIncompleteCommitLocked();
+        CommitLocked(staging, package, options);
+    }
 
-        // Serialize the whole aside/promote/rollback transaction for this destination so a concurrent
-        // commit of the same package cannot observe or clobber our intermediate state.
-        lock (PromotionGates.GetOrAdd(destination, static _ => new object()))
+    private void CommitLocked(
+        string stagingLocation,
+        InstalledPackageInfo package,
+        DeploymentOptions options)
+    {
+        PackageIdentity identity = package.Identity;
+        string packageFullName = identity.PackageFullName;
+        string destination = GetInstallLocation(packageFullName);
+        Directory.CreateDirectory(_root);
+
+        List<InstalledPackageInfo> familyPackages = EnumeratePackageInfosForCommit()
+            .Where(installed => string.Equals(
+                installed.Identity.PackageFamilyName,
+                identity.PackageFamilyName,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        InstalledPackageInfo? exact = familyPackages.FirstOrDefault(installed => string.Equals(
+            installed.Identity.PackageFullName,
+            packageFullName,
+            StringComparison.OrdinalIgnoreCase));
+        if (exact is not null && !options.HasFlag(DeploymentOptions.ForceReinstall))
         {
-            CommitLocked(stagingLocation, destination, packageFullName);
+            throw new InvalidOperationException(
+                $"Package '{packageFullName}' is already installed. Use ForceReinstall to reinstall it.");
+        }
+
+        InstalledPackageInfo? newest = familyPackages
+            .OrderByDescending(static installed => installed.Identity.Version)
+            .ThenBy(static installed => installed.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (newest is not null
+            && identity.Version < newest.Identity.Version
+            && !options.HasFlag(DeploymentOptions.AllowDowngrade))
+        {
+            throw new InvalidOperationException(
+                $"Package family '{identity.PackageFamilyName}' has newer version '{newest.Identity.Version}' installed. "
+                + "Use AllowDowngrade to replace it with an older version.");
+        }
+
+        MakeStagingDurable(stagingLocation);
+        var transaction = new CommitTransaction
+        {
+            RecoveryMode = CommitRecoveryMode.RollForward,
+            StagingRelativePath = Path.GetRelativePath(_root, stagingLocation),
+            DestinationName = Path.GetFileName(destination),
+            Backups = familyPackages.Select(installed => new CommitBackup
+            {
+                OriginalName = Path.GetFileName(installed.InstalledLocation),
+                BackupName = "." + Path.GetFileName(installed.InstalledLocation)
+                    + ".bak-" + Guid.NewGuid().ToString("N"),
+            }).ToList(),
+        };
+        WriteCommitJournal(transaction);
+
+        try
+        {
+            ExecuteCommitTransaction(transaction);
+        }
+        catch (SimulatedProcessCrashException)
+        {
+            throw;
+        }
+        catch (Exception commitFailure)
+        {
+            CommitRecoveryOutcome recoveryOutcome;
+            try
+            {
+                recoveryOutcome = RecoverIncompleteCommitLocked();
+            }
+            catch (Exception recoveryFailure)
+            {
+                throw new AggregateException(
+                    "The package commit failed and recovery was interrupted; the durable journal remains for retry.",
+                    commitFailure,
+                    recoveryFailure);
+            }
+
+            if (recoveryOutcome is CommitRecoveryOutcome.NoJournal or CommitRecoveryOutcome.RolledForward)
+            {
+                return;
+            }
+
+            ExceptionDispatchInfo.Capture(commitFailure).Throw();
+            throw;
         }
     }
 
-    private void CommitLocked(string stagingLocation, string destination, string packageFullName)
+    private void ExecuteCommitTransaction(CommitTransaction transaction)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
+        MoveOriginalsToBackups(resolved);
+        _fileSystem.FlushDirectory(_root);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterBackupsDurableBeforePromotion);
 
-        // Move any existing installation aside (rather than deleting it) so a failed promotion can be
-        // rolled back instead of destroying the previously-installed package. The backup name starts
-        // with '.' so it is excluded from EnumeratePackages while it exists.
-        string? backup = null;
-        if (Directory.Exists(destination))
+        _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterPromotionBeforeDurable);
+        FlushPromotionDirectories(resolved);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterPromotionDurableBeforeJournalClear);
+        CompleteCommitTransaction(resolved);
+    }
+
+    private CommitRecoveryOutcome RecoverIncompleteCommitLocked()
+    {
+        string journalPath = Path.Combine(_root, CommitJournalFileName);
+        if (!_fileSystem.FileExists(journalPath))
         {
-            backup = Path.Combine(_root, "." + packageFullName + ".bak-" + Guid.NewGuid().ToString("N"));
-            Directory.Move(destination, backup);
+            return CommitRecoveryOutcome.NoJournal;
+        }
+
+        CommitTransaction transaction;
+        try
+        {
+            using FileStream journal = File.OpenRead(journalPath);
+            CommitJournal envelope = JsonSerializer.Deserialize<CommitJournal>(journal)
+                ?? throw new InvalidDataException("The commit journal is empty.");
+            transaction = ReadCommitJournal(envelope);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
+        {
+            throw new InvalidOperationException(
+                $"The package store commit journal '{journalPath}' cannot be recovered.",
+                ex);
+        }
+
+        ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
+        if (transaction.RecoveryMode is not (
+            CommitRecoveryMode.RollForward or CommitRecoveryMode.RollBack))
+        {
+            throw new InvalidOperationException(
+                $"The commit journal has unsupported recovery mode '{transaction.RecoveryMode}'.");
+        }
+
+        return ConvergeCommitTransaction(transaction, resolved);
+    }
+
+    private CommitRecoveryOutcome ConvergeCommitTransaction(
+        CommitTransaction transaction,
+        ResolvedCommitTransaction resolved)
+    {
+        if (transaction.RecoveryMode == CommitRecoveryMode.RollBack)
+        {
+            ConvergeRollback(resolved);
+            return CommitRecoveryOutcome.RolledBack;
+        }
+
+        // Staging present means promotion has not completed. Destination present means promotion
+        // occurred, but its durability barrier may still need to be replayed.
+        if (_fileSystem.DirectoryExists(resolved.StagingLocation))
+        {
+            if (_fileSystem.DirectoryExists(resolved.Destination))
+            {
+                ChangeRecoveryMode(transaction, CommitRecoveryMode.RollBack);
+                ConvergeRollback(resolved);
+                return CommitRecoveryOutcome.RolledBack;
+            }
+
+            MoveOriginalsToBackups(resolved);
+            _fileSystem.FlushDirectory(_root);
+            if (!_fileSystem.DirectoryExists(resolved.StagingLocation))
+            {
+                throw new InvalidOperationException(
+                    $"Staging disappeared while moving backups: '{resolved.StagingLocation}'. Backups: "
+                    + string.Join(", ", resolved.Backups.Select(static backup => backup.Original)));
+            }
+
+            _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
+        }
+        else if (!_fileSystem.DirectoryExists(resolved.Destination))
+        {
+            ChangeRecoveryMode(transaction, CommitRecoveryMode.RollBack);
+            ConvergeRollback(resolved);
+            return CommitRecoveryOutcome.RolledBack;
+        }
+
+        FlushPromotionDirectories(resolved);
+        CompleteCommitTransaction(resolved);
+        return CommitRecoveryOutcome.RolledForward;
+    }
+
+    private void ConvergeRollback(ResolvedCommitTransaction resolved)
+    {
+        if (_fileSystem.DirectoryExists(resolved.Destination))
+        {
+            _fileSystem.DeleteDirectory(resolved.Destination, recursive: true);
+            _fileSystem.FlushDirectory(_root);
+        }
+
+        if (_fileSystem.DirectoryExists(resolved.StagingLocation))
+        {
+            _fileSystem.DeleteDirectory(resolved.StagingLocation, recursive: true);
+            _fileSystem.FlushDirectory(Path.GetDirectoryName(resolved.StagingLocation)!);
+        }
+
+        RestoreBackups(resolved);
+        _fileSystem.FlushDirectory(_root);
+        CompleteCommitTransaction(resolved);
+    }
+
+    private void WriteCommitJournal(CommitTransaction transaction)
+    {
+        string journalPath = Path.Combine(_root, CommitJournalFileName);
+        if (_fileSystem.FileExists(journalPath))
+        {
+            throw new InvalidOperationException(
+                $"The package store contains an unrecovered commit journal at '{journalPath}'.");
+        }
+
+        string temporary = Path.Combine(_root, ".commit-transaction-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            WriteCommitJournalFile(temporary, transaction);
+            _fileSystem.MoveFile(temporary, journalPath);
+            _fileSystem.CommitPoint(CommitFaultPoint.BeforeJournalDurable);
+            _fileSystem.FlushDirectory(_root);
+            _fileSystem.CommitPoint(CommitFaultPoint.AfterJournalDurableBeforeBackups);
+        }
+        finally
+        {
+            if (_fileSystem.FileExists(temporary))
+            {
+                _fileSystem.DeleteFile(temporary);
+            }
+        }
+    }
+
+    private void ChangeRecoveryMode(
+        CommitTransaction transaction,
+        CommitRecoveryMode recoveryMode)
+    {
+        transaction.RecoveryMode = recoveryMode;
+        string temporary = Path.Combine(_root, ".commit-transaction-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            WriteCommitJournalFile(temporary, transaction);
+            _fileSystem.ReplaceFile(temporary, Path.Combine(_root, CommitJournalFileName));
+            _fileSystem.FlushDirectory(_root);
+        }
+        finally
+        {
+            if (_fileSystem.FileExists(temporary))
+            {
+                _fileSystem.DeleteFile(temporary);
+            }
+        }
+    }
+
+    private static void WriteCommitJournalFile(
+        string path,
+        CommitTransaction transaction)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None);
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(transaction);
+        var journal = new CommitJournal
+        {
+            FormatVersion = 1,
+            Payload = Convert.ToBase64String(payload),
+            Sha256 = Convert.ToHexString(SHA256.HashData(payload)),
+        };
+        JsonSerializer.Serialize(stream, journal);
+        stream.Flush(flushToDisk: true);
+    }
+
+    private void MakeStagingDurable(string stagingLocation)
+    {
+        var pending = new Stack<string>();
+        var directories = new List<string>();
+        pending.Push(stagingLocation);
+
+        while (pending.Count > 0)
+        {
+            string directory = pending.Pop();
+            directories.Add(directory);
+            foreach (string entry in _fileSystem.EnumerateFileSystemEntries(directory))
+            {
+                FileAttributes attributes = _fileSystem.GetAttributes(entry);
+                if (attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    throw new InvalidDataException(
+                        $"Staging path '{entry}' is a symbolic link or junction; refusing to commit.");
+                }
+
+                if (attributes.HasFlag(FileAttributes.Directory))
+                {
+                    pending.Push(entry);
+                }
+                else
+                {
+                    _fileSystem.FlushFile(entry);
+                    _fileSystem.CommitPoint(CommitFaultPoint.MidStagedFileFlush);
+                }
+            }
+        }
+
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterStagedFilesBeforeDirectoryFlush);
+        foreach (string directory in directories.AsEnumerable().Reverse())
+        {
+            _fileSystem.FlushDirectory(directory);
+        }
+
+        _fileSystem.FlushDirectory(Path.GetDirectoryName(stagingLocation)!);
+        _fileSystem.FlushDirectory(_root);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterStagingDurableBeforeJournal);
+    }
+
+    private static CommitTransaction ReadCommitJournal(CommitJournal journal)
+    {
+        if (journal.FormatVersion != 1)
+        {
+            throw new InvalidDataException(
+                $"The commit journal has unsupported format version '{journal.FormatVersion}'.");
+        }
+
+        if (string.IsNullOrEmpty(journal.Payload) || string.IsNullOrEmpty(journal.Sha256))
+        {
+            throw new InvalidDataException("The commit journal is missing integrity data.");
         }
 
         try
         {
-            Directory.Move(stagingLocation, destination);
+            byte[] payload = Convert.FromBase64String(journal.Payload);
+            byte[] expectedHash = Convert.FromHexString(journal.Sha256);
+            byte[] actualHash = SHA256.HashData(payload);
+            if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash))
+            {
+                throw new InvalidDataException("The commit journal failed its integrity check.");
+            }
+
+            return JsonSerializer.Deserialize<CommitTransaction>(payload)
+                ?? throw new InvalidDataException("The commit journal transaction is empty.");
         }
-        catch
+        catch (Exception ex) when (ex is FormatException or JsonException)
         {
-            // Promotion failed: restore the previous installation, if any.
-            if (backup is not null)
-            {
-                if (Directory.Exists(destination))
-                {
-                    Directory.Delete(destination, recursive: true);
-                }
+            throw new InvalidDataException("The commit journal is malformed.", ex);
+        }
+    }
 
-                Directory.Move(backup, destination);
+    private void FlushPromotionDirectories(ResolvedCommitTransaction transaction)
+    {
+        _fileSystem.FlushDirectory(Path.GetDirectoryName(transaction.StagingLocation)!);
+        _fileSystem.FlushDirectory(_root);
+    }
+
+    private void MoveOriginalsToBackups(ResolvedCommitTransaction transaction)
+    {
+        foreach ((string original, string backup) in transaction.Backups)
+        {
+            bool originalExists = _fileSystem.DirectoryExists(original);
+            bool backupExists = _fileSystem.DirectoryExists(backup);
+            if (originalExists && !backupExists)
+            {
+                _fileSystem.MoveDirectory(original, backup);
+                _fileSystem.CommitPoint(CommitFaultPoint.MidBackup);
+            }
+            else if (originalExists == backupExists)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot continue package-store commit: expected exactly one of '{original}' or '{backup}' to exist.");
+            }
+        }
+    }
+
+    private void RestoreBackups(ResolvedCommitTransaction transaction)
+    {
+        foreach ((string original, string backup) in transaction.Backups.AsEnumerable().Reverse())
+        {
+            if (!_fileSystem.DirectoryExists(original) && _fileSystem.DirectoryExists(backup))
+            {
+                _fileSystem.MoveDirectory(backup, original);
+            }
+        }
+    }
+
+    private void CleanupBackups(ResolvedCommitTransaction transaction)
+    {
+        foreach ((_, string backup) in transaction.Backups)
+        {
+            if (!_fileSystem.DirectoryExists(backup))
+            {
+                continue;
             }
 
-            throw;
+            _fileSystem.DeleteDirectory(backup, recursive: true);
+            if (_fileSystem.DirectoryExists(backup))
+            {
+                throw new IOException($"Could not remove package-store backup '{backup}'.");
+            }
+        }
+    }
+
+    private void CompleteCommitTransaction(ResolvedCommitTransaction transaction)
+    {
+        CleanupBackups(transaction);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterBackupCleanupBeforeDurable);
+        _fileSystem.FlushDirectory(_root);
+        DeleteCommitJournal();
+        _fileSystem.FlushDirectory(_root);
+    }
+
+    private void DeleteCommitJournal()
+    {
+        _fileSystem.DeleteFile(Path.Combine(_root, CommitJournalFileName));
+    }
+
+    private ResolvedCommitTransaction ResolveTransaction(CommitTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        ValidateTransactionName(transaction.DestinationName, nameof(transaction.DestinationName));
+
+        string staging = Path.GetFullPath(Path.Combine(_root, transaction.StagingRelativePath));
+        string stagingRoot = Path.GetFullPath(Path.Combine(_root, StagingFolderName));
+        if (!IsDescendant(stagingRoot, staging))
+        {
+            throw new InvalidOperationException("The commit journal contains an invalid staging location.");
         }
 
-        // The new installation is already in place and the operation has succeeded. Removing the
-        // backup is pure cleanup, so a failure here (e.g. a transient lock on the old files) must not
-        // fail an otherwise-successful install. Leave the stale ('.'-prefixed, enumeration-excluded)
-        // backup behind for later cleanup rather than reporting a false failure.
-        if (backup is not null && Directory.Exists(backup))
+        var backups = new List<(string Original, string Backup)>(transaction.Backups.Count);
+        foreach (CommitBackup item in transaction.Backups)
         {
-            try
+            ValidateTransactionName(item.OriginalName, nameof(item.OriginalName));
+            ValidateTransactionName(item.BackupName, nameof(item.BackupName));
+            if (!item.BackupName.StartsWith('.'))
             {
-                Directory.Delete(backup, recursive: true);
+                throw new InvalidOperationException("The commit journal contains an invalid backup name.");
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Best-effort cleanup; the successful promotion stands.
-            }
+
+            backups.Add((
+                Path.Combine(_root, item.OriginalName),
+                Path.Combine(_root, item.BackupName)));
+        }
+
+        return new ResolvedCommitTransaction
+        {
+            StagingLocation = staging,
+            Destination = Path.Combine(_root, transaction.DestinationName),
+            Backups = backups,
+        };
+    }
+
+    private static void ValidateTransactionName(string name, string propertyName)
+    {
+        if (string.IsNullOrEmpty(name)
+            || name is "." or ".."
+            || !string.Equals(Path.GetFileName(name), name, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"The commit journal contains an invalid {propertyName}.");
         }
     }
 
@@ -196,24 +623,260 @@ public sealed class FileSystemPackageStore : IPackageStore
         return packageFullName;
     }
 
+    private string ValidateStagingLocation(string stagingLocation, InstalledPackageInfo package)
+    {
+        string staging = Path.GetFullPath(stagingLocation);
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!string.Equals(staging, Path.GetFullPath(package.InstalledLocation), comparison))
+        {
+            throw new ArgumentException(
+                "The package metadata must have been read from the staging location.",
+                nameof(package));
+        }
+
+        string stagingRoot = Path.GetFullPath(Path.Combine(_root, StagingFolderName));
+        string stagingPrefix = stagingRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? stagingRoot
+            : stagingRoot + Path.DirectorySeparatorChar;
+        if (!staging.StartsWith(stagingPrefix, comparison))
+        {
+            throw new ArgumentException(
+                "The staging location must be created by this package store.",
+                nameof(stagingLocation));
+        }
+
+        return staging;
+    }
+
     private static bool ContainsManifest(string directory)
     {
-        if (!Directory.Exists(directory))
+        return InstalledPackageInfo.FindManifest(directory) is not null;
+    }
+
+    private InstalledPackageInfo? FindByFullNameLocked(string packageFullName)
+    {
+        string location = GetInstallLocation(packageFullName);
+        InstalledPackageInfo? direct = TryReadInfo(location);
+        if (direct is not null)
         {
-            return false;
+            return HasFullName(direct, packageFullName) ? direct : null;
+        }
+
+        if (!Directory.Exists(_root))
+        {
+            return null;
+        }
+
+        string? caseInsensitiveMatch = _enumerateDirectories(_root)
+            .Where(directory => string.Equals(
+                Path.GetFileName(directory),
+                packageFullName,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static directory => directory, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static directory => directory, StringComparer.Ordinal)
+            .FirstOrDefault();
+        InstalledPackageInfo? fallback = caseInsensitiveMatch is null
+            ? null
+            : TryReadInfo(caseInsensitiveMatch);
+        return fallback is not null && HasFullName(fallback, packageFullName) ? fallback : null;
+    }
+
+    private static bool HasFullName(InstalledPackageInfo package, string packageFullName) =>
+        string.Equals(
+            package.Identity.PackageFullName,
+            packageFullName,
+            StringComparison.OrdinalIgnoreCase);
+
+    private IEnumerable<string> EnumeratePackageDirectories()
+    {
+        if (!Directory.Exists(_root))
+        {
+            yield break;
+        }
+
+        foreach (string directory in _enumerateDirectories(_root))
+        {
+            if (!Path.GetFileName(directory).StartsWith('.') && ContainsManifest(directory))
+            {
+                yield return directory;
+            }
+        }
+    }
+
+    private IEnumerable<InstalledPackageInfo> EnumeratePackageInfos()
+    {
+        foreach (string directory in EnumeratePackageDirectories())
+        {
+            InstalledPackageInfo? info = TryReadInfo(directory);
+            if (info is not null)
+            {
+                yield return info;
+            }
+        }
+    }
+
+    private IEnumerable<InstalledPackageInfo> EnumeratePackageInfosForCommit()
+    {
+        if (!Directory.Exists(_root))
+        {
+            yield break;
+        }
+
+        List<string> directories;
+        try
+        {
+            directories = _enumerateDirectories(_root)
+                .Where(static directory => !Path.GetFileName(directory).StartsWith('.'))
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException(
+                "Installed-package metadata could not be enumerated; the commit was aborted.",
+                ex);
+        }
+
+        foreach (string directory in directories)
+        {
+            InstalledPackageInfo? info = ReadInfoForCommit(directory);
+            if (info is not null)
+            {
+                yield return info;
+            }
+        }
+    }
+
+    private static InstalledPackageInfo? ReadInfoForCommit(string directory)
+    {
+        try
+        {
+            if (InstalledPackageInfo.FindManifestStrict(directory) is null)
+            {
+                return null;
+            }
+
+            return InstalledPackageInfo.ReadFromDirectory(directory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            throw new InvalidOperationException(
+                $"Installed-package metadata at '{directory}' could not be read; the commit was aborted.",
+                ex);
+        }
+    }
+
+    private static InstalledPackageInfo? TryReadInfo(string directory)
+    {
+        if (!ContainsManifest(directory))
+        {
+            return null;
         }
 
         try
         {
-            return Directory.EnumerateFiles(directory)
-                .Any(file => string.Equals(
-                    Path.GetFileName(file),
-                    OpcPartNames.AppxManifest,
-                    StringComparison.OrdinalIgnoreCase));
+            return InstalledPackageInfo.ReadFromDirectory(directory);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            return false;
+            return null;
         }
     }
+
+    private FileStream AcquireCommitLock()
+    {
+        Directory.CreateDirectory(_root);
+        string path = Path.Combine(_root, CommitLockFileName);
+        var timeout = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (timeout.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                Thread.Sleep(25);
+            }
+        }
+    }
+
+    private static bool IsDescendant(string root, string path)
+    {
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        string prefix = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        return path.StartsWith(prefix, comparison);
+    }
+
+    private sealed class CommitTransaction
+    {
+        public CommitRecoveryMode RecoveryMode { get; set; }
+
+        public required string StagingRelativePath { get; init; }
+
+        public required string DestinationName { get; init; }
+
+        public required List<CommitBackup> Backups { get; init; }
+    }
+
+    private sealed class CommitJournal
+    {
+        public int FormatVersion { get; init; }
+
+        public required string Payload { get; init; }
+
+        public required string Sha256 { get; init; }
+    }
+
+    private sealed class CommitBackup
+    {
+        public required string OriginalName { get; init; }
+
+        public required string BackupName { get; init; }
+    }
+
+    private sealed class ResolvedCommitTransaction
+    {
+        public required string StagingLocation { get; init; }
+
+        public required string Destination { get; init; }
+
+        public required List<(string Original, string Backup)> Backups { get; init; }
+    }
+}
+
+internal enum CommitFaultPoint
+{
+    MidStagedFileFlush,
+    AfterStagedFilesBeforeDirectoryFlush,
+    AfterStagingDurableBeforeJournal,
+    BeforeJournalDurable,
+    AfterJournalDurableBeforeBackups,
+    MidBackup,
+    AfterBackupsDurableBeforePromotion,
+    AfterPromotionBeforeDurable,
+    AfterPromotionDurableBeforeJournalClear,
+    AfterBackupCleanupBeforeDurable,
+}
+
+internal enum CommitRecoveryMode
+{
+    RollForward,
+    RollBack,
+}
+
+internal enum CommitRecoveryOutcome
+{
+    NoJournal,
+    RolledForward,
+    RolledBack,
+}
+
+internal sealed class SimulatedProcessCrashException : Exception
+{
 }

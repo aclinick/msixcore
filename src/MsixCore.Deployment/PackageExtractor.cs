@@ -1,4 +1,5 @@
 using MsixCore.Packaging.Opc;
+using MsixCore.Packaging.Integrity;
 
 namespace MsixCore.Deployment;
 
@@ -75,6 +76,88 @@ public static class PackageExtractor
         }
     }
 
+    /// <summary>
+    /// Extracts a package while verifying each payload file against its block map in the same read.
+    /// </summary>
+    public static BlockMapVerificationResult ExtractAndVerify(
+        IOpcPackage package,
+        BlockMap blockMap,
+        string destination,
+        IProgress<float>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        ArgumentNullException.ThrowIfNull(blockMap);
+        ArgumentException.ThrowIfNullOrEmpty(destination);
+
+        IReadOnlyList<string> coverageErrors = BlockMapVerifier.VerifyCoverage(package, blockMap);
+        if (coverageErrors.Count != 0)
+        {
+            return new BlockMapVerificationResult
+            {
+                IsValid = false,
+                Files = [],
+                CoverageErrors = coverageErrors,
+            };
+        }
+
+        var mappedFiles = blockMap.Files.ToDictionary(static file => file.Name, StringComparer.OrdinalIgnoreCase);
+        var fileResults = new Dictionary<string, BlockMapFileResult>(StringComparer.OrdinalIgnoreCase);
+        string root = PrepareDestination(destination);
+        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        var parts = package.PartNames.ToList();
+        int done = 0;
+
+        foreach (string part in parts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string target = GetContainedTarget(root, rootWithSeparator, part);
+            EnsureNoReparsePointEscape(root, target);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+
+            using Stream source = package.OpenPart(part);
+            using FileStream file = File.Create(target);
+            if (mappedFiles.TryGetValue(part, out BlockMapFile? mapped))
+            {
+                BlockMapFileResult result = BlockMapVerifier.VerifyAndCopy(
+                    source,
+                    file,
+                    blockMap.HashMethod,
+                    mapped,
+                    cancellationToken);
+                fileResults.Add(result.Name, result);
+                if (!result.IsValid)
+                {
+                    return new BlockMapVerificationResult
+                    {
+                        IsValid = false,
+                        Files = blockMap.Files
+                            .Where(mappedFile => fileResults.ContainsKey(mappedFile.Name))
+                            .Select(mappedFile => fileResults[mappedFile.Name])
+                            .ToList(),
+                        CoverageErrors = [],
+                    };
+                }
+            }
+            else
+            {
+                CopyCancelable(source, file, cancellationToken);
+            }
+
+            done++;
+            progress?.Report(parts.Count == 0 ? 100f : done * 100f / parts.Count);
+        }
+
+        return new BlockMapVerificationResult
+        {
+            IsValid = true,
+            Files = blockMap.Files.Select(mappedFile => fileResults[mappedFile.Name]).ToList(),
+            CoverageErrors = [],
+        };
+    }
+
     /// <summary>Copies <paramref name="source"/> to <paramref name="destination"/> honoring cancellation between chunks.</summary>
     private static void CopyCancelable(Stream source, Stream destination, CancellationToken cancellationToken)
     {
@@ -87,11 +170,37 @@ public static class PackageExtractor
                 cancellationToken.ThrowIfCancellationRequested();
                 destination.Write(buffer, 0, read);
             }
+
         }
         finally
         {
             System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
+    }
+
+    private static string PrepareDestination(string destination)
+    {
+        string root = Path.GetFullPath(destination);
+        Directory.CreateDirectory(root);
+        if (IsReparsePoint(root))
+        {
+            throw new InvalidDataException(
+                $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
+        }
+
+        return root;
+    }
+
+    private static string GetContainedTarget(string root, string rootWithSeparator, string part)
+    {
+        string relative = part.Replace('/', Path.DirectorySeparatorChar);
+        string target = Path.GetFullPath(Path.Combine(root, relative));
+        if (!target.StartsWith(rootWithSeparator, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"Package part '{part}' resolves outside the destination directory.");
+        }
+
+        return target;
     }
 
     /// <summary>
