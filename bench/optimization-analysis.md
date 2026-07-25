@@ -36,9 +36,10 @@ the strongest optimization signal.
 ### Block-map verification
 
 `src/MsixCore.Packaging/Integrity/BlockMapVerifier.cs:75` allocates a new 64 KiB array for every
-verified file. The 64-file benchmark allocates 4,537.42 KB; approximately 4,194 KB of that is
-explained by 64 payload buffers alone. The loop correctly fills a complete block across short reads
-at lines 155-170 and hashes only the populated span at line 93.
+verified file. The benchmark verifies 66 block-mapped files (64 generated files plus
+`AppxManifest.xml` and `Assets/StoreLogo.png`) and allocates 4,537.42 KB; 4,224 KiB of that is
+explained by the 66 payload buffers alone, approximately 93%. The loop correctly fills a complete
+block across short reads at lines 155-170 and hashes only the populated span at line 93.
 
 Each block also allocates a digest array and a Base64 string at lines 93-95 solely to compare with
 the block-map string. The existing one-shot `CryptographicOperations.HashData` path is preferable to
@@ -88,8 +89,8 @@ Those allocations are measurable but not important enough to justify parser rewr
 
 | Rank | Hypothesis and evidence | Estimated impact | Risk | Effort | Disposition |
 |---:|---|---|---|---|---|
-| 1 | Reuse a single pooled 64 KiB block buffer across complete verification. Per-file arrays explain about 4.1 MB of the 4.54 MB large-verification allocation. | About 90% lower verification allocation; CPU neutral to modestly better through fewer GCs. | Low | Small | Ready to implement |
-| 2 | Reuse one pooled block buffer across the complete authoring pass and hash into a stack destination span. `BlockMapWriter` currently allocates per file and per block. | Save roughly 64 KiB per authored file plus transient digest arrays; likely fewer pack GCs. | Low | Small | Ready after adding a pack benchmark |
+| 1 | Reuse a single pooled 64 KiB block buffer across complete verification. The 66 per-file arrays account for 4,224 KiB, approximately 93% of the 4,537.42 KB large-verification allocation. | About 93% lower verification allocation; CPU neutral to modestly better through fewer GCs. | Low | Small | Ready to implement |
+| 2 | Reuse one pooled block buffer across the complete authoring pass and hash into a stack destination span. `BlockMapWriter` currently allocates per file and per block. As a correctness precondition, `ReadBlock` and the hashed/written span must be capped at exactly `BlockMap.BlockSize`, regardless of a rented array's potentially larger length. | Save roughly 64 KiB per authored file plus transient digest arrays; likely fewer pack GCs. | Low | Small | Ready after adding a pack benchmark and enforcing the 64 KiB cap |
 | 3 | Compare decoded expected hashes with stack-span digest bytes rather than allocating an actual Base64 string per block. Verification still needs result/model allocations after buffer pooling. | Tens of KB per 10 MB package; negligible-to-small CPU benefit. | Low-medium because malformed Base64 and SHA-384/512 behavior must remain identical | Small | Ready only with focused tests/benchmark |
 | 4 | Accelerate the scalar CRC-32 loop using a proven runtime implementation or a wider managed algorithm. Every authored byte uses the byte-at-a-time table loop. | Potentially material pack CPU reduction; magnitude unknown until isolated. | Medium | Medium | Needs issue/benchmark |
 | 5 | Replace the builder's post-write full reread with equivalent in-memory validation or make deep validation configurable. It currently adds another complete hash/read pass. | Approximately one verification pass plus package reopen; around 13 ms per 10 MB on this host as an upper-order estimate. | Medium-high: removes a strong correctness invariant | Medium | Needs issue/design |
@@ -105,8 +106,10 @@ Those allocations are measurable but not important enough to justify parser rewr
    contract with its own pooled rental.
 2. **Authoring buffer pooling and span hashing:** first add a large stored-package authoring
    benchmark. Then rent once in `MsixPackageBuilder.WritePackage`, pass the buffer to
-   `BlockMapWriter`, and use the span overload of `SHA256.HashData`. Require byte-identical package,
-   block-hash differential, makeappx unpack, and full round-trip tests.
+   `BlockMapWriter`, and use the span overload of `SHA256.HashData`. As a required correctness
+   precondition, change `ReadBlock` to read, write, and hash at most `BlockMap.BlockSize` bytes rather
+   than `buffer.Length`; an oversized pooled array must never create an oversized MSIX block.
+   Require byte-identical package, block-hash differential, makeappx unpack, and full round-trip tests.
 3. **Binary digest comparison:** add malformed-hash and SHA-256/384/512 tests before replacing
    transient digest/Base64 allocations. Keep error text and failure ordering unchanged.
 
