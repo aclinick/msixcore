@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -11,6 +12,13 @@ public class PackageSignatureReaderTests
     private static readonly byte[] Magic = "PKCX"u8.ToArray();
 
     private static X509Certificate2 CreateCertificate(string subject)
+    {
+        using RSA rsa = RSA.Create(2048);
+        var request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
+    }
+
+    private static X509Certificate2 CreateCertificate(X500DistinguishedName subject)
     {
         using RSA rsa = RSA.Create(2048);
         var request = new CertificateRequest(subject, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -85,6 +93,52 @@ public class PackageSignatureReaderTests
         PackageSignature result = PackageSignatureReader.Read(BuildSignature(cert, prependMagic: true));
 
         Assert.False(result.MatchesPublisher("CN=Fabrikam"));
+    }
+
+    [Fact]
+    public void Read_CapturesRawSubjectBytes()
+    {
+        using X509Certificate2 cert = CreateCertificate("CN=Contoso");
+        PackageSignature result = PackageSignatureReader.Read(BuildSignature(cert, prependMagic: true));
+
+        Assert.False(result.SubjectNameRawData.IsEmpty);
+        Assert.True(result.SubjectNameRawData.Span.SequenceEqual(cert.SubjectName.RawData));
+    }
+
+    [Fact]
+    public void MatchesPublisher_Utf8EncodedSubject_MatchesEquivalentManifest()
+    {
+        // Regression for #12: the signer certificate encodes its CN as a UTF8String; the manifest
+        // publisher is a plain string. Publisher matching must compare the decoded DN values, not a
+        // lossy re-encoding of the formatted subject string, so these must match despite any ASN.1
+        // string-encoding difference.
+        var builder = new X500DistinguishedNameBuilder();
+        builder.Add("2.5.4.3", "Contoso Corporation", UniversalTagNumber.UTF8String); // CN
+        using X509Certificate2 cert = CreateCertificate(builder.Build());
+
+        PackageSignature result = PackageSignatureReader.Read(BuildSignature(cert, prependMagic: true));
+
+        Assert.True(result.MatchesPublisher("CN=Contoso Corporation"));
+    }
+
+    [Fact]
+    public void MatchesPublisher_MultiRdnSameOrder_Matches()
+    {
+        using X509Certificate2 cert = CreateCertificate("CN=Contoso Corporation, O=Contoso, C=US");
+        PackageSignature result = PackageSignatureReader.Read(BuildSignature(cert, prependMagic: true));
+
+        Assert.True(result.MatchesPublisher("CN=Contoso Corporation, O=Contoso, C=US"));
+    }
+
+    [Fact]
+    public void MatchesPublisher_CaseDifferentValue_ReturnsFalse()
+    {
+        // MSIX publisher identity is case-sensitive (Windows byte-compares); a case-only difference in
+        // an RDN value must not be treated as a match.
+        using X509Certificate2 cert = CreateCertificate("CN=Contoso Corporation");
+        PackageSignature result = PackageSignatureReader.Read(BuildSignature(cert, prependMagic: true));
+
+        Assert.False(result.MatchesPublisher("CN=contoso corporation"));
     }
 
     [Fact]

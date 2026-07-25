@@ -122,6 +122,65 @@ public class CliCommandTests : IDisposable
         Assert.Contains("\"BlockMapValid\": true", output);
     }
 
+    private static (int Code, string Out, string Err) RunUnpack(params string[] args)
+    {
+        var o = new StringWriter();
+        var e = new StringWriter();
+        int code = UnpackCommand.Run(args, o, e);
+        return (code, o.ToString(), e.ToString());
+    }
+
+    [Fact]
+    public void Unpack_LoosePackage_ExtractsAllParts()
+    {
+        var extra = new Dictionary<string, byte[]>
+        {
+            ["Assets/data.bin"] = Encoding.UTF8.GetBytes("payload"),
+        };
+        string dir = LooseCliPackage.Create(_root, "pkgUnpack", extra);
+        string dest = Path.Combine(_root, "unpacked");
+
+        (int code, string output, _) = RunUnpack(dir, "-Destination", dest);
+
+        Assert.Equal(0, code);
+        Assert.Contains("Extracted", output);
+        Assert.True(File.Exists(Path.Combine(dest, "AppxManifest.xml")));
+        Assert.Equal("payload", File.ReadAllText(Path.Combine(dest, "Assets", "data.bin")));
+    }
+
+    [Fact]
+    public void Unpack_Json_EmitsReport()
+    {
+        string dir = LooseCliPackage.Create(_root, "pkgUnpackJson");
+        string dest = Path.Combine(_root, "unpacked-json");
+
+        (int code, string output, _) = RunUnpack(dir, "-Destination", dest, "--json");
+
+        Assert.Equal(0, code);
+        Assert.Contains("\"ExtractedPartCount\"", output);
+        Assert.Contains("\"Destination\"", output);
+    }
+
+    [Fact]
+    public void Unpack_MissingDestination_ReturnsUsageError()
+    {
+        string dir = LooseCliPackage.Create(_root, "pkgNoDest");
+
+        (int code, _, string err) = RunUnpack(dir);
+
+        Assert.Equal(2, code);
+        Assert.Contains("destination directory is required", err);
+    }
+
+    [Fact]
+    public void Unpack_MissingPath_ReturnsUsageError()
+    {
+        (int code, _, string err) = RunUnpack("-Destination", Path.Combine(_root, "d"));
+
+        Assert.Equal(2, code);
+        Assert.Contains("package path is required", err);
+    }
+
     [Fact]
     public void Program_Help_ReturnsZeroAndListsVerbs()
     {
