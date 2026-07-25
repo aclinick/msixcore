@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -18,25 +19,32 @@ internal static class BlockMapWriter
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
 
-        byte[] buffer = new byte[BlockMap.BlockSize];
-        var blocks = new List<BlockMapBlock>();
-        long size = 0;
-
-        while (true)
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
+        try
         {
-            int length = ReadBlock(source, buffer);
-            if (length == 0)
+            var blocks = new List<BlockMapBlock>();
+            long size = 0;
+
+            while (true)
             {
-                break;
+                int length = ReadBlock(source, buffer);
+                if (length == 0)
+                {
+                    break;
+                }
+
+                ReadOnlySpan<byte> block = buffer.AsSpan(0, length);
+                destination.Write(block);
+                blocks.Add(new BlockMapBlock { Hash = HashToBase64(block) });
+                size += length;
             }
 
-            destination.Write(buffer, 0, length);
-            byte[] hash = SHA256.HashData(buffer.AsSpan(0, length));
-            blocks.Add(new BlockMapBlock { Hash = Convert.ToBase64String(hash) });
-            size += length;
+            return new BlockMapFile { Name = name, Size = size, Blocks = blocks };
         }
-
-        return new BlockMapFile { Name = name, Size = size, Blocks = blocks };
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     public static CompressedBlockMapFile CompressAndHash(
@@ -49,44 +57,50 @@ internal static class BlockMapWriter
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
 
-        byte[] buffer = new byte[BlockMap.BlockSize];
-        var blocks = new List<BlockMapBlock>();
-        var crc32 = new Crc32Calculator();
-        long uncompressedSize = 0;
-        long compressedSize = 0;
-
-        while (true)
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
+        try
         {
-            int length = ReadBlock(source, buffer);
-            if (length == 0)
+            var blocks = new List<BlockMapBlock>();
+            var crc32 = new Crc32Calculator();
+            long uncompressedSize = 0;
+            long compressedSize = 0;
+
+            while (true)
             {
-                break;
+                int length = ReadBlock(source, buffer);
+                if (length == 0)
+                {
+                    break;
+                }
+
+                ReadOnlySpan<byte> block = buffer.AsSpan(0, length);
+                crc32.Append(block);
+                byte[] compressed = CompressBlock(block, compressionLevel);
+                destination.Write(compressed);
+                blocks.Add(new BlockMapBlock
+                {
+                    Hash = HashToBase64(block),
+                    CompressedSize = compressed.Length,
+                });
+                uncompressedSize += length;
+                compressedSize += compressed.Length;
             }
 
-            ReadOnlySpan<byte> block = buffer.AsSpan(0, length);
-            crc32.Append(block);
-            byte[] hash = SHA256.HashData(block);
-            byte[] compressed = CompressBlock(block, compressionLevel);
-            destination.Write(compressed);
-            blocks.Add(new BlockMapBlock
-            {
-                Hash = Convert.ToBase64String(hash),
-                CompressedSize = compressed.Length,
-            });
-            uncompressedSize += length;
-            compressedSize += compressed.Length;
+            // MakeAppx terminates the single ZIP deflate stream after its independently restartable,
+            // full-flushed blocks. The two-byte terminator is entry overhead and is not a Block Size.
+            destination.Write([0x03, 0x00]);
+            compressedSize += 2;
+
+            return new CompressedBlockMapFile(
+                new BlockMapFile { Name = name, Size = uncompressedSize, Blocks = blocks },
+                crc32.Value,
+                ToUInt32(compressedSize, "compressed size"),
+                ToUInt32(uncompressedSize, "uncompressed size"));
         }
-
-        // MakeAppx terminates the single ZIP deflate stream after its independently restartable,
-        // full-flushed blocks. The two-byte terminator is entry overhead and is not a Block Size.
-        destination.Write([0x03, 0x00]);
-        compressedSize += 2;
-
-        return new CompressedBlockMapFile(
-            new BlockMapFile { Name = name, Size = uncompressedSize, Blocks = blocks },
-            crc32.Value,
-            ToUInt32(compressedSize, "compressed size"),
-            ToUInt32(uncompressedSize, "uncompressed size"));
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     public static byte[] Write(IReadOnlyList<AuthoredBlockMapFile> files)
@@ -136,10 +150,13 @@ internal static class BlockMapWriter
 
     private static int ReadBlock(Stream source, byte[] buffer)
     {
+        // The shared pool may return an array larger than requested; block-map hashes must always
+        // be computed over at most the fixed MSIX block size.
+        int limit = Math.Min(buffer.Length, BlockMap.BlockSize);
         int filled = 0;
-        while (filled < buffer.Length)
+        while (filled < limit)
         {
-            int read = source.Read(buffer, filled, buffer.Length - filled);
+            int read = source.Read(buffer, filled, limit - filled);
             if (read == 0)
             {
                 break;
@@ -161,6 +178,13 @@ internal static class BlockMapWriter
         compressor.Write(block);
         compressor.Flush();
         return output.ToArray();
+    }
+
+    private static string HashToBase64(ReadOnlySpan<byte> block)
+    {
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(block, hash);
+        return Convert.ToBase64String(hash);
     }
 
     private static uint ToUInt32(long value, string description)

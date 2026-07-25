@@ -281,37 +281,20 @@ internal sealed class StoredZipWriter : IDisposable
     }
 }
 
+/// <summary>
+/// Incremental ZIP CRC-32 (reflected, polynomial <c>0xEDB88320</c>). Delegates to
+/// <see cref="System.IO.Hashing.Crc32"/>, which uses the CPU's hardware CRC instructions
+/// (Arm64 <c>crc32*</c>, x64 SSE4.2) where available and falls back to a portable software path.
+/// The produced value is byte-identical to the previous scalar table implementation and to the
+/// standard ZIP/PKZIP CRC-32, verified by authoring round-trip and byte-identical output tests.
+/// </summary>
 internal sealed class Crc32Calculator
 {
-    private static readonly uint[] Table = CreateTable();
-    private uint _state = uint.MaxValue;
+    private readonly System.IO.Hashing.Crc32 _crc = new();
 
-    public uint Value => ~_state;
+    public uint Value => _crc.GetCurrentHashAsUInt32();
 
-    public void Append(ReadOnlySpan<byte> bytes)
-    {
-        foreach (byte value in bytes)
-        {
-            _state = Table[(byte)(_state ^ value)] ^ (_state >> 8);
-        }
-    }
-
-    private static uint[] CreateTable()
-    {
-        var table = new uint[256];
-        for (uint i = 0; i < table.Length; i++)
-        {
-            uint value = i;
-            for (int bit = 0; bit < 8; bit++)
-            {
-                value = (value >> 1) ^ ((value & 1) == 0 ? 0 : 0xEDB88320);
-            }
-
-            table[i] = value;
-        }
-
-        return table;
-    }
+    public void Append(ReadOnlySpan<byte> bytes) => _crc.Append(bytes);
 }
 
 internal sealed record StoredZipEntryInfo(int LocalHeaderSize, long ContentOffset, long UncompressedSize);

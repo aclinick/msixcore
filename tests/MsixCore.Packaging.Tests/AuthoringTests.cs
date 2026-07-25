@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
 using MsixCore.Deployment;
@@ -83,6 +84,84 @@ public sealed class AuthoringTests : IDisposable
         XElement emptyElement = document.Root!.Elements().Single(element => element.Attribute("Name")!.Value == "empty.dat");
         Assert.Equal("39", emptyElement.Attribute("LfhSize")!.Value);
         Assert.Empty(emptyElement.Elements());
+    }
+
+    [Fact]
+    public void BlockMapWriter_ReadBlock_CapsOversizedPooledBuffersAtBlockSize()
+    {
+        byte[] content = Enumerable.Range(0, BlockMap.BlockSize + 17)
+            .Select(static value => (byte)(value % 251))
+            .ToArray();
+        byte[] oversizedBuffer = new byte[BlockMap.BlockSize + 4096];
+        using var source = new MemoryStream(content);
+        MethodInfo readBlock = typeof(BlockMapWriter).GetMethod("ReadBlock", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        int read = (int)readBlock.Invoke(null, [source, oversizedBuffer])!;
+
+        Assert.Equal(BlockMap.BlockSize, read);
+        Assert.Equal(BlockMap.BlockSize, source.Position);
+        Assert.Equal(content.AsSpan(0, BlockMap.BlockSize).ToArray(), oversizedBuffer.AsSpan(0, read).ToArray());
+    }
+
+    [Fact]
+    public void Crc32Calculator_KnownAnswerAndScalarReference_AreEquivalent()
+    {
+        byte[] known = "123456789"u8.ToArray();
+        var knownCalculator = new Crc32Calculator();
+        knownCalculator.Append(known);
+        Assert.Equal(0xCBF43926U, knownCalculator.Value);
+
+        int[] sizes = [0, 1, 2, 3, 7, 63, 64, 255, 1024, BlockMap.BlockSize - 1, BlockMap.BlockSize, BlockMap.BlockSize + 1, (BlockMap.BlockSize * 2) + 123];
+        foreach (int size in sizes)
+        {
+            byte[] content = Enumerable.Range(0, size)
+                .Select(static value => (byte)((value * 31) ^ (value >> 3)))
+                .ToArray();
+
+            var singleAppend = new Crc32Calculator();
+            singleAppend.Append(content);
+            Assert.Equal(ComputeCrc32(content), singleAppend.Value);
+
+            var chunked = new Crc32Calculator();
+            int offset = 0;
+            int chunkSize = 1;
+            while (offset < content.Length)
+            {
+                int length = Math.Min(chunkSize, content.Length - offset);
+                chunked.Append(content.AsSpan(offset, length));
+                offset += length;
+                chunkSize = (chunkSize * 17) % 4096 + 1;
+            }
+
+            Assert.Equal(singleAppend.Value, chunked.Value);
+        }
+    }
+
+    [Fact]
+    public void StoredZipWriter_WriteByte_UpdatesCrc32()
+    {
+        using var output = new MemoryStream();
+        using (var writer = new StoredZipWriter(output))
+        {
+            writer.AddEntry(
+                "kat.txt",
+                stream =>
+                {
+                    foreach (byte value in "123456789"u8)
+                    {
+                        stream.WriteByte(value);
+                    }
+                });
+        }
+
+        string packagePath = Path.Combine(_root, "write-byte.zip");
+        File.WriteAllBytes(packagePath, output.ToArray());
+        LocalHeader header = ReadLocalHeaders(packagePath)["kat.txt"];
+        var spanCalculator = new Crc32Calculator();
+        spanCalculator.Append("123456789"u8);
+
+        Assert.Equal(0xCBF43926U, header.Crc32);
+        Assert.Equal(spanCalculator.Value, header.Crc32);
     }
 
     [Fact]
@@ -418,6 +497,58 @@ public sealed class AuthoringTests : IDisposable
         Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(second));
     }
 
+    [Theory]
+    [InlineData(CompressionLevel.NoCompression, "stored")]
+    [InlineData(CompressionLevel.Optimal, "optimal")]
+    public void Build_StoredAndOptimalOutputs_AreDeterministicAndVerify(CompressionLevel compressionLevel, string name)
+    {
+        string source = CreateSource(name + "-deterministic-verifiable");
+        WritePayload(
+            source,
+            "Data/multi-block.bin",
+            Enumerable.Range(0, (BlockMap.BlockSize * 2) + 257).Select(static value => (byte)(value % 241)).ToArray());
+        WritePayload(source, "Data/text.txt", "payload for deterministic package authoring"u8.ToArray());
+        WritePayload(
+            source,
+            "Assets/logo.png",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="));
+        string first = Path.Combine(_root, name + "-first.msix");
+        string second = Path.Combine(_root, name + "-second.msix");
+        var options = new PackOptions { CompressionLevel = compressionLevel };
+
+        MsixPackageBuilder.Build(source, first, options);
+        MsixPackageBuilder.Build(source, second, options);
+
+        Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(second));
+        using MsixPackage firstPackage = MsixPackage.Open(first);
+        using MsixPackage secondPackage = MsixPackage.Open(second);
+        Assert.True(firstPackage.VerifyBlockMap().IsValid);
+        Assert.True(secondPackage.VerifyBlockMap().IsValid);
+        Assert.True(BlockMapVerifier.Verify(firstPackage.Opc, firstPackage.BlockMap).IsValid);
+        Assert.True(BlockMapVerifier.Verify(secondPackage.Opc, secondPackage.BlockMap).IsValid);
+    }
+
+    [Theory]
+    [InlineData(CompressionLevel.NoCompression, "stored.msix")]
+    [InlineData(CompressionLevel.Optimal, "optimal.msix")]
+    public void Build_OutputMatchesOriginMainGoldenBytes(CompressionLevel compressionLevel, string goldenFile)
+    {
+        string source = CreateGoldenBaselineSource("golden-" + Path.GetFileNameWithoutExtension(goldenFile));
+        string output = Path.Combine(_root, goldenFile);
+
+        MsixPackageBuilder.Build(source, output, new PackOptions { CompressionLevel = compressionLevel });
+
+        byte[] actual = File.ReadAllBytes(output);
+        byte[] expected = File.ReadAllBytes(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "AuthoringGolden",
+            goldenFile));
+        Assert.Equal(expected, actual);
+        using MsixPackage package = MsixPackage.Open(output);
+        Assert.True(package.VerifyBlockMap().IsValid);
+    }
+
     [Fact]
     public void Build_MissingRootManifest_ThrowsClearError()
     {
@@ -568,6 +699,25 @@ public sealed class AuthoringTests : IDisposable
         Directory.CreateDirectory(source);
         File.WriteAllText(Path.Combine(source, "AppxManifest.xml"), Manifest, new UTF8Encoding(false));
         File.WriteAllBytes(Path.Combine(source, "empty.dat"), []);
+        return source;
+    }
+
+    private string CreateGoldenBaselineSource(string name)
+    {
+        string source = CreateSource(name);
+        File.WriteAllText(
+            Path.Combine(source, OpcPartNames.AppxManifest),
+            Manifest.ReplaceLineEndings("\n"),
+            new UTF8Encoding(false));
+        WritePayload(source, "Data/payload.txt", "golden baseline payload"u8.ToArray());
+        WritePayload(
+            source,
+            "Data/pattern.bin",
+            Enumerable.Range(0, 4097).Select(static value => (byte)((value * 13) % 251)).ToArray());
+        WritePayload(
+            source,
+            "Assets/logo.png",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="));
         return source;
     }
 
