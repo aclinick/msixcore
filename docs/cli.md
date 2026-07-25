@@ -29,15 +29,18 @@ msixmgr <verb> [options]
 |----------------------------------------|---------------|-------------|
 | `inspect <path> [--json]`              | Implemented   | Show package identity and metadata. |
 | `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
+| `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
 | `-AddPackage <path>`                   | Not yet       | Install an MSIX/APPX package. |
 | `-RemovePackage <fullName>`            | Not yet       | Uninstall a package by full name. |
 | `-FindPackage <pattern>`               | Not yet       | Query installed packages (`*` and `?`). |
-| `-Unpack <path> -Destination <dir>`    | Not yet       | Extract a package without installing. |
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
-> The four deployment verbs are advertised in `--help` but currently return exit
-> code `2` (`verb ... is not implemented yet`). They land in later phases.
+> `inspect`, `validate`, and `unpack` are implemented. The remaining deployment
+> verbs (`-AddPackage`, `-RemovePackage`, `-FindPackage`) are advertised in
+> `--help` but currently return exit code `2` (`verb ... is not implemented
+> yet`); they are exposed programmatically today via `PackageManager` (see
+> [api.md](api.md)) and reach the CLI in a later phase.
 
 ## Exit codes
 
@@ -63,11 +66,11 @@ Usage:
 Verbs (implemented incrementally):
   inspect <path> [--json]     Show package identity and metadata.
   validate <path> [--json]    Verify integrity (block map + signature); CI exit code.
+  unpack <path> -Destination <dir> [--json]
+                              Extract a package to a loose layout without installing.
   -AddPackage <path>          Install an MSIX/APPX package.
   -RemovePackage <fullName>   Uninstall a package by full name.
   -FindPackage <pattern>      Query installed packages (supports * and ?).
-  -Unpack <path> -Destination <dir>
-                              Extract a package without installing.
 
 <path> may be a package file (.msix/.appx) or an unpacked directory.
 
@@ -200,6 +203,71 @@ always `false` today — see the authenticity note below.
 > consistent and the signer subject matches the manifest publisher. It does
 > **not** verify the APPX indirect-data digest binding or the certificate trust
 > chain; the text output and `Warnings` say so plainly.
+
+## `unpack`
+
+Extracts a package's payload to a directory as a loose (unpacked) layout,
+**without installing** it. Cross-platform (no OS integration), so it works on
+Linux CI the same as on Windows. The destination is created if missing; part
+paths are reproduced under it.
+
+```
+msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]
+```
+
+The destination flag is accepted as `-Destination`, `-destination`,
+`--destination`, or `-d`.
+
+### Text output
+
+```console
+$ dotnet $DLL unpack ./Contoso.MyApp.msix -Destination ./out
+Extracted 4 parts to /abs/path/to/out
+$ echo $?
+0
+```
+
+The extracted layout can be re-validated (a round-trip integrity check):
+
+```console
+$ dotnet $DLL validate ./out
+INTEGRITY OK      Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
+  Block map : ok (3 files)
+  Signature : unsigned
+  note:  package is unsigned; integrity is self-asserted by its own block map only.
+```
+
+### JSON output
+
+```console
+$ dotnet $DLL unpack ./Contoso.MyApp.msix -Destination ./out2 --json
+{
+  "Destination": "/abs/path/to/out2",
+  "ExtractedPartCount": 4
+}
+```
+
+`Destination` is the absolute path of the output directory; `ExtractedPartCount`
+is the number of OPC parts written.
+
+### Usage errors
+
+A missing destination (exit `2`):
+
+```console
+$ dotnet $DLL unpack ./Contoso.MyApp.msix
+msixmgr unpack: a destination directory is required (-Destination <dir>).
+Usage: msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]
+
+$ dotnet $DLL unpack ./Contoso.MyApp.msix -Destination
+msixmgr unpack: option '-Destination' requires a directory argument.
+Usage: msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]
+```
+
+Extraction is hardened against traversal: a part that would resolve outside the
+destination, or a symlink/junction anywhere on the destination path (including a
+dangling link, or the destination root itself), aborts extraction with exit code
+`1`. See [architecture.md](architecture.md#layer-5--deployment-engine-msixcoredeployment).
 
 ## Error handling examples
 

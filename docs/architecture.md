@@ -13,11 +13,13 @@ libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.Deploymen
 │                         PackageOpener, Reports (text + --json)     │
 ├──────────────────────────────────────────────────────────────────┤
 │  Deployment engine      PackageManager : IPackageManager          │
-│  (MsixCore.Deployment)  IMsixResponse / InstallationStep          │
+│  (MsixCore.Deployment)  PackageExtractor, MsixResponse            │
+│                         IMsixResponse / InstallationStep          │
 │                         IPackageHandler pipeline (add/remove)      │
 ├──────────────────────────────────────────────────────────────────┤
 │  Package store / query  IPackageStore → FileSystemPackageStore    │
-│  (MsixCore.Deployment)  InstalledPackage : IInstalledPackage      │
+│  (MsixCore.Deployment)  (writable: staging + transactional Commit)│
+│                         InstalledPackage : IInstalledPackage      │
 │                         Wildcard (glob matching)                  │
 ├──────────────────────────────────────────────────────────────────┤
 │  Integrity              BlockMapParser / BlockMapVerifier         │
@@ -37,10 +39,14 @@ libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.Deploymen
 flowchart TD
     CLI[msixmgr CLI] --> PKG[MsixPackage]
     CLI --> PM[PackageManager]
+    CLI --> EXT[PackageExtractor]
     PM --> STORE[IPackageStore / FileSystemPackageStore]
+    PM --> EXT
+    PM --> RESP[MsixResponse : IMsixResponse]
     STORE --> INST[InstalledPackage]
     INST --> PKG
     PM -. add/remove .-> HANDLERS[IPackageHandler pipeline]
+    EXT --> OPC
     PKG --> MANI[AppxManifestParser -> AppxManifest]
     PKG --> BM[BlockMapParser -> BlockMap]
     PKG --> SIG[PackageSignatureReader -> PackageSignature]
@@ -108,8 +114,16 @@ part-name rules.
 - **`PackageSignatureReader` / `PackageSignature`** read `AppxSignature.p7x`
   (stripping the `PKCX` magic), decode the PKCS#7/CMS envelope with `SignedCms`
   (OpenSSL-backed on Linux), and extract the primary signer (subject/issuer DN,
-  thumbprint, validity) plus a CMS-envelope integrity flag.
-  `PackageSignature.MatchesPublisher` compares canonicalized X.500 DNs.
+  thumbprint, validity, and the subject's raw DER bytes) plus a CMS-envelope
+  integrity flag. `PackageSignature.MatchesPublisher` compares the manifest
+  `Publisher` against the signer subject **by decoded RDN sequence**: it decodes
+  the signer DN from the certificate's original raw subject bytes
+  (`SubjectNameRawData`) — preserving exact RDN order and attribute encoding —
+  then compares each RDN's OID and decoded string value. Comparing decoded values
+  makes matching independent of the ASN.1 string encoding
+  (`PrintableString` vs `UTF8String`); multi-valued RDNs fall back to a raw-bytes
+  comparison. This replaces the earlier whole-DN raw-byte compare, which produced
+  false mismatches on encoding or ordering differences.
 
 > **Integrity ≠ authenticity.** `PackageSignature.IsCmsIntegrityValid` asserts
 > only that the CMS envelope is internally consistent. The tool does **not** yet
@@ -123,7 +137,17 @@ part-name rules.
   their unpacked payloads live. **`FileSystemPackageStore`** is a self-contained,
   cross-platform store: each installed package is a subdirectory (identified by
   the presence of `AppxManifest.xml`) under a store root, defaulting to
-  `LocalApplicationData/MsixCore/Packages`.
+  `LocalApplicationData/MsixCore/Packages`. It is **writable and transactional**:
+  `CreateStagingLocation()` yields a fresh `.staging/<guid>` directory the engine
+  extracts into, and `Commit(staging, fullName)` promotes it with
+  `Directory.Move`. Commit moves any existing install *aside* to a `.`-prefixed
+  backup first, so a failed promotion **rolls back** to the previous install
+  rather than destroying it; the whole aside/promote/rollback sequence is
+  serialized **per destination** by a process-wide gate so concurrent commits of
+  the same package cannot interleave. `.`-prefixed directories (staging, backups)
+  are excluded from enumeration. `Contains`, `GetInstallLocation`, and `Delete`
+  round out the surface; `GetInstallLocation` validates the full name is a single,
+  non-traversing path segment.
 - **`InstalledPackage`** wraps a loose `MsixPackage` and adds
   `InstalledLocation` and resolved `ExecutionInfo` (the primary app's executable
   path, safely resolved within the install root).
@@ -132,19 +156,33 @@ part-name rules.
 
 ## Layer 5 — Deployment engine (`MsixCore.Deployment`)
 
-- **`PackageManager : IPackageManager`** implements the query surface today
-  (`FindPackage`, `FindPackageByFamilyName`, `FindPackages`,
-  `GetMsixPackageInfo`) over an `IPackageStore`, with careful ownership/disposal
-  of enumerated packages. `AddPackage`/`RemovePackage` return
-  `IMsixResponse` and currently throw `NotImplementedException` (later phase).
-- **`IMsixResponse` / `MsixResponse`** model an async operation: a `Completion`
-  task, `Percentage`/`Status` (`InstallationStep`), a `ProgressChanged` event,
-  and `Cancel()`. (Interface present; `MsixResponse` concrete type lands with the
-  engine.)
+- **`PackageManager : IPackageManager`** implements the full lifecycle.
+  `AddPackage`/`RemovePackage` return an `IMsixResponse` **immediately** and run
+  the operation on a background task. `AddPackage` reads the package, gates on
+  `VerifyBlockMap()` (a failing block map aborts the install), rejects an
+  already-installed package unless `ForceApplicationShutdown` is set, extracts to
+  a staging directory via `PackageExtractor`, then `Commit`s it — cleaning up
+  staging and reporting failure on any error. The query surface (`FindPackage`,
+  `FindPackageByFamilyName`, `FindPackages`, `GetMsixPackageInfo`) is unchanged,
+  with careful ownership/disposal of enumerated packages.
+- **`PackageExtractor`** (public, static) extracts an `IOpcPackage`'s parts to a
+  directory as a loose layout. Pure managed and cross-platform, it powers both
+  the `unpack` CLI verb and the install engine's extraction step. It reports
+  progress (0–100), honors cancellation between chunks, and enforces the
+  traversal defenses described under [Security invariants](#security-invariants).
+- **`MsixResponse : IMsixResponse`** is the mutable response the engine drives
+  via `Report`/`Complete`/`Fail`. It exposes a `Completion` task,
+  `Percentage`/`Status` (`InstallationStep`), `StatusText`, `Failure`, a
+  thread-safe `ProgressChanged` event (each subscriber invoked independently so
+  one throwing observer can't strand the others or the completion task), and
+  `Cancel()` backed by a linked `CancellationTokenSource`. Progress after a
+  terminal transition is ignored. `SynchronousProgress<T>` delivers the engine's
+  progress callbacks inline and in order.
 - **`IPackageHandler` / `PackageDeploymentContext`** define the add/remove
   pipeline: handlers run in order on add and in reverse on remove, each guarded
   by `IsApplicable` so OS-integration steps (shortcuts, registry, associations)
-  only run on their platform. Extraction is the cross-platform handler.
+  only run on their platform. Extraction is the cross-platform step;
+  Windows OS-integration handlers land in a later phase.
 - **`DeploymentOptions`** is a `[Flags]` enum (`None`, `ForceApplicationShutdown`,
   `ExtractOnly`).
 
@@ -152,9 +190,10 @@ part-name rules.
 
 `Program.Main` dispatches verbs. `PackageOpener` transparently opens a `.msix`
 file **or** a loose directory (`MsixPackage.Open` vs `MsixPackage.OpenDirectory`),
-so every verb supports both layouts. `InspectCommand` and `ValidateCommand`
-build `record` reports (`InspectionReport`, `ValidationReport`) rendered as text
-or indented JSON (`--json`). See [cli.md](cli.md).
+so every verb supports both layouts. `InspectCommand`, `ValidateCommand`, and
+`UnpackCommand` build `record` reports (`InspectionReport`, `ValidationReport`,
+`UnpackReport`) rendered as text or indented JSON (`--json`). `unpack` drives
+`PackageExtractor` directly. See [cli.md](cli.md).
 
 ## Cross-platform design decisions
 
@@ -164,7 +203,8 @@ or indented JSON (`--json`). See [cli.md](cli.md).
   Linux). This is what lets `validate` run in Linux CI.
 - **Loose layouts are first-class.** `DirectoryOpcPackage` mirrors `OpcPackage`
   so inspection, validation, and the deployment store all work on unpacked
-  directories without a container.
+  directories without a container, and `PackageExtractor` produces such layouts
+  cross-platform (powering both `unpack` and the install engine).
 - **Idiomatic .NET shapes.** Native `HRESULT`/pointer interfaces become
   properties, exceptions, records, and `Task`-based async. Enum numeric values
   (`ProcessorArchitecture`) intentionally match the Windows
@@ -183,8 +223,15 @@ or indented JSON (`--json`). See [cli.md](cli.md).
   part-name layer. `DirectoryOpcPackage` additionally requires each resolved file
   path to stay within the package root (`Path.GetFullPath(...).StartsWith(root)`)
   and **skips symlinks/reparse points** so a crafted loose layout cannot escape
-  the root. `InstalledPackage.ResolveExecutionInfo` similarly rejects rooted or
-  `..`-escaping executable paths from the (untrusted) manifest.
+  the root. `PackageExtractor` applies the same containment on the way *out*:
+  each part must resolve under the destination, and it refuses to extract when a
+  symlink/junction appears anywhere on the destination path — including the
+  destination root itself or a **dangling** link (detected via no-follow
+  `LinkTarget`, not `Exists`, so a broken link can't slip through and redirect a
+  write). `FileSystemPackageStore` promotes only via `Directory.Move` into a
+  validated single-segment install folder. `InstalledPackage.ResolveExecutionInfo`
+  similarly rejects rooted or `..`-escaping executable paths from the (untrusted)
+  manifest.
 - **XML hardening.** All parsers (`AppxManifestParser`, `BundleManifestParser`,
   `BlockMapParser`) create readers with `DtdProcessing.Prohibit` and no external
   `XmlResolver`, blocking XXE and entity-expansion attacks.
@@ -194,4 +241,8 @@ or indented JSON (`--json`). See [cli.md](cli.md).
   non-zero exit code.
 - **Explicit signature scope.** CMS-envelope integrity is reported but never
   conflated with authenticity; binding and trust-chain checks are explicitly
-  marked unverified until implemented.
+  marked unverified until implemented. Publisher matching
+  (`PackageSignature.MatchesPublisher`) compares the manifest `Publisher` to the
+  signer subject by **decoded RDN sequence** from the certificate's raw subject
+  bytes, so it is faithful to RDN order and attribute encoding rather than
+  sensitive to a lossy re-encoding.

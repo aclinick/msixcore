@@ -32,20 +32,23 @@ as a modern, memory-safe, **cross-platform** library and CLI.
   `PackageSignatureReader`), and identity (`PackageFullName` /
   `PackageFamilyName`).
 - **`MsixCore.Deployment`** — install/uninstall/query engine over an
-  `IPackageStore`, with a handler pipeline. Extraction is cross-platform; OS
-  integration (shortcuts, registry, file-type associations) is guarded to the
-  relevant platform.
-- **`msixmgr`** — command-line tool. Today `inspect` and `validate` are
-  implemented; the deployment verbs (`-AddPackage`, `-RemovePackage`,
-  `-FindPackage`, `-Unpack`) are advertised in help and land in later phases.
+  `IPackageStore`, with a handler pipeline and cross-platform payload extraction
+  (`PackageExtractor`). `PackageManager.AddPackage`/`RemovePackage` are
+  implemented (transactional install with rollback); OS integration (shortcuts,
+  registry, file-type associations) is guarded to the relevant platform.
+- **`msixmgr`** — command-line tool. `inspect`, `validate`, and `unpack` are
+  implemented; the remaining deployment verbs (`-AddPackage`, `-RemovePackage`,
+  `-FindPackage`) are advertised in help and reach the CLI in a later phase.
 
 ## Status
 
 Under active, **phased** development. Each phase lands as its own reviewed PR
-with full test coverage (currently 152 passing tests). The reader
-(OPC → manifest → block map → signature → identity) and the deployment **query**
-surface are implemented; the add/remove deployment engine and OS-integration
-handlers are stubbed (`NotImplementedException`) pending later phases.
+with full test coverage (currently 207 passing tests). The reader
+(OPC → manifest → block map → signature → identity), the deployment **engine**
+(transactional add/remove driving `IMsixResponse`, cross-platform extraction,
+and query), and the `unpack` CLI verb are implemented; Windows OS-integration
+handlers (shortcuts, registry, associations) are guarded and land in a later
+phase.
 
 ## Requirements
 
@@ -114,8 +117,13 @@ INTEGRITY FAILED  Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 
 ### unpack — extract without installing
 
-Advertised in `--help` but not yet implemented; today it returns exit code `2`
-(`verb ... is not implemented yet`). See [docs/cli.md](docs/cli.md).
+```console
+$ dotnet $DLL unpack ./Contoso.MyApp.msix -Destination ./out
+Extracted 4 parts to /abs/path/to/out
+```
+
+Extraction is cross-platform and hardened against zip-slip and symlink/junction
+escapes. See [docs/cli.md](docs/cli.md).
 
 ## Project layout
 

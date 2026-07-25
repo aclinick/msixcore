@@ -103,7 +103,7 @@ publisher hash used in family/full names.
 | `BlockMapVerificationResult` | record | `IsValid`, `Files`, `CoverageErrors`. |
 | `BlockMapFileResult` | record | `Name`, `IsValid`, `Error?`. |
 | `PackageSignatureReader` | static class | `Read(Stream)` / `Read(byte[])` → `PackageSignature`. |
-| `PackageSignature` | record | `SubjectName`, `IssuerName`, `Thumbprint`, `NotBefore/NotAfter`, `IsCmsIntegrityValid`; `bool MatchesPublisher(string)`. |
+| `PackageSignature` | record | `SubjectName`, `SubjectNameRawData` (raw DER subject bytes), `IssuerName`, `Thumbprint`, `NotBefore/NotAfter`, `IsCmsIntegrityValid`; `bool MatchesPublisher(string)` compares by decoded RDN sequence. |
 
 ## `MsixCore.Deployment`
 
@@ -113,8 +113,8 @@ Lifecycle + query over an `IPackageStore`.
 
 | Member | Description | Status |
 |--------|-------------|--------|
-| `IMsixResponse AddPackage(string path, DeploymentOptions = None, CancellationToken = default)` | Install a package. | Throws `NotImplementedException` (later phase). |
-| `IMsixResponse RemovePackage(string fullName, CancellationToken = default)` | Uninstall by full name. | Throws `NotImplementedException` (later phase). |
+| `IMsixResponse AddPackage(string path, DeploymentOptions = None, CancellationToken = default)` | Install a package: verify block map, extract to staging, transactionally commit. Returns immediately; runs on a background task. | Implemented. |
+| `IMsixResponse RemovePackage(string fullName, CancellationToken = default)` | Uninstall by full name. Returns immediately. | Implemented. |
 | `IInstalledPackage? FindPackage(string fullName)` | Find one by full name. | Implemented. |
 | `IInstalledPackage? FindPackageByFamilyName(string familyName)` | Find one by family name. | Implemented. |
 | `IReadOnlyList<IInstalledPackage> FindPackages(string pattern)` | Glob query (`*`, `?`). | Implemented. |
@@ -124,11 +124,28 @@ Lifecycle + query over an `IPackageStore`.
 `FileSystemPackageStore.CreateDefault()`) and a `PackageManager(IPackageStore)`
 constructor.
 
-### `IPackageStore` / `FileSystemPackageStore` (sealed class)
+### `PackageExtractor` (static class)
+
+Cross-platform extraction of an OPC package to a loose directory. Powers the
+`unpack` verb and the install engine.
 
 | Member | Description |
 |--------|-------------|
-| `IReadOnlyList<IInstalledPackage> EnumeratePackages()` | Enumerate installed packages (caller disposes each). |
+| `static void Extract(IOpcPackage package, string destination, IProgress<float>? progress = null, CancellationToken = default)` | Extract all parts under `destination`, reporting 0–100 progress. Throws `InvalidDataException` if a part escapes the destination or a symlink/junction (incl. dangling, or the root itself) is on the path. |
+
+### `IPackageStore` / `FileSystemPackageStore` (sealed class)
+
+`IPackageStore` is now writable/transactional; `FileSystemPackageStore`
+implements it over a store root.
+
+| Member | Description |
+|--------|-------------|
+| `IReadOnlyList<IInstalledPackage> EnumeratePackages()` | Enumerate installed packages (caller disposes each). Skips `.`-prefixed internal dirs. |
+| `string GetInstallLocation(string packageFullName)` | The (possibly not-yet-existing) install directory for a package. |
+| `bool Contains(string packageFullName)` | Whether a package is currently installed. |
+| `void Delete(string packageFullName)` | Remove an installed package's payload (no-op if absent). |
+| `string CreateStagingLocation()` | Create a fresh empty staging directory to extract into. |
+| `void Commit(string stagingLocation, string packageFullName)` | Transactionally promote staging to the install location: move existing aside, promote, roll back on failure; serialized per destination. |
 | `FileSystemPackageStore(string rootDirectory)` | Store rooted at a directory. |
 | `static FileSystemPackageStore CreateDefault()` | Store under `LocalApplicationData/MsixCore/Packages`. |
 | `string RootDirectory { get; }` | Absolute store root. |
@@ -144,7 +161,9 @@ constructor.
 
 Async operation surface: `float Percentage`, `InstallationStep Status`,
 `string StatusText`, `Exception? Failure`, `Task Completion`,
-`event EventHandler<IMsixResponse>? ProgressChanged`, `void Cancel()`.
+`event EventHandler<IMsixResponse>? ProgressChanged`, `void Cancel()`. Returned
+by `AddPackage`/`RemovePackage`. The concrete driver (`MsixResponse`) and the
+inline `SynchronousProgress<T>` reporter are `internal` implementation details.
 
 ### `InstallationStep` (enum)
 
