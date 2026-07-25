@@ -72,6 +72,22 @@ internal sealed class TestPackageFixture : IDisposable
         return path;
     }
 
+    public string CreateLooseDirectoryWithCoverageError()
+    {
+        string path = Path.Combine(_root, "loose-coverage-error");
+        Directory.CreateDirectory(path);
+        Dictionary<string, byte[]> parts = CreateParts(signed: false, out _);
+        parts["unlisted.bin"] = [7, 8, 9];
+        foreach ((string name, byte[] content) in parts)
+        {
+            string filePath = Path.Combine(path, name.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+            File.WriteAllBytes(filePath, content);
+        }
+
+        return path;
+    }
+
     public string CreateNonPackageFile()
     {
         Directory.CreateDirectory(_root);

@@ -138,6 +138,13 @@
             <StackPanel Spacing="4">
               <TextBlock Text="Verification result" Style="{StaticResource StudioMetadataLabelStyle}" />
               <TextBlock Text="{Binding BlockMapStatus}" TextWrapping="Wrap" />
+              <ItemsControl ItemsSource="{Binding BlockMapCoverageErrors}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel>
           </Border>
           <Grid Grid.Row="1" Padding="16,0" ColumnDefinitions="*,120,104,280" ColumnSpacing="16">

@@ -54,6 +54,21 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task LoadDirectoryWithUnlistedPayload_SurfacesCoverageErrorDetail()
+    {
+        using var fixture = new TestPackageFixture();
+        string path = fixture.CreateLooseDirectoryWithCoverageError();
+        var viewModel = CreateViewModel();
+
+        await viewModel.LoadPackageAsync(path, isDirectory: true);
+
+        Assert.True(viewModel.HasPackage);
+        Assert.False(viewModel.IsBlockMapValid);
+        string detail = Assert.Single(viewModel.BlockMapCoverageErrors);
+        Assert.Equal("Package part 'unlisted.bin' is not covered by the block map.", detail);
+    }
+
+    [Fact]
     public async Task LoadSignedPackage_MapsSignatureInformation()
     {
         using var fixture = new TestPackageFixture();
@@ -94,6 +109,45 @@ public sealed class MainWindowViewModelTests
         await viewModel.LoadPackageAsync(fixture.MissingPackagePath, isDirectory: false);
 
         AssertError(viewModel);
+    }
+
+    [Fact]
+    public async Task FailedLoadAfterValidPackage_ClearsAllPackageMetadata()
+    {
+        using var fixture = new TestPackageFixture();
+        string validPath = fixture.CreatePackageFile(signed: true, out _);
+        var viewModel = CreateViewModel();
+        await viewModel.LoadPackageAsync(validPath, isDirectory: false);
+        AssertLoadedManifest(viewModel);
+        Assert.NotNull(viewModel.Signature);
+
+        await viewModel.LoadPackageAsync(fixture.MissingPackagePath, isDirectory: false);
+
+        AssertError(viewModel);
+        Assert.Equal(string.Empty, viewModel.SourcePath);
+        Assert.Equal(string.Empty, viewModel.IdentityName);
+        Assert.Equal(string.Empty, viewModel.Publisher);
+        Assert.Equal(string.Empty, viewModel.Version);
+        Assert.Equal(string.Empty, viewModel.Architecture);
+        Assert.Equal(string.Empty, viewModel.PackageFamilyName);
+        Assert.Equal(string.Empty, viewModel.PackageFullName);
+        Assert.Equal(string.Empty, viewModel.DisplayName);
+        Assert.Equal(string.Empty, viewModel.PublisherDisplayName);
+        Assert.Equal(string.Empty, viewModel.FrameworkStatus);
+        Assert.Equal(string.Empty, viewModel.BlockMapStatus);
+        Assert.Null(viewModel.IsBlockMapValid);
+        Assert.Null(viewModel.Signature);
+        Assert.Equal(string.Empty, viewModel.SignatureStatus);
+        Assert.Equal(string.Empty, viewModel.SignatureSubject);
+        Assert.Equal(string.Empty, viewModel.SignatureIssuer);
+        Assert.Equal(string.Empty, viewModel.SignatureThumbprint);
+        Assert.Equal(string.Empty, viewModel.SignatureValidity);
+        Assert.Equal(string.Empty, viewModel.SignatureCmsIntegrity);
+        Assert.Equal(string.Empty, viewModel.SignaturePublisherMatch);
+        Assert.Empty(viewModel.Capabilities);
+        Assert.Empty(viewModel.Applications);
+        Assert.Empty(viewModel.BlockMapFiles);
+        Assert.Empty(viewModel.BlockMapCoverageErrors);
     }
 
     private static MainWindowViewModel CreateViewModel() =>

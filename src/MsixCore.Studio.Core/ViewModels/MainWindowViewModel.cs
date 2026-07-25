@@ -92,6 +92,8 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
 
     public ObservableCollection<BlockMapFileItem> BlockMapFiles { get; } = [];
 
+    public ObservableCollection<string> BlockMapCoverageErrors { get; } = [];
+
     [RelayCommand]
     private async Task OpenPackageAsync()
     {
@@ -189,17 +191,36 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
         Replace(Capabilities, snapshot.Capabilities);
         Replace(Applications, snapshot.Applications);
         Replace(BlockMapFiles, snapshot.BlockMapFiles);
+        Replace(BlockMapCoverageErrors, snapshot.BlockMapCoverageErrors);
     }
 
     private void ClearPackage()
     {
         HasPackage = false;
         SourcePath = string.Empty;
+        IdentityName = string.Empty;
+        Publisher = string.Empty;
+        Version = string.Empty;
+        Architecture = string.Empty;
+        PackageFamilyName = string.Empty;
+        PackageFullName = string.Empty;
+        DisplayName = string.Empty;
+        PublisherDisplayName = string.Empty;
+        FrameworkStatus = string.Empty;
+        BlockMapStatus = string.Empty;
         IsBlockMapValid = null;
         Signature = null;
+        SignatureStatus = string.Empty;
+        SignatureSubject = string.Empty;
+        SignatureIssuer = string.Empty;
+        SignatureThumbprint = string.Empty;
+        SignatureValidity = string.Empty;
+        SignatureCmsIntegrity = string.Empty;
+        SignaturePublisherMatch = string.Empty;
         Capabilities.Clear();
         Applications.Clear();
         BlockMapFiles.Clear();
+        BlockMapCoverageErrors.Clear();
     }
 
     private void ShowError(string context, Exception exception)
@@ -246,6 +267,8 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
 
         public required IReadOnlyList<BlockMapFileItem> BlockMapFiles { get; init; }
 
+        public required IReadOnlyList<string> BlockMapCoverageErrors { get; init; }
+
         public required string BlockMapStatus { get; init; }
 
         public required bool? IsBlockMapValid { get; init; }
@@ -274,7 +297,11 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
 
             AppxManifest manifest = package.Manifest;
             PackageIdentity identity = package.Identity;
-            (IReadOnlyList<BlockMapFileItem> files, string blockMapStatus, bool? isBlockMapValid) = ReadBlockMap(package);
+            (
+                IReadOnlyList<BlockMapFileItem> files,
+                IReadOnlyList<string> coverageErrors,
+                string blockMapStatus,
+                bool? isBlockMapValid) = ReadBlockMap(package);
             SignatureSnapshot signature = ReadSignature(package, identity.Publisher);
 
             return new PackageSnapshot
@@ -292,6 +319,7 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                 Capabilities = package.Capabilities.ToArray(),
                 Applications = manifest.Applications.Select(ToApplicationItem).ToArray(),
                 BlockMapFiles = files,
+                BlockMapCoverageErrors = coverageErrors,
                 BlockMapStatus = blockMapStatus,
                 IsBlockMapValid = isBlockMapValid,
                 Signature = signature.Signature,
@@ -312,7 +340,11 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                 ValueOrDash(application.Executable),
                 ValueOrDash(application.EntryPoint));
 
-        private static (IReadOnlyList<BlockMapFileItem> Files, string Status, bool? IsValid) ReadBlockMap(MsixPackage package)
+        private static (
+            IReadOnlyList<BlockMapFileItem> Files,
+            IReadOnlyList<string> CoverageErrors,
+            string Status,
+            bool? IsValid) ReadBlockMap(MsixPackage package)
         {
             try
             {
@@ -333,11 +365,11 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
                 string status = verification.IsValid
                     ? $"Valid — {files.Length} file(s) verified with {blockMap.HashMethod}."
                     : BuildVerificationFailure(verification);
-                return (files, status, verification.IsValid);
+                return (files, verification.CoverageErrors.ToArray(), status, verification.IsValid);
             }
             catch (Exception ex)
             {
-                return ([], $"Unavailable — {ex.Message}", null);
+                return ([], [], $"Unavailable — {ex.Message}", null);
             }
         }
 
