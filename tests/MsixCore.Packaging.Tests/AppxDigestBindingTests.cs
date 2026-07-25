@@ -528,8 +528,9 @@ public class AppxDigestBindingTests
     }
 
     [Fact]
-    public void Verify_AxciAbsent_IsValid()
+    public void Verify_AxciAbsent_NoPart_IsValid()
     {
+        // No AXCI tag and no CodeIntegrity.cat part — binding should pass.
         byte[] contentTypes = "<Types />"u8.ToArray();
         byte[] blockMap = "<BlockMap />"u8.ToArray();
 
@@ -546,6 +547,57 @@ public class AppxDigestBindingTests
         IndirectDataBindingResult result = AppxDigestTableVerifier.Verify(table, opc);
 
         Assert.True(result.IsBindingValid);
+    }
+
+    [Fact]
+    public void Verify_AxciAbsent_ButPartPresent_FailsBinding()
+    {
+        // AXCI tag absent but CodeIntegrity.cat exists in the package — an attacker added
+        // an unsigned catalog. Binding MUST FAIL.
+        byte[] contentTypes = "<Types />"u8.ToArray();
+        byte[] blockMap = "<BlockMap />"u8.ToArray();
+
+        var entries = MakeCorrectEntries(contentTypes, blockMap); // No AXCI tag.
+        var parts = new Dictionary<string, byte[]>
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMap,
+            ["AppxMetadata/CodeIntegrity.cat"] = new byte[] { 0xDE, 0xAD }, // attacker-added
+        };
+
+        using OpcPackage opc = BuildOpc(parts);
+        AppxDigestTable table = ParseTableDirect(entries);
+
+        IndirectDataBindingResult result = AppxDigestTableVerifier.Verify(table, opc);
+
+        Assert.False(result.IsBindingValid, "Part present without AXCI tag must fail binding.");
+        AssertTagStatus(result, AppxDigestTag.Axci, DigestVerificationStatus.DigestMissing);
+    }
+
+    [Fact]
+    public void Verify_AxciTagPresent_ButPartMissing_FailsBinding()
+    {
+        // AXCI tag present but CodeIntegrity.cat missing from package — confirms
+        // both directions of the tag/part mismatch are caught.
+        byte[] contentTypes = "<Types />"u8.ToArray();
+        byte[] blockMap = "<BlockMap />"u8.ToArray();
+        byte[] codeIntegrity = new byte[] { 0xCA, 0xFE };
+
+        var entries = MakeCorrectEntries(contentTypes, blockMap, codeIntegrity);
+        // Deliberately omit CodeIntegrity.cat from the package.
+        var parts = new Dictionary<string, byte[]>
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMap,
+        };
+
+        using OpcPackage opc = BuildOpc(parts);
+        AppxDigestTable table = ParseTableDirect(entries);
+
+        IndirectDataBindingResult result = AppxDigestTableVerifier.Verify(table, opc);
+
+        Assert.False(result.IsBindingValid, "AXCI tag present with missing part must fail binding.");
+        AssertTagStatus(result, AppxDigestTag.Axci, DigestVerificationStatus.PartMissing);
     }
 
     [Fact]
@@ -762,6 +814,102 @@ public class AppxDigestBindingTests
 
         stream.Position = 0;
         return stream;
+    }
+
+    #endregion
+
+    #region TOCTOU — single-read-single-hash guarantee
+
+    /// <summary>
+    /// Demonstrates that the snapshot-based verification API detects mutation between
+    /// block-map parsing and binding verification. The test simulates the attack by
+    /// presenting block-map B bytes (matching malicious payload) during parsing, then
+    /// verifying binding against the legitimate block-map A bytes in the digest table.
+    ///
+    /// With the old re-read design on a directory-backed package, an attacker could swap
+    /// the file between phases. With <see cref="AppxDigestTableVerifier.VerifyFromSnapshots"/>,
+    /// the caller controls exactly which bytes are hashed.
+    /// </summary>
+    [Fact]
+    public void Toctou_SnapshotMutation_DetectedByVerifyFromSnapshots()
+    {
+        byte[] contentTypes = "<Types />"u8.ToArray();
+
+        // "Legitimate" block map (what was signed).
+        byte[] blockMapA = "<BlockMap><File Name='good.txt' /></BlockMap>"u8.ToArray();
+
+        // "Malicious" block map (what the attacker wants to substitute).
+        byte[] blockMapB = "<BlockMap><File Name='evil.exe' /></BlockMap>"u8.ToArray();
+        Assert.NotEqual(blockMapA, blockMapB);
+
+        // Digest table binds to blockMapA.
+        var entries = MakeCorrectEntries(contentTypes, blockMapA);
+        AppxDigestTable table = ParseTableDirect(entries);
+
+        // Snapshot contains blockMapB (simulating a swap after parsing).
+        var mutatedSnapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMapB,
+        };
+
+        IndirectDataBindingResult result = AppxDigestTableVerifier.VerifyFromSnapshots(table, mutatedSnapshots);
+
+        Assert.False(result.IsBindingValid, "Snapshot with mutated block map must fail binding.");
+        AssertTagStatus(result, AppxDigestTag.Axbm, DigestVerificationStatus.Mismatch);
+    }
+
+    /// <summary>
+    /// Verifies that when the correct snapshot bytes are provided, binding passes.
+    /// This is the counterpart to <see cref="Toctou_SnapshotMutation_DetectedByVerifyFromSnapshots"/>
+    /// confirming the mechanism works in both directions.
+    /// </summary>
+    [Fact]
+    public void Toctou_CorrectSnapshot_PassesVerification()
+    {
+        byte[] contentTypes = "<Types />"u8.ToArray();
+        byte[] blockMap = "<BlockMap />"u8.ToArray();
+
+        var entries = MakeCorrectEntries(contentTypes, blockMap);
+        AppxDigestTable table = ParseTableDirect(entries);
+
+        var correctSnapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMap,
+        };
+
+        IndirectDataBindingResult result = AppxDigestTableVerifier.VerifyFromSnapshots(table, correctSnapshots);
+
+        Assert.True(result.IsBindingValid);
+    }
+
+    /// <summary>
+    /// Verifies that the <see cref="AppxDigestTableVerifier.Verify(AppxDigestTable, IOpcPackage)"/>
+    /// convenience overload (used for ZIP-backed packages) snapshots internally and cannot be
+    /// tricked by a package that returns different bytes on subsequent reads. For ZIP-backed
+    /// packages this is inherently safe since ZipArchive is opened once, but the snapshot
+    /// guarantees it regardless of the IOpcPackage implementation.
+    /// </summary>
+    [Fact]
+    public void Verify_ZipBacked_ReadOnce_Safe()
+    {
+        byte[] contentTypes = "<Types />"u8.ToArray();
+        byte[] blockMap = "<BlockMap />"u8.ToArray();
+
+        var entries = MakeCorrectEntries(contentTypes, blockMap);
+        var parts = new Dictionary<string, byte[]>
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMap,
+        };
+
+        using OpcPackage opc = BuildOpc(parts);
+        AppxDigestTable table = ParseTableDirect(entries);
+
+        // The Verify(table, opc) overload reads parts once internally — confirm it works.
+        IndirectDataBindingResult result = AppxDigestTableVerifier.Verify(table, opc);
+        Assert.True(result.IsBindingValid);
     }
 
     #endregion

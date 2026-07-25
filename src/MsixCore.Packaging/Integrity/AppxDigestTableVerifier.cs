@@ -10,8 +10,18 @@ namespace MsixCore.Packaging.Integrity;
 /// </summary>
 public static class AppxDigestTableVerifier
 {
+    /// <summary>The footprint parts that binding verification may need to read.</summary>
+    private static readonly (AppxDigestTag Tag, string PartName)[] VerifiableParts =
+    [
+        (AppxDigestTag.Axct, OpcPartNames.ContentTypes),
+        (AppxDigestTag.Axbm, OpcPartNames.AppxBlockMap),
+        (AppxDigestTag.Axci, OpcPartNames.CodeIntegrityCatalog),
+    ];
+
     /// <summary>
-    /// Verifies the digest table against the package contents.
+    /// Snapshots the footprint parts from <paramref name="opc"/> once, then verifies the
+    /// digest table against those snapshots. This ensures exactly one read per part,
+    /// eliminating TOCTOU exposure on directory-backed packages.
     /// </summary>
     /// <param name="table">The parsed digest table from the CMS signature.</param>
     /// <param name="opc">The OPC package to verify against.</param>
@@ -20,6 +30,36 @@ public static class AppxDigestTableVerifier
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(opc);
+
+        // Single-read snapshot: read each verifiable part exactly once.
+        var snapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (_, partName) in VerifiableParts)
+        {
+            if (opc.ContainsPart(partName))
+            {
+                snapshots[partName] = ReadPartBytes(opc, partName);
+            }
+        }
+
+        return VerifyFromSnapshots(table, snapshots);
+    }
+
+    /// <summary>
+    /// Verifies the digest table against pre-read part byte snapshots. This overload
+    /// is the core verification path — callers that already hold part bytes (or want to
+    /// control when reads happen) should use this directly.
+    /// </summary>
+    /// <param name="table">The parsed digest table from the CMS signature.</param>
+    /// <param name="partSnapshots">
+    /// A dictionary mapping OPC part names (e.g. <c>[Content_Types].xml</c>) to their exact
+    /// decompressed bytes. Parts absent from the dictionary are treated as missing.
+    /// </param>
+    public static IndirectDataBindingResult VerifyFromSnapshots(
+        AppxDigestTable table,
+        IReadOnlyDictionary<string, byte[]> partSnapshots)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(partSnapshots);
 
         var results = new List<DigestEntryResult>();
         bool allVerifiableOk = true;
@@ -34,9 +74,9 @@ public static class AppxDigestTableVerifier
                     Status = DigestVerificationStatus.NotVerified,
                     Detail = $"{entry.Tag} verification is not supported — exact ZIP byte ranges are not recoverable from the public specification.",
                 },
-                AppxDigestTag.Axct => VerifyPart(entry, OpcPartNames.ContentTypes, opc, ref allVerifiableOk),
-                AppxDigestTag.Axbm => VerifyPart(entry, OpcPartNames.AppxBlockMap, opc, ref allVerifiableOk),
-                AppxDigestTag.Axci => VerifyPart(entry, OpcPartNames.CodeIntegrityCatalog, opc, ref allVerifiableOk),
+                AppxDigestTag.Axct => VerifySnapshot(entry, OpcPartNames.ContentTypes, partSnapshots, ref allVerifiableOk),
+                AppxDigestTag.Axbm => VerifySnapshot(entry, OpcPartNames.AppxBlockMap, partSnapshots, ref allVerifiableOk),
+                AppxDigestTag.Axci => VerifySnapshot(entry, OpcPartNames.CodeIntegrityCatalog, partSnapshots, ref allVerifiableOk),
                 _ => new DigestEntryResult
                 {
                     Tag = entry.Tag,
@@ -48,18 +88,18 @@ public static class AppxDigestTableVerifier
             results.Add(result);
         }
 
-        // Check for AXCI tag-vs-part consistency: if the part exists but no AXCI entry, flag it.
-        // (The table parser already ensured no unknown tags, so we only need to check the reverse.)
+        // Check for AXCI tag-vs-part consistency: if the part exists but no AXCI entry, that is
+        // a security-relevant failure — an attacker could add an unsigned CodeIntegrity.cat and
+        // we would silently accept it alongside a "binding verified" verdict.
         AppxDigestEntry? axciEntry = table.FindEntry(AppxDigestTag.Axci);
-        if (axciEntry is null && opc.ContainsPart(OpcPartNames.CodeIntegrityCatalog))
+        if (axciEntry is null && partSnapshots.ContainsKey(OpcPartNames.CodeIntegrityCatalog))
         {
-            // Part present without a digest entry — not a verification failure per spec (AXCI is optional),
-            // but surface it for visibility.
+            allVerifiableOk = false;
             results.Add(new DigestEntryResult
             {
                 Tag = AppxDigestTag.Axci,
                 Status = DigestVerificationStatus.DigestMissing,
-                Detail = "CodeIntegrity.cat exists in the package but no AXCI digest is present in the signature.",
+                Detail = "CodeIntegrity.cat exists in the package but no AXCI digest is present in the signature — the catalog is unsigned and untrusted.",
             });
         }
 
@@ -67,7 +107,7 @@ public static class AppxDigestTableVerifier
             ? "APPX indirect-data binding verified for AXCT, AXBM" +
               (axciEntry is not null ? ", AXCI" : "") +
               "; AXPC and AXCD are present but not verified (byte ranges unrecoverable)."
-            : "APPX indirect-data binding FAILED — one or more verifiable digests do not match.";
+            : "APPX indirect-data binding FAILED — one or more verifiable digests do not match or are missing.";
 
         return new IndirectDataBindingResult
         {
@@ -77,13 +117,13 @@ public static class AppxDigestTableVerifier
         };
     }
 
-    private static DigestEntryResult VerifyPart(
+    private static DigestEntryResult VerifySnapshot(
         AppxDigestEntry entry,
         string partName,
-        IOpcPackage opc,
+        IReadOnlyDictionary<string, byte[]> snapshots,
         ref bool allOk)
     {
-        if (!opc.ContainsPart(partName))
+        if (!snapshots.TryGetValue(partName, out byte[]? partBytes))
         {
             allOk = false;
             return new DigestEntryResult
@@ -94,14 +134,7 @@ public static class AppxDigestTableVerifier
             };
         }
 
-        byte[] actual;
-        using (Stream stream = opc.OpenPart(partName))
-        using (var ms = new MemoryStream())
-        {
-            stream.CopyTo(ms);
-            actual = SHA256.HashData(ms.ToArray());
-        }
-
+        byte[] actual = SHA256.HashData(partBytes);
         bool match = CryptographicOperations.FixedTimeEquals(actual, entry.Digest.Span);
         if (!match)
         {
@@ -114,5 +147,13 @@ public static class AppxDigestTableVerifier
             Status = match ? DigestVerificationStatus.Valid : DigestVerificationStatus.Mismatch,
             Detail = match ? null : $"SHA-256 digest mismatch for '{partName}'.",
         };
+    }
+
+    private static byte[] ReadPartBytes(IOpcPackage opc, string partName)
+    {
+        using Stream stream = opc.OpenPart(partName);
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
     }
 }

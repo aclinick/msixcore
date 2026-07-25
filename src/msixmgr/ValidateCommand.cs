@@ -148,6 +148,10 @@ internal static class ValidateCommand
                         {
                             errors.Add($"signature binding: {dr.Tag} part missing{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
                         }
+                        else if (dr.Status == DigestVerificationStatus.DigestMissing)
+                        {
+                            errors.Add($"signature binding: {dr.Tag} unsigned part present{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
+                        }
                     }
                 }
                 else if (signature.IsCmsIntegrityValid && signature.DigestTable is null)
