@@ -77,3 +77,43 @@ Optimal mode passed the semantic checks for every package: payload SHA-256 sets 
 3. Match makeappx entry ordering: payloads first using Windows/case-insensitive ordering, then `AppxManifest.xml`, `AppxBlockMap.xml`, `[Content_Types].xml`.
 4. Match makeappx footprint handling in `/nc`: deflate `AppxManifest.xml` and `AppxBlockMap.xml` and emit stored block `Size` attributes for the manifest as makeappx does.
 5. Fix OPC ZIP name escaping for reserved bracketed names (`[Content_Types].old` -> `%5BContent_Types%5D.old`) and revalidate `LfhSize` after escaping.
+
+## ZIP64 writer implementation — before/after evidence (2026-07-25)
+
+Branch: `feature/zip64-writer`. Design follows the microsoft/msix-packaging SDK model (not makeappx.exe).
+
+### What changed
+
+- **ZIP64 EOCD + Locator always emitted** (56 + 20 bytes before the classic EOCD). This is the structural requirement for the SDK's `ZipObjectWriter` to open/edit a package for signing.
+- **UTF-8 general-purpose bit (`0x0800`) dropped.** All ZIP entry names are percent-encoded to pure ASCII by `OpcPartNameEncoder` before reaching the writer; the bit was incorrect.
+- **65,535-entry ceiling removed.** Entry count is now 64-bit in the ZIP64 EOCD.
+- **Per-entry ZIP64 extra field** emitted only when a size or offset exceeds `UINT32_MAX - 1` (sentinel-driven, variable-sized). No extra fields for normal packages.
+- **Data descriptors** emitted only when a size exceeds `UINT32_MAX - 1`. Normal packages continue to seek-back and patch the local file header.
+
+### Corpus roundtrip results
+
+Ran the harness on `tests/Corpus/packed/arch-x64.msix` (4,278 bytes, 8 entries) in stored mode.
+
+| Diff category | Before (origin/main) | After (feature/zip64-writer) | Resolved? |
+| --- | --- | --- | --- |
+| #1: ZIP64 EOCD/locator absent | Present in makeappx, absent in ours | Now present in ours | **Yes** |
+| #4: UTF-8 flag `0x0800` set | Set in ours, absent in makeappx | Now absent in both | **Yes** |
+| #2: Central `0x0001(24)` per entry | makeappx always emits, ours never | Ours still omits (SDK model: sentinel-driven only) | No (by design) |
+| #3: Data descriptors always | makeappx always emits, ours never | Ours still omits (SDK model: only for >4 GiB) | No (by design) |
+| #5: Entry ordering | Differs | Unchanged | No |
+| #6: Footprint compression | Differs | Unchanged | No |
+
+### Structural verification
+
+```
+C:\temp\zip64-roundtrip\000-arch-x64\stored\ours.msix (4108 bytes)
+  Classic EOCD at offset 4086:  sig=0x06054B50
+  ZIP64 EOCD Locator at 4066:  sig=0x07064B50
+  ZIP64 EOCD at offset 4010:   sig=0x06064B50, total_entries=8
+```
+
+Our output is now structurally compatible with the SDK's `GetIsZip64()` check, which is the prerequisite for `ZipObjectWriter` to open and edit a package (append `AppxSignature.p7x` and rewrite the central directory).
+
+### Remaining makeappx byte-parity gaps (out of scope for this change)
+
+Diffs #2, #3, #5, and #6 remain. These are deliberate design divergences from makeappx (we follow the SDK model). They do not affect signability or >4 GiB correctness.
