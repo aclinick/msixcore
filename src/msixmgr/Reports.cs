@@ -75,6 +75,28 @@ internal sealed record UnpackReport
     public required int ExtractedPartCount { get; init; }
 }
 
+/// <summary>Machine-readable result of the <c>pack</c> verb.</summary>
+internal sealed record PackReport
+{
+    public required string OutputPath { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string PackageFullName { get; init; }
+
+    public required string PackageFamilyName { get; init; }
+
+    public required string Version { get; init; }
+
+    public required string Architecture { get; init; }
+
+    public required int FileCount { get; init; }
+
+    public required long TotalSize { get; init; }
+
+    public required bool IsSigned { get; init; }
+}
+
 /// <summary>Shared JSON options for CLI report serialization.</summary>
 internal static class ReportJson
 {

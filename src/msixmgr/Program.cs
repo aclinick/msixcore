@@ -34,6 +34,9 @@ public static class Program
                 return ValidateCommand.Run(rest, Console.Out, Console.Error);
             case "unpack":
                 return UnpackCommand.Run(rest, Console.Out, Console.Error);
+            case "pack":
+            case "makemsix":
+                return PackCommand.Run(rest, Console.Out, Console.Error);
             default:
                 Console.Error.WriteLine($"msixmgr: verb '{args[0]}' is not implemented yet.");
                 Console.Error.WriteLine("Run 'msixmgr --help' for usage.");
@@ -64,6 +67,8 @@ public static class Program
               validate <path> [--json]    Verify integrity (block map + signature); CI exit code.
               unpack <path> -Destination <dir> [--json]
                                           Extract a package to a loose layout without installing.
+              pack <sourceDir> -o <file.msix> [--overwrite] [--json]
+                                          Build an unsigned MSIX package (alias: makemsix).
               -AddPackage <path>          Install an MSIX/APPX package.
               -RemovePackage <fullName>   Uninstall a package by full name.
               -FindPackage <pattern>      Query installed packages (supports * and ?).
