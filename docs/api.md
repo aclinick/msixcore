@@ -38,7 +38,8 @@ requested output.
 `BundleOptions.Version` sets the bundle identity version; when omitted, the
 highest child version is used deterministically. `BundleResult` reports the
 bundle identity and child entries, including type, architecture/resource ID,
-payload offset, and size. Builders author only; they do not sign output.
+payload offset, and size. Builders author only; they intentionally do not sign
+output. Sign with external Windows SignTool/signcode or CI/CD signing services.
 
 ### `MsixPackage` (sealed class, `IPackage`)
 

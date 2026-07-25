@@ -126,9 +126,10 @@ part-name rules.
   false mismatches on encoding or ordering differences.
 
 > **Integrity ≠ authenticity.** `PackageSignature.IsCmsIntegrityValid` asserts
-> only that the CMS envelope is internally consistent. The tool does **not** yet
+> only that the CMS envelope is internally consistent. The tool does **not**
 > verify the APPX indirect-data digest binding (that the signature is bound to
-> *this* package's block map/manifest) nor the certificate trust chain. The
+> *this* package's block map/manifest) and intentionally delegates certificate
+> trust-chain and revocation evaluation to the platform/signing environment. The
 > `validate` verb states this explicitly.
 
 ## Layer 4 — Package store & query (`MsixCore.Deployment`)
@@ -273,8 +274,8 @@ so every verb supports both layouts. `InspectCommand`, `ValidateCommand`, and
   missing, or tampered files fail verification. `validate` surfaces this as a
   non-zero exit code.
 - **Explicit signature scope.** CMS-envelope integrity is reported but never
-  conflated with authenticity; binding and trust-chain checks are explicitly
-  marked unverified until implemented. Publisher matching
+  conflated with authenticity; binding is unverified, and trust-chain checks are
+  delegated to the platform/signing environment. Publisher matching
   (`PackageSignature.MatchesPublisher`) compares the manifest `Publisher` to the
   signer subject by **decoded RDN sequence** from the certificate's raw subject
   bytes, so it is faithful to RDN order and attribute encoding rather than

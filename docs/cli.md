@@ -281,8 +281,10 @@ Identity: Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 `makemsix` is an alias for `pack`. Existing output is rejected unless
 `--overwrite` is supplied. Input `AppxBlockMap.xml`, `AppxSignature.p7x`, and
 `[Content_Types].xml` files are ignored; the builder generates fresh block-map
-and content-types parts and does not sign the package. Package entries are
-Stored/uncompressed by default so existing output remains byte-compatible.
+and content-types parts and intentionally does not sign the package. Sign with
+external Windows SignTool/signcode or a CI/CD signing service before
+distribution. Package entries are Stored/uncompressed by default so existing
+output remains byte-compatible.
 `--compress` enables MakeAppx-compatible 64 KiB block DEFLATE. Each block is
 restartable, hashes its uncompressed bytes, and records its compressed length;
 incompressible blocks remain deflated, while MakeAppx's already-compressed
@@ -324,7 +326,8 @@ without recompression. If `--version` is omitted, the highest child package vers
 used, making the default deterministic. Existing output requires `--overwrite`.
 
 `--json` reports the bundle identity plus every child's type, architecture/resource
-ID, payload offset, and size. The generated bundle is unsigned.
+ID, payload offset, and size. The generated bundle is unsigned; signing is delegated
+to external Windows SignTool/signcode or CI/CD signing services.
 
 ## Error handling examples
 
