@@ -176,4 +176,45 @@ public class OpcPackageTests
         Assert.True(OpcPackage.IsValidPartName("AppxManifest.xml"));
         Assert.True(OpcPackage.IsValidPartName("AppxMetadata/AppxBundleManifest.xml"));
     }
+
+    [Fact]
+    public void PartNames_ArePercentDecodedToLogicalNames()
+    {
+        // OPC percent-encodes part names in the ZIP ('!' -> '%21'); the block map and manifest use
+        // the decoded logical name. Regression test for issue #7.
+        using MemoryStream zip = CreateZip(
+            ("AppxManifest.xml", "<x/>"),
+            ("Microsoft.WindowsAppRuntime.Release%211.8.610-experimental3", "payload"),
+            ("VFS/Program%20Files/app.exe", "MZ"));
+        using OpcPackage package = OpcPackage.Open(zip);
+
+        Assert.Contains("Microsoft.WindowsAppRuntime.Release!1.8.610-experimental3", package.PartNames);
+        Assert.Contains("VFS/Program Files/app.exe", package.PartNames);
+        Assert.DoesNotContain(package.PartNames, p => p.Contains('%'));
+    }
+
+    [Fact]
+    public void ContainsPart_MatchesDecodedLogicalName()
+    {
+        using MemoryStream zip = CreateZip(
+            ("AppxManifest.xml", "<x/>"),
+            ("Assets/Icon%20Set/logo.png", "PNG"));
+        using OpcPackage package = OpcPackage.Open(zip);
+
+        Assert.True(package.ContainsPart("Assets/Icon Set/logo.png"));
+        using Stream part = package.OpenPart("Assets/Icon Set/logo.png");
+        using var reader = new StreamReader(part);
+        Assert.Equal("PNG", reader.ReadToEnd());
+    }
+
+    [Theory]
+    [InlineData("%2e%2e/evil.xml")]      // ".." via encoding
+    [InlineData("foo/%2e%2e/bar.xml")]   // nested ".." via encoding
+    [InlineData("%2frooted.xml")]        // leading "/" via encoding
+    [InlineData("dir%5cfile.xml")]       // backslash via encoding
+    public void Open_TraversalViaPercentEncoding_ThrowsInvalidData(string encodedName)
+    {
+        using MemoryStream zip = CreateZip((encodedName, "<x/>"));
+        Assert.Throws<InvalidDataException>(() => OpcPackage.Open(zip));
+    }
 }

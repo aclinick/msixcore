@@ -35,6 +35,9 @@ public sealed class FileSystemPackageStore : IPackageStore
         return new FileSystemPackageStore(Path.Combine(appData, "MsixCore", "Packages"));
     }
 
+    /// <summary>The store subdirectory used for in-progress extraction; excluded from enumeration.</summary>
+    private const string StagingFolderName = ".staging";
+
     /// <inheritdoc/>
     public IReadOnlyList<IInstalledPackage> EnumeratePackages()
     {
@@ -48,6 +51,12 @@ public sealed class FileSystemPackageStore : IPackageStore
         {
             foreach (string directory in Directory.EnumerateDirectories(_root))
             {
+                // Skip reserved/internal directories (e.g. staging) so partial installs aren't listed.
+                if (Path.GetFileName(directory).StartsWith('.'))
+                {
+                    continue;
+                }
+
                 if (!File.Exists(Path.Combine(directory, OpcPartNames.AppxManifest)))
                 {
                     continue;
@@ -68,5 +77,62 @@ public sealed class FileSystemPackageStore : IPackageStore
         }
 
         return packages;
+    }
+
+    /// <inheritdoc/>
+    public string GetInstallLocation(string packageFullName) =>
+        Path.Combine(_root, ValidateFolderName(packageFullName));
+
+    /// <inheritdoc/>
+    public bool Contains(string packageFullName) =>
+        File.Exists(Path.Combine(GetInstallLocation(packageFullName), OpcPartNames.AppxManifest));
+
+    /// <inheritdoc/>
+    public void Delete(string packageFullName)
+    {
+        string location = GetInstallLocation(packageFullName);
+        if (Directory.Exists(location))
+        {
+            Directory.Delete(location, recursive: true);
+        }
+    }
+
+    /// <inheritdoc/>
+    public string CreateStagingLocation()
+    {
+        string staging = Path.Combine(_root, StagingFolderName, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(staging);
+        return staging;
+    }
+
+    /// <inheritdoc/>
+    public void Commit(string stagingLocation, string packageFullName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(stagingLocation);
+        string destination = GetInstallLocation(packageFullName);
+
+        if (Directory.Exists(destination))
+        {
+            Directory.Delete(destination, recursive: true);
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        Directory.Move(stagingLocation, destination);
+    }
+
+    private static string ValidateFolderName(string packageFullName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFullName);
+
+        // A package full name must be a single path segment; reject anything that could traverse.
+        if (packageFullName.Contains(Path.DirectorySeparatorChar)
+            || packageFullName.Contains(Path.AltDirectorySeparatorChar)
+            || packageFullName is "." or ".."
+            || packageFullName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException($"Invalid package full name: '{packageFullName}'.", nameof(packageFullName));
+        }
+
+        return packageFullName;
     }
 }

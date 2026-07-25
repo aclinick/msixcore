@@ -37,14 +37,25 @@ public sealed class OpcPackage : IOpcPackage
                     $"The package contains an invalid OPC part name: '{entry.FullName}'.");
             }
 
-            // OPC forbids equivalent (including case-insensitively equal) part names.
-            if (!_entriesByPart.TryAdd(entry.FullName, entry))
+            // OPC part names are percent-encoded in the ZIP (e.g. '!' -> '%21'), but the block map,
+            // manifest, and file system all use the decoded logical name. Canonicalize to the decoded
+            // form so lookups and coverage checks line up. Re-validate afterwards because decoding can
+            // reintroduce traversal characters (e.g. '%2e%2e' -> '..', '%2f' -> '/', '%5c' -> '\').
+            string partName = DecodePartName(entry.FullName);
+            if (!IsValidPartName(partName))
             {
                 throw new InvalidDataException(
-                    $"The package contains a duplicate OPC part name: '{entry.FullName}'.");
+                    $"The package contains an invalid OPC part name: '{entry.FullName}'.");
             }
 
-            _partNames.Add(entry.FullName);
+            // OPC forbids equivalent (including case-insensitively equal) part names.
+            if (!_entriesByPart.TryAdd(partName, entry))
+            {
+                throw new InvalidDataException(
+                    $"The package contains a duplicate OPC part name: '{partName}'.");
+            }
+
+            _partNames.Add(partName);
         }
     }
 
@@ -124,6 +135,13 @@ public sealed class OpcPackage : IOpcPackage
 
     /// <inheritdoc/>
     public void Dispose() => _archive.Dispose();
+
+    /// <summary>
+    /// Percent-decodes a raw ZIP entry name into its canonical OPC logical part name. OPC stores part
+    /// names percent-encoded (UTF-8), so <c>%21</c> becomes <c>!</c> and <c>%20</c> becomes a space,
+    /// matching the unencoded names used by the block map and manifest.
+    /// </summary>
+    internal static string DecodePartName(string rawName) => Uri.UnescapeDataString(rawName);
 
     /// <summary>
     /// Leniently normalizes a caller-supplied part name for lookup: backslashes become forward

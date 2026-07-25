@@ -1,4 +1,5 @@
 using MsixCore.Packaging;
+using MsixCore.Packaging.Integrity;
 
 namespace MsixCore.Deployment;
 
@@ -31,14 +32,115 @@ public sealed class PackageManager : IPackageManager
     public IMsixResponse AddPackage(
         string packageFilePath,
         DeploymentOptions options = DeploymentOptions.None,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Implemented in Phase 5 (deployment engine).");
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFilePath);
+        var response = new MsixResponse(cancellationToken);
+        _ = Task.Run(() => RunAdd(packageFilePath, options, response), CancellationToken.None);
+        return response;
+    }
 
     /// <inheritdoc/>
     public IMsixResponse RemovePackage(
         string packageFullName,
-        CancellationToken cancellationToken = default) =>
-        throw new NotImplementedException("Implemented in Phase 5 (deployment engine).");
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFullName);
+        var response = new MsixResponse(cancellationToken);
+        _ = Task.Run(() => RunRemove(packageFullName, response), CancellationToken.None);
+        return response;
+    }
+
+    private void RunAdd(string packageFilePath, DeploymentOptions options, MsixResponse response)
+    {
+        string? staging = null;
+        try
+        {
+            response.Report(InstallationStep.Started, 0f, "Starting installation.");
+            response.Token.ThrowIfCancellationRequested();
+
+            response.Report(InstallationStep.GetPackageInformation, 5f, "Reading package information.");
+            using MsixPackage package = MsixPackage.Open(packageFilePath);
+            string fullName = package.Identity.PackageFullName;
+
+            BlockMapVerificationResult verification = package.VerifyBlockMap();
+            if (!verification.IsValid)
+            {
+                throw new InvalidDataException(
+                    $"Package integrity check failed for '{fullName}': the payload does not match its block map.");
+            }
+
+            if (_store.Contains(fullName) && !options.HasFlag(DeploymentOptions.ForceApplicationShutdown))
+            {
+                throw new InvalidOperationException(
+                    $"Package '{fullName}' is already installed. Use ForceApplicationShutdown to reinstall.");
+            }
+
+            response.Token.ThrowIfCancellationRequested();
+            response.Report(InstallationStep.Extraction, 10f, "Extracting package payload.");
+            staging = _store.CreateStagingLocation();
+            var progress = new Progress<float>(p =>
+                response.Report(InstallationStep.Extraction, 10f + (p * 0.85f), "Extracting package payload."));
+            PackageExtractor.Extract(package.Opc, staging, progress, response.Token);
+
+            response.Report(InstallationStep.Integration, 95f,
+                options.HasFlag(DeploymentOptions.ExtractOnly)
+                    ? "Skipping OS integration (ExtractOnly)."
+                    : "Registering package.");
+
+            // OS-integration handlers (shortcuts, associations, etc.) land in a later Windows phase.
+            _store.Commit(staging, fullName);
+            staging = null;
+
+            response.Complete();
+        }
+        catch (Exception ex)
+        {
+            CleanupStaging(staging);
+            response.Fail(ex);
+        }
+    }
+
+    private void RunRemove(string packageFullName, MsixResponse response)
+    {
+        try
+        {
+            response.Report(InstallationStep.Started, 0f, "Starting removal.");
+            response.Token.ThrowIfCancellationRequested();
+
+            if (!_store.Contains(packageFullName))
+            {
+                throw new InvalidOperationException($"Package '{packageFullName}' is not installed.");
+            }
+
+            response.Report(InstallationStep.Extraction, 50f, "Removing package payload.");
+            _store.Delete(packageFullName);
+
+            response.Complete();
+        }
+        catch (Exception ex)
+        {
+            response.Fail(ex);
+        }
+    }
+
+    private static void CleanupStaging(string? staging)
+    {
+        if (staging is not null && Directory.Exists(staging))
+        {
+            try
+            {
+                Directory.Delete(staging, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best-effort cleanup of a failed install; never mask the original failure.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
 
     /// <inheritdoc/>
     public IInstalledPackage? FindPackage(string packageFullName)
