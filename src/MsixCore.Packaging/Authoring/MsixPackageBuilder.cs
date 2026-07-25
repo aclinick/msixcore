@@ -26,6 +26,12 @@ public sealed class MsixPackageBuilder
         OpcPartNames.CodeIntegrityCatalog,
     };
 
+    private static readonly HashSet<string> MakeAppxStoredExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".appx", ".avi", ".cab", ".gif", ".gz", ".jpeg", ".jpg",
+        ".m4a", ".mov", ".mp3", ".png", ".rar", ".wmv", ".zip",
+    };
+
     private readonly Dictionary<string, PackageInput> _payload = new(StringComparer.OrdinalIgnoreCase);
     private PackageInput? _manifest;
 
@@ -146,12 +152,10 @@ public sealed class MsixPackageBuilder
         string outputPath,
         PackOptions options)
     {
-        if (options.CompressionLevel != CompressionLevel.NoCompression)
+        if (options.CompressionLevel is not CompressionLevel.NoCompression and not CompressionLevel.Optimal)
         {
-            // Whole-entry ZIP deflate is not valid MSIX block compression. Spec-conformant block-level
-            // deflate is tracked by https://github.com/aclinick/msixcore/issues/41.
             throw new NotSupportedException(
-                "Only stored (uncompressed) package entries are currently supported.");
+                "MSIX authoring supports CompressionLevel.NoCompression or CompressionLevel.Optimal.");
         }
 
         string? outputDirectory = Path.GetDirectoryName(outputPath);
@@ -172,7 +176,10 @@ public sealed class MsixPackageBuilder
 
         try
         {
-            List<AuthoredBlockMapFile> files = WritePackage(temporaryPath, inputs);
+            List<AuthoredBlockMapFile> files = WritePackage(
+                temporaryPath,
+                inputs,
+                options.CompressionLevel);
             PackageIdentity identity;
             using (MsixPackage package = MsixPackage.Open(temporaryPath))
             {
@@ -191,6 +198,7 @@ public sealed class MsixPackageBuilder
                 Identity = identity,
                 FileCount = files.Count,
                 TotalSize = files.Sum(static file => file.File.Size),
+                CompressionLevel = options.CompressionLevel,
             };
         }
         finally
@@ -201,7 +209,8 @@ public sealed class MsixPackageBuilder
 
     private static List<AuthoredBlockMapFile> WritePackage(
         string path,
-        IReadOnlyCollection<PackageInput> inputs)
+        IReadOnlyCollection<PackageInput> inputs,
+        CompressionLevel compressionLevel)
     {
         PackageInput[] orderedInputs = inputs
             .OrderBy(static input => input.SortKey, StringComparer.Ordinal)
@@ -215,9 +224,32 @@ public sealed class MsixPackageBuilder
             {
                 using Stream source = input.Open();
                 BlockMapFile? file = null;
-                StoredZipEntryInfo entry = archive.AddEntry(
-                    OpcPartNameEncoder.Encode(input.PartName),
-                    destination => file = BlockMapWriter.CopyAndHash(input.PartName, source, destination));
+                StoredZipEntryInfo entry;
+                if (ShouldCompress(input.PartName, compressionLevel))
+                {
+                    entry = archive.AddDeflatedEntry(
+                        OpcPartNameEncoder.Encode(input.PartName),
+                        destination =>
+                        {
+                            CompressedBlockMapFile compressed = BlockMapWriter.CompressAndHash(
+                                input.PartName,
+                                source,
+                                destination,
+                                compressionLevel);
+                            file = compressed.File;
+                            return new DeflatedZipEntryContent(
+                                compressed.Crc32,
+                                compressed.CompressedSize,
+                                compressed.UncompressedSize);
+                        });
+                }
+                else
+                {
+                    entry = archive.AddEntry(
+                        OpcPartNameEncoder.Encode(input.PartName),
+                        destination => file = BlockMapWriter.CopyAndHash(input.PartName, source, destination));
+                }
+
                 if (!BlockMapFootprints.Contains(input.PartName))
                 {
                     blockMapFiles.Add(new AuthoredBlockMapFile(file!, entry.LocalHeaderSize));
@@ -227,11 +259,13 @@ public sealed class MsixPackageBuilder
             WriteGeneratedEntry(
                 archive,
                 OpcPartNames.ContentTypes,
-                ContentTypesWriter.Write(orderedInputs.Select(static input => input.PartName)));
+                ContentTypesWriter.Write(orderedInputs.Select(static input => input.PartName)),
+                compressionLevel);
             WriteGeneratedEntry(
                 archive,
                 OpcPartNames.AppxBlockMap,
-                BlockMapWriter.Write(blockMapFiles));
+                BlockMapWriter.Write(blockMapFiles),
+                compressionLevel);
         }
 
         return blockMapFiles;
@@ -240,10 +274,34 @@ public sealed class MsixPackageBuilder
     private static void WriteGeneratedEntry(
         StoredZipWriter archive,
         string name,
-        byte[] content)
+        byte[] content,
+        CompressionLevel compressionLevel)
     {
-        archive.AddEntry(name, destination => destination.Write(content));
+        if (compressionLevel == CompressionLevel.NoCompression)
+        {
+            archive.AddEntry(name, destination => destination.Write(content));
+            return;
+        }
+
+        archive.AddDeflatedEntry(
+            name,
+            destination =>
+            {
+                CompressedBlockMapFile compressed = BlockMapWriter.CompressAndHash(
+                    name,
+                    new MemoryStream(content, writable: false),
+                    destination,
+                    compressionLevel);
+                return new DeflatedZipEntryContent(
+                    compressed.Crc32,
+                    compressed.CompressedSize,
+                    compressed.UncompressedSize);
+            });
     }
+
+    private static bool ShouldCompress(string partName, CompressionLevel compressionLevel) =>
+        compressionLevel != CompressionLevel.NoCompression
+        && !MakeAppxStoredExtensions.Contains(Path.GetExtension(partName));
 
     private static string ValidatePayloadPath(string packagePath)
     {

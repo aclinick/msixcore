@@ -32,7 +32,7 @@ msixmgr <verb> [options]
 | `inspect <path> [--json]`              | Implemented   | Show package identity and metadata. |
 | `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
 | `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
-| `pack <sourceDir> -o <file.msix> [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package (`makemsix` alias). |
+| `pack <sourceDir> -o <file.msix> [--compress] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package (`makemsix` alias). |
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
@@ -64,7 +64,7 @@ Verbs:
   inspect <path> [--json]                                                Show package identity and metadata.
   validate <path> [--json]                                               Verify integrity (block map + signature); CI exit code.
   unpack <path> -Destination <dir> [--json]                              Extract a package to a loose layout without installing.
-  pack <sourceDir> -o|--output <file.msix> [--overwrite] [--json]        Build an unsigned MSIX package (alias: makemsix).
+  pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]  Build an unsigned MSIX package (alias: makemsix).
 
 For inspect, validate, and unpack, <path> may be a package file
 (.msix/.appx) or an unpacked directory. pack requires a source directory.
@@ -279,8 +279,11 @@ Identity: Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 `--overwrite` is supplied. Input `AppxBlockMap.xml`, `AppxSignature.p7x`, and
 `[Content_Types].xml` files are ignored; the builder generates fresh block-map
 and content-types parts and does not sign the package. Package entries are
-Stored/uncompressed by default; block-level deflate compression is not yet
-available ([issue #41](https://github.com/aclinick/msixcore/issues/41)).
+Stored/uncompressed by default so existing output remains byte-compatible.
+`--compress` enables MakeAppx-compatible 64 KiB block DEFLATE. Each block is
+restartable, hashes its uncompressed bytes, and records its compressed length;
+incompressible blocks remain deflated, while MakeAppx's already-compressed
+media/archive file types (such as PNG/JPEG/ZIP) remain Stored.
 
 ```console
 $ dotnet $DLL pack ./layout --output ./Contoso.MyApp.msix --json
@@ -293,7 +296,8 @@ $ dotnet $DLL pack ./layout --output ./Contoso.MyApp.msix --json
   "Architecture": "x64",
   "FileCount": 4,
   "TotalSize": 70231,
-  "IsSigned": false
+  "IsSigned": false,
+  "Compression": "Stored"
 }
 ```
 

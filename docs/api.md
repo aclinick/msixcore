@@ -21,13 +21,15 @@ source for full details. Types are immutable `record`s unless noted.
 
 `PackOptions.Overwrite` controls replacement of an existing output.
 `PackOptions.CompressionLevel` defaults to `CompressionLevel.NoCompression`;
-all entries are Stored/uncompressed so their block map and ZIP local headers
-are exactly representable and MSIX-conformant. Other compression levels are
-currently rejected. Spec-conformant 64 KiB block-level deflate is tracked by
-[issue #41](https://github.com/aclinick/msixcore/issues/41).
+`CompressionLevel.Optimal` enables MakeAppx-compatible block compression.
+Compressed files are split into independent 64 KiB raw-DEFLATE blocks, with
+each compressed block length recorded in `AppxBlockMap.xml`; already-compressed
+media/archive file types follow MakeAppx and remain Stored. The default remains
+Stored to preserve existing authored-package bytes.
 `PackResult` reports the absolute output path, manifest `Identity`, block-mapped
-file count, and total uncompressed payload size. The completed package is read
-back and block-map verified before it replaces the requested output.
+file count, total uncompressed payload size, and compression level. The
+completed package is read back and block-map verified before it replaces the
+requested output.
 
 The builder authors packages only: it does not sign them and does not create
 `.msixbundle` files.

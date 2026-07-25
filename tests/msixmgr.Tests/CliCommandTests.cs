@@ -227,8 +227,39 @@ public class CliCommandTests : IDisposable
         Assert.Equal("1.2.3.4", root.GetProperty("Version").GetString());
         Assert.Equal("x64", root.GetProperty("Architecture").GetString());
         Assert.False(root.GetProperty("IsSigned").GetBoolean());
+        Assert.Equal("Stored", root.GetProperty("Compression").GetString());
         Assert.True(root.GetProperty("FileCount").GetInt32() >= 1);
         Assert.True(root.GetProperty("TotalSize").GetInt64() > 0);
+    }
+
+    [Fact]
+    public void Pack_CompressFlag_EmitsBlockDeflateAndReportsNormal()
+    {
+        string source = LooseCliPackage.Create(
+            _root,
+            "pack-compress",
+            new Dictionary<string, byte[]>
+            {
+                ["Data/value.bin"] = Enumerable.Repeat((byte)'A', 70000).ToArray(),
+            });
+        string outputPath = Path.Combine(_root, "packed-compressed.msix");
+
+        (int code, string output, string error) = RunPack(
+            source,
+            "--output",
+            outputPath,
+            "--compress",
+            "--json");
+
+        Assert.Equal(0, code);
+        Assert.Empty(error);
+        using JsonDocument document = JsonDocument.Parse(output);
+        Assert.Equal("Normal", document.RootElement.GetProperty("Compression").GetString());
+        using MsixPackage package = MsixPackage.Open(outputPath);
+        Assert.True(package.VerifyBlockMap().IsValid);
+        Assert.All(
+            package.BlockMap.Files.Single(static file => file.Name == "Data/value.bin").Blocks,
+            static block => Assert.NotNull(block.CompressedSize));
     }
 
     [Fact]

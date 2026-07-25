@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using System.Text.Json;
 using MsixCore.Packaging;
 using MsixCore.Packaging.Authoring;
@@ -15,11 +16,12 @@ internal static class PackCommand
             out string? sourceDirectory,
             out string? outputPath,
             out bool overwrite,
+            out bool compress,
             out bool json,
             out string? parseError))
         {
             error.WriteLine($"msixmgr pack: {parseError}");
-            error.WriteLine("Usage: msixmgr pack <sourceDir> -o|--output <file.msix> [--overwrite] [--json]");
+            error.WriteLine("Usage: msixmgr pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]");
             return 2;
         }
 
@@ -28,7 +30,11 @@ internal static class PackCommand
             PackResult result = MsixPackageBuilder.Build(
                 sourceDirectory!,
                 outputPath!,
-                new PackOptions { Overwrite = overwrite });
+                new PackOptions
+                {
+                    Overwrite = overwrite,
+                    CompressionLevel = compress ? CompressionLevel.Optimal : CompressionLevel.NoCompression,
+                });
             if (json)
             {
                 output.WriteLine(JsonSerializer.Serialize(
@@ -58,12 +64,14 @@ internal static class PackCommand
         out string? sourceDirectory,
         out string? outputPath,
         out bool overwrite,
+        out bool compress,
         out bool json,
         out string? error)
     {
         sourceDirectory = null;
         outputPath = null;
         overwrite = false;
+        compress = false;
         json = false;
         error = null;
 
@@ -73,6 +81,10 @@ internal static class PackCommand
             if (arg is "--overwrite")
             {
                 overwrite = true;
+            }
+            else if (arg is "--compress")
+            {
+                compress = true;
             }
             else if (arg is "--json")
             {
@@ -139,6 +151,7 @@ internal static class PackCommand
             FileCount = result.FileCount,
             TotalSize = result.TotalSize,
             IsSigned = false,
+            Compression = result.CompressionLevel == CompressionLevel.NoCompression ? "Stored" : "Normal",
         };
     }
 }

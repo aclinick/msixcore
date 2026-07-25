@@ -1,3 +1,5 @@
+using System.IO.Compression;
+
 namespace MsixCore.Packaging.Authoring;
 
 /// <summary>Describes a successfully authored MSIX package.</summary>
@@ -14,4 +16,7 @@ public sealed record PackResult
 
     /// <summary>The total uncompressed size of the block-mapped payload files.</summary>
     public required long TotalSize { get; init; }
+
+    /// <summary>The compression mode used to author the package.</summary>
+    public CompressionLevel CompressionLevel { get; init; } = CompressionLevel.NoCompression;
 }
