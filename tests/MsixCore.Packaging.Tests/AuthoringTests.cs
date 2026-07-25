@@ -194,10 +194,57 @@ public sealed class AuthoringTests : IDisposable
     [InlineData("space name.txt", "space%20name.txt")]
     [InlineData("!+#%{}^`@&", "%21%2B%23%25%7B%7D%5E%60%40%26")]
     [InlineData("[Content_Types].old", "%5BContent_Types%5D.old")]
+    [InlineData("é.txt", "%C3%A9.txt")]
+    [InlineData("漢字.txt", "%E6%BC%A2%E5%AD%97.txt")]
+    [InlineData("😀.txt", "%F0%9F%98%80.txt")]
     [InlineData("folder/a b.txt", "folder/a%20b.txt")]
     public void OpcPartNameEncoder_EncodesMakeAppxReservedCharacters(string input, string expected)
     {
         Assert.Equal(expected, OpcPartNameEncoder.Encode(input));
+    }
+
+    [Theory]
+    [InlineData("Data/é.txt", "Data/%C3%A9.txt")]
+    [InlineData("Data/漢字.txt", "Data/%E6%BC%A2%E5%AD%97.txt")]
+    [InlineData("Data/😀.txt", "Data/%F0%9F%98%80.txt")]
+    public void Build_NonAsciiPartNames_UseUtf8PercentEncodingAndRoundTrip(string logicalName, string encodedName)
+    {
+        string source = CreateSource("non-ascii-" + Guid.NewGuid().ToString("N"));
+        byte[] expectedContent = Encoding.UTF8.GetBytes("payload for " + logicalName);
+        WritePayload(source, logicalName, expectedContent);
+        string output = Path.Combine(_root, Path.GetFileNameWithoutExtension(logicalName) + ".msix");
+
+        MsixPackageBuilder.Build(source, output);
+
+        using (ZipArchive zip = ZipFile.OpenRead(output))
+        {
+            Assert.Contains(zip.Entries, entry => entry.FullName == encodedName);
+            Assert.DoesNotContain(zip.Entries, entry => entry.FullName == logicalName);
+        }
+
+        using MsixPackage package = MsixPackage.Open(output);
+        Assert.True(package.VerifyBlockMap().IsValid);
+        using (Stream payload = package.Opc.OpenPart(logicalName))
+        using (var copy = new MemoryStream())
+        {
+            payload.CopyTo(copy);
+            Assert.Equal(expectedContent, copy.ToArray());
+        }
+
+        BlockMapFile blockMapFile = package.BlockMap.Files.Single(file => file.Name == logicalName);
+        Assert.DoesNotContain('%', blockMapFile.Name);
+        Dictionary<string, LocalHeader> headers = ReadLocalHeaders(output);
+        Assert.Equal(30 + Encoding.UTF8.GetByteCount(encodedName), headers[logicalName].Size);
+
+        using Stream blockMapStream = package.Opc.OpenPart(OpcPartNames.AppxBlockMap);
+        XDocument blockMap = XDocument.Load(blockMapStream);
+        XElement fileElement = blockMap.Root!.Elements()
+            .Single(element => element.Name.LocalName == "File"
+                && element.Attribute("Name")!.Value.Replace('\\', '/') == logicalName);
+        Assert.DoesNotContain('%', fileElement.Attribute("Name")!.Value);
+        Assert.Equal(
+            headers[logicalName].Size.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            fileElement.Attribute("LfhSize")!.Value);
     }
 
     [Fact]
@@ -248,6 +295,19 @@ public sealed class AuthoringTests : IDisposable
             package.BlockMap.Files,
             static file => file.Name is OpcPartNames.AppxBlockMap or OpcPartNames.AppxSignature or OpcPartNames.ContentTypes);
         Assert.Equal(2, result.FileCount);
+    }
+
+    [Fact]
+    public void Build_GeneratedContentTypesFootprint_UsesLiteralRawZipName()
+    {
+        string source = CreateSource("raw-content-types");
+        string output = Path.Combine(_root, "raw-content-types.msix");
+
+        MsixPackageBuilder.Build(source, output);
+
+        using ZipArchive zip = ZipFile.OpenRead(output);
+        Assert.Contains(zip.Entries, static entry => entry.FullName == OpcPartNames.ContentTypes);
+        Assert.DoesNotContain(zip.Entries, static entry => entry.FullName == "%5BContent_Types%5D.xml");
     }
 
     [Fact]

@@ -64,8 +64,16 @@ internal static class VariantZipRewriter
             {
                 WriteUInt32(output, DataDescriptorSignature);
                 WriteUInt32(output, entry.Crc32);
-                WriteUInt64(output, entry.CompressedSize);
-                WriteUInt64(output, entry.UncompressedSize);
+                if (zip64)
+                {
+                    WriteUInt64(output, entry.CompressedSize);
+                    WriteUInt64(output, entry.UncompressedSize);
+                }
+                else
+                {
+                    WriteUInt32(output, entry.CompressedSize);
+                    WriteUInt32(output, entry.UncompressedSize);
+                }
             }
 
             written.Add(new WrittenEntry(entry, flags, localOffset));
@@ -242,4 +250,3 @@ internal static class VariantZipRewriter
 
     private sealed record WrittenEntry(Entry Entry, ushort Flags, long LocalHeaderOffset);
 }
-

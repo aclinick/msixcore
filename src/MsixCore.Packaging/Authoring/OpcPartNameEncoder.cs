@@ -6,6 +6,7 @@ namespace MsixCore.Packaging.Authoring;
 internal static class OpcPartNameEncoder
 {
     private const string ReservedCharacters = " !+#%{}^`@&[]";
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
     public static string Encode(string partName)
     {
@@ -24,17 +25,18 @@ internal static class OpcPartNameEncoder
     {
         ArgumentNullException.ThrowIfNull(segment);
 
-        var encoded = new StringBuilder(segment.Length);
-        foreach (char character in segment)
+        byte[] utf8Bytes = StrictUtf8.GetBytes(segment);
+        var encoded = new StringBuilder(utf8Bytes.Length);
+        foreach (byte value in utf8Bytes)
         {
-            if (ReservedCharacters.Contains(character, StringComparison.Ordinal))
+            if (value >= 0x80 || ReservedCharacters.Contains((char)value, StringComparison.Ordinal))
             {
                 encoded.Append('%');
-                encoded.Append(((int)character).ToString("X2", CultureInfo.InvariantCulture));
+                encoded.Append(value.ToString("X2", CultureInfo.InvariantCulture));
             }
             else
             {
-                encoded.Append(character);
+                encoded.Append((char)value);
             }
         }
 

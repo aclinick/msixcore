@@ -42,7 +42,7 @@ Variants were post-processed from MSIX Core `Optimal` output without changing pa
 
 - A / `baseline`: current MSIX Core shape: version-needed 2.0, CRC/sizes in local headers, no ZIP64 EOCD, UTF-8 bit set.
 - B / `zip64`: baseline plus version-needed 4.5, central ZIP64 extra field `0x0001` with 24 bytes, ZIP64 EOCD and locator.
-- C / `descriptor`: baseline plus GP bit 3, zero local CRC/sizes, `PK\x07\x08` data descriptor with 8-byte sizes after data.
+- C / `descriptor`: baseline plus GP bit 3, zero local CRC/sizes, `PK\x07\x08` data descriptor with 32-bit sizes after data.
 - D / `both`: B + C.
 - E / `no-utf8`: baseline with GP bit `0x0800` cleared.
 
@@ -86,11 +86,13 @@ Install matrix:
 
 Interpretation: the makeappx-produced control fails through the exact same install path, with the same trust error as MSIX Core baseline and the makeappx-style `both` variant.  Therefore Tier 2 is blocked by certificate trust/environment in this non-elevated shell, not by MSIX Core's ZIP shape.  Earlier `-AllowUnsigned` attempts also failed by unsigned-package policy (`0x80073D2C` publisher not in unsigned namespace; `0x80073D2B` invalid unsigned content), and those policy failures were identical across variants including `both`.
 
+Follow-up after fixing the descriptor-only variant generator to emit classic 32-bit data-descriptor sizes when ZIP64 is disabled: the CcProto descriptor-only package now opens successfully through the OS reader both unsigned and after `signtool` signing.  The previous signed descriptor-only `0x80511007` reader failure was caused by the malformed experimental variant (64-bit descriptor sizes in a non-ZIP64 archive), not by data descriptors or signing.
+
 ## Recommendation
 
-1. **Correctness: fix OPC escaping for bracketed payload names.**  `[Content_Types].old` must be stored as `%5BContent_Types%5D.old`, not as a literal bracketed ZIP name.  This is independent of the ZIP64/data-descriptor question and is now fixed in `OpcPartNameEncoder` with a regression test.
+1. **Correctness: fix OPC escaping for bracketed and non-ASCII payload names.**  `[Content_Types].old` must be stored as `%5BContent_Types%5D.old`, and non-ASCII names such as `é.txt` must be stored as UTF-8 byte percent escapes (`%C3%A9.txt`).  These are independent of the ZIP64/data-descriptor question and are now fixed in `OpcPartNameEncoder` with regression tests.
 2. **Cosmetic for normal-size packages: makeappx's always-ZIP64 output.**  The OS reader accepted non-ZIP64 baseline packages and ZIP64 variants.  Implement ZIP64 only when needed for >4 GiB offsets/sizes or >65,535 entries, or if a future compatibility target proves it necessary.
-3. **Cosmetic for reader compatibility: makeappx's data descriptors.**  The OS reader accepted baseline packages without descriptors and unsigned descriptor variants.  Descriptor-only packages should not be signed using the experimental post-processor without further investigation because the signed copy failed reader/deployment (`0x80511007` / `0x87E80034`).
+3. **Cosmetic for reader compatibility: makeappx's data descriptors.**  The OS reader accepted baseline packages without descriptors and accepted corrected descriptor-only variants both unsigned and signed.
 4. **Cosmetic/tolerated: UTF-8 general-purpose bit.**  Baseline with bit `0x0800` set and variant E with it cleared both opened successfully for these ASCII-only package paths.
 5. **No writer change recommended for ZIP version-needed/local CRC+sizes/EOCD shape.**  Those differences are tied to ZIP64/descriptors and were accepted by the OS reader.
 6. **Follow-up if full install proof is required:** run the same committed commands from an elevated shell, import the test certificate into the machine trust store, then repeat the signed CcProto `Add-AppxPackage` matrix.  The current non-elevated run could not alter machine trust and therefore could not complete signed installation.
@@ -131,6 +133,6 @@ Get-AppxPackage -Name '*CcProto*'
 
 - Removed all packages matching `MsixCoreOSTest*`; final `Get-AppxPackage -Name 'MsixCoreOSTest*'` returned no packages.
 - Removed all packages matching `fruitybunny.CcProto`; final `Get-AppxPackage -Name 'fruitybunny.CcProto'` returned no packages.
-- Removed the test certificates `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86`, `157125F316332997849C3587836AFB8C06FE4D93`, and `6C2D03BF8F5DD16DEB434082ED80BBE4BC7B8A85` from CurrentUser `My`, `TrustedPeople`, and `Root`.
+- Removed the test certificates `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86`, `157125F316332997849C3587836AFB8C06FE4D93`, `6C2D03BF8F5DD16DEB434082ED80BBE4BC7B8A85`, and `59383FECA334C2A578FE24DF14C8D0FE8D788361` from CurrentUser stores touched during testing.
 - Deleted scratch directories `C:\osaccept-work` and `%USERPROFILE%\osaccept` after recording the results above.
 - No package bytes or payloads are committed.

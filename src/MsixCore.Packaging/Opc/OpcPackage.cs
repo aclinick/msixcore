@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text;
 
 namespace MsixCore.Packaging.Opc;
 
@@ -13,6 +14,8 @@ namespace MsixCore.Packaging.Opc;
 /// </remarks>
 public sealed class OpcPackage : IOpcPackage
 {
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
     private readonly ZipArchive _archive;
     private readonly Dictionary<string, ZipArchiveEntry> _entriesByPart;
     private readonly List<string> _partNames;
@@ -148,7 +151,12 @@ public sealed class OpcPackage : IOpcPackage
         string[] segments = rawName.Split('/');
         for (int i = 0; i < segments.Length; i++)
         {
-            string decoded = Uri.UnescapeDataString(segments[i]);
+            if (!TryPercentDecodeSegment(segments[i], out string decoded))
+            {
+                canonical = string.Empty;
+                return false;
+            }
+
             if (decoded.Contains('/') || decoded.Contains('\\'))
             {
                 canonical = string.Empty;
@@ -172,6 +180,95 @@ public sealed class OpcPackage : IOpcPackage
 
         canonical = string.Join('/', segments);
         return true;
+    }
+
+    private static bool TryPercentDecodeSegment(string segment, out string decoded)
+    {
+        var bytes = new List<byte>(segment.Length);
+        for (int i = 0; i < segment.Length;)
+        {
+            if (segment[i] == '%')
+            {
+                if (i + 2 >= segment.Length
+                    || !TryReadHexByte(segment[i + 1], segment[i + 2], out byte value))
+                {
+                    decoded = string.Empty;
+                    return false;
+                }
+
+                bytes.Add(value);
+                i += 3;
+                continue;
+            }
+
+            int charCount = 1;
+            if (char.IsHighSurrogate(segment[i]))
+            {
+                if (i + 1 >= segment.Length || !char.IsLowSurrogate(segment[i + 1]))
+                {
+                    decoded = string.Empty;
+                    return false;
+                }
+
+                charCount = 2;
+            }
+            else if (char.IsLowSurrogate(segment[i]))
+            {
+                decoded = string.Empty;
+                return false;
+            }
+
+            byte[] literal = StrictUtf8.GetBytes(segment.Substring(i, charCount));
+            bytes.AddRange(literal);
+            i += charCount;
+        }
+
+        try
+        {
+            decoded = StrictUtf8.GetString(bytes.ToArray());
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            decoded = string.Empty;
+            return false;
+        }
+    }
+
+    private static bool TryReadHexByte(char high, char low, out byte value)
+    {
+        if (!TryReadHexNibble(high, out int highValue) || !TryReadHexNibble(low, out int lowValue))
+        {
+            value = 0;
+            return false;
+        }
+
+        value = (byte)((highValue << 4) | lowValue);
+        return true;
+    }
+
+    private static bool TryReadHexNibble(char c, out int value)
+    {
+        if (c is >= '0' and <= '9')
+        {
+            value = c - '0';
+            return true;
+        }
+
+        if (c is >= 'A' and <= 'F')
+        {
+            value = c - 'A' + 10;
+            return true;
+        }
+
+        if (c is >= 'a' and <= 'f')
+        {
+            value = c - 'a' + 10;
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     /// <summary>
