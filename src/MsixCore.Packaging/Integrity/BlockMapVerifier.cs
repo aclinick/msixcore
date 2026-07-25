@@ -106,6 +106,7 @@ public static class BlockMapVerifier
         int blockIndex = 0;
         Span<byte> actual = stackalloc byte[64];
         Span<byte> expected = stackalloc byte[64];
+        Span<char> canonical = stackalloc char[88];
 
         while (true)
         {
@@ -121,14 +122,12 @@ public static class BlockMapVerifier
                 return Invalid(file.Name, "the file contains more data than the block map declares.");
             }
 
-            // Hash into a stack buffer (max digest is SHA-512 = 64 bytes) and compare the raw digest
-            // bytes against the Base64-decoded expected hash. This avoids allocating a digest array and
-            // a Base64 string per block. Malformed expected Base64 is treated as a mismatch, never an
-            // exception, preserving the previous ordinal-string-compare semantics.
+            // Hash into stack buffers (max digest is SHA-512 = 64 bytes) and compare raw digest bytes.
+            // The expected text must also be the exact canonical Base64 spelling the old string compare
+            // required; alternate decodable forms such as whitespace or non-canonical padding mismatch.
             int actualLength = CryptographicOperations.HashData(algorithm, buffer.AsSpan(0, filled), actual);
 
-            if (!Convert.TryFromBase64String(file.Blocks[blockIndex].Hash, expected, out int expectedLength)
-                || !actual[..actualLength].SequenceEqual(expected[..expectedLength]))
+            if (!ExpectedHashMatches(file.Blocks[blockIndex].Hash, actual[..actualLength], expected, canonical))
             {
                 return Invalid(file.Name, $"block {blockIndex} hash mismatch.");
             }
@@ -237,6 +236,26 @@ public static class BlockMapVerifier
         }
 
         return errors;
+    }
+
+    private static bool ExpectedHashMatches(
+        string expectedHash,
+        ReadOnlySpan<byte> actual,
+        Span<byte> expected,
+        Span<char> canonical)
+    {
+        int canonicalLength = ((actual.Length + 2) / 3) * 4;
+        if (expectedHash.Length != canonicalLength
+            || !Convert.TryFromBase64String(expectedHash, expected, out int expectedLength)
+            || expectedLength != actual.Length
+            || !actual.SequenceEqual(expected[..expectedLength])
+            || !Convert.TryToBase64Chars(expected[..expectedLength], canonical, out int encodedLength)
+            || encodedLength != canonicalLength)
+        {
+            return false;
+        }
+
+        return expectedHash.AsSpan().SequenceEqual(canonical[..encodedLength]);
     }
 
     private static HashAlgorithmName ToAlgorithmName(BlockMapHashMethod hashMethod) => hashMethod switch

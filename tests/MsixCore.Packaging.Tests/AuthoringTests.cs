@@ -138,6 +138,33 @@ public sealed class AuthoringTests : IDisposable
     }
 
     [Fact]
+    public void StoredZipWriter_WriteByte_UpdatesCrc32()
+    {
+        using var output = new MemoryStream();
+        using (var writer = new StoredZipWriter(output))
+        {
+            writer.AddEntry(
+                "kat.txt",
+                stream =>
+                {
+                    foreach (byte value in "123456789"u8)
+                    {
+                        stream.WriteByte(value);
+                    }
+                });
+        }
+
+        string packagePath = Path.Combine(_root, "write-byte.zip");
+        File.WriteAllBytes(packagePath, output.ToArray());
+        LocalHeader header = ReadLocalHeaders(packagePath)["kat.txt"];
+        var spanCalculator = new Crc32Calculator();
+        spanCalculator.Append("123456789"u8);
+
+        Assert.Equal(0xCBF43926U, header.Crc32);
+        Assert.Equal(spanCalculator.Value, header.Crc32);
+    }
+
+    [Fact]
     public void BlockMapWriter_CompressedBlocks_EmitsMakeAppxSizes()
     {
         byte[] content = Enumerable.Repeat((byte)'A', BlockMap.BlockSize + 123).ToArray();
@@ -501,6 +528,27 @@ public sealed class AuthoringTests : IDisposable
         Assert.True(BlockMapVerifier.Verify(secondPackage.Opc, secondPackage.BlockMap).IsValid);
     }
 
+    [Theory]
+    [InlineData(CompressionLevel.NoCompression, "stored.msix")]
+    [InlineData(CompressionLevel.Optimal, "optimal.msix")]
+    public void Build_OutputMatchesOriginMainGoldenBytes(CompressionLevel compressionLevel, string goldenFile)
+    {
+        string source = CreateGoldenBaselineSource("golden-" + Path.GetFileNameWithoutExtension(goldenFile));
+        string output = Path.Combine(_root, goldenFile);
+
+        MsixPackageBuilder.Build(source, output, new PackOptions { CompressionLevel = compressionLevel });
+
+        byte[] actual = File.ReadAllBytes(output);
+        byte[] expected = File.ReadAllBytes(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "AuthoringGolden",
+            goldenFile));
+        Assert.Equal(expected, actual);
+        using MsixPackage package = MsixPackage.Open(output);
+        Assert.True(package.VerifyBlockMap().IsValid);
+    }
+
     [Fact]
     public void Build_MissingRootManifest_ThrowsClearError()
     {
@@ -651,6 +699,25 @@ public sealed class AuthoringTests : IDisposable
         Directory.CreateDirectory(source);
         File.WriteAllText(Path.Combine(source, "AppxManifest.xml"), Manifest, new UTF8Encoding(false));
         File.WriteAllBytes(Path.Combine(source, "empty.dat"), []);
+        return source;
+    }
+
+    private string CreateGoldenBaselineSource(string name)
+    {
+        string source = CreateSource(name);
+        File.WriteAllText(
+            Path.Combine(source, OpcPartNames.AppxManifest),
+            Manifest.ReplaceLineEndings("\n"),
+            new UTF8Encoding(false));
+        WritePayload(source, "Data/payload.txt", "golden baseline payload"u8.ToArray());
+        WritePayload(
+            source,
+            "Data/pattern.bin",
+            Enumerable.Range(0, 4097).Select(static value => (byte)((value * 13) % 251)).ToArray());
+        WritePayload(
+            source,
+            "Assets/logo.png",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="));
         return source;
     }
 

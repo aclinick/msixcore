@@ -60,13 +60,24 @@ public class BlockMapVerifierTests
         Dictionary<string, byte[]> parts = SampleParts();
         using OpcPackage opc = PackageBuilder.OpcFrom(parts);
         BlockMap map = PackageBuilder.BlockMapFor(parts);
-        BlockMapFile manifest = map.Files.Single(static file => file.Name == "AppxManifest.xml");
-        BlockMapBlock badBlock = manifest.Blocks[0] with { Hash = "not base64!" };
-        BlockMapFile badManifest = manifest with { Blocks = [badBlock] };
-        map = map with
-        {
-            Files = map.Files.Select(file => file.Name == manifest.Name ? badManifest : file).ToArray(),
-        };
+        map = ReplaceManifestHash(map, "not base64!");
+
+        BlockMapVerificationResult result = BlockMapVerifier.Verify(opc, map);
+
+        Assert.False(result.IsValid);
+        BlockMapFileResult manifestResult = result.Files.Single(static file => file.Name == "AppxManifest.xml");
+        Assert.False(manifestResult.IsValid);
+        Assert.Equal("File 'AppxManifest.xml': block 0 hash mismatch.", manifestResult.Error);
+    }
+
+    [Fact]
+    public void Verify_CorrectHashWithWhitespace_IsMismatchNotAcceptedByDecoder()
+    {
+        Dictionary<string, byte[]> parts = SampleParts();
+        using OpcPackage opc = PackageBuilder.OpcFrom(parts);
+        BlockMap map = PackageBuilder.BlockMapFor(parts);
+        string canonical = map.Files.Single(static file => file.Name == "AppxManifest.xml").Blocks[0].Hash;
+        map = ReplaceManifestHash(map, $"{canonical[..1]} {canonical[1..]} ");
 
         BlockMapVerificationResult result = BlockMapVerifier.Verify(opc, map);
 
@@ -203,4 +214,15 @@ public class BlockMapVerifierTests
         BlockMapHashMethod.Sha512 => SHA512.HashData(content),
         _ => throw new ArgumentOutOfRangeException(nameof(hashMethod), hashMethod, "Unsupported block map hash method."),
     };
+
+    private static BlockMap ReplaceManifestHash(BlockMap map, string hash)
+    {
+        BlockMapFile manifest = map.Files.Single(static file => file.Name == "AppxManifest.xml");
+        BlockMapBlock badBlock = manifest.Blocks[0] with { Hash = hash };
+        BlockMapFile badManifest = manifest with { Blocks = [badBlock] };
+        return map with
+        {
+            Files = map.Files.Select(file => file.Name == manifest.Name ? badManifest : file).ToArray(),
+        };
+    }
 }
