@@ -60,8 +60,8 @@ internal sealed class StoredZipWriter : IDisposable
 
         long localHeaderOffset = _output.Position;
         WriteUInt32(LocalFileHeaderSignature);
-        WriteUInt16(Version20);
-        WriteUInt16(0); // general purpose flags — no UTF-8 bit (names are percent-encoded ASCII)
+        WriteUInt16(Version20); // patched to 45 below if data descriptor needed
+        WriteUInt16(0); // general purpose flags — patched below if data descriptor needed
         WriteUInt16(StoredMethod);
         WriteUInt16(DosTime);
         WriteUInt16(DosDate);
@@ -86,9 +86,10 @@ internal sealed class StoredZipWriter : IDisposable
             WriteUInt64((ulong)size);
             WriteUInt64((ulong)size);
 
-            // Seek back to set the data-descriptor flag (bit 3) in the general purpose flags.
+            // Seek back to set version-needed 45 and data-descriptor flag in local header.
             long endPosition = _output.Position;
-            _output.Position = localHeaderOffset + 6;
+            _output.Position = localHeaderOffset + 4;
+            WriteUInt16(Version45);
             WriteUInt16(DataDescriptorFlag);
             _output.Position = endPosition;
         }
@@ -109,7 +110,8 @@ internal sealed class StoredZipWriter : IDisposable
             crc32,
             size,
             size,
-            localHeaderOffset));
+            localHeaderOffset,
+            needsDataDescriptor));
         return new StoredZipEntryInfo(localHeaderSize, localHeaderOffset + localHeaderSize, size);
     }
 
@@ -130,8 +132,8 @@ internal sealed class StoredZipWriter : IDisposable
 
         long localHeaderOffset = _output.Position;
         WriteUInt32(LocalFileHeaderSignature);
-        WriteUInt16(Version20);
-        WriteUInt16(0); // general purpose flags
+        WriteUInt16(Version20); // patched to 45 below if data descriptor needed
+        WriteUInt16(0); // general purpose flags — patched below if data descriptor needed
         WriteUInt16(DeflateMethod);
         WriteUInt16(DosTime);
         WriteUInt16(DosDate);
@@ -159,11 +161,13 @@ internal sealed class StoredZipWriter : IDisposable
         {
             WriteUInt32(DataDescriptorSignature);
             WriteUInt32(content.Crc32);
-            WriteUInt64(content.CompressedSize);
+            WriteUInt64((ulong)content.CompressedSize);
             WriteUInt64((ulong)content.UncompressedSize);
 
+            // Seek back to set version-needed 45 and data-descriptor flag in local header.
             long endPosition = _output.Position;
-            _output.Position = localHeaderOffset + 6;
+            _output.Position = localHeaderOffset + 4;
+            WriteUInt16(Version45);
             WriteUInt16(DataDescriptorFlag);
             _output.Position = endPosition;
         }
@@ -172,8 +176,8 @@ internal sealed class StoredZipWriter : IDisposable
             long endPosition = _output.Position;
             _output.Position = localHeaderOffset + 14;
             WriteUInt32(content.Crc32);
-            WriteUInt32(content.CompressedSize);
-            WriteUInt32(content.UncompressedSize);
+            WriteUInt32((uint)content.CompressedSize);
+            WriteUInt32((uint)content.UncompressedSize);
             _output.Position = endPosition;
         }
 
@@ -183,7 +187,8 @@ internal sealed class StoredZipWriter : IDisposable
             content.Crc32,
             content.CompressedSize,
             content.UncompressedSize,
-            localHeaderOffset));
+            localHeaderOffset,
+            needsDataDescriptor));
         return new StoredZipEntryInfo(
             localHeaderSize,
             localHeaderOffset + localHeaderSize,
@@ -202,12 +207,14 @@ internal sealed class StoredZipWriter : IDisposable
         {
             byte[] extraField = BuildCentralZip64ExtraField(entry);
             bool hasZip64Extra = extraField.Length > 0;
-            ushort versionNeeded = hasZip64Extra ? Version45 : Version20;
+            // Version-needed is 45 if the entry has a ZIP64 extra field OR a data descriptor.
+            ushort versionNeeded = (hasZip64Extra || entry.HasDataDescriptor) ? Version45 : Version20;
+            ushort flags = entry.HasDataDescriptor ? DataDescriptorFlag : (ushort)0;
 
             WriteUInt32(CentralDirectoryHeaderSignature);
             WriteUInt16(Version45); // version made by
             WriteUInt16(versionNeeded);
-            WriteUInt16(0); // general purpose flags
+            WriteUInt16(flags);
             WriteUInt16(entry.CompressionMethod);
             WriteUInt16(DosTime);
             WriteUInt16(DosDate);
@@ -250,20 +257,19 @@ internal sealed class StoredZipWriter : IDisposable
         WriteUInt64((ulong)zip64EocdOffset);
         WriteUInt32(1); // total disks
 
-        // Classic End of Central Directory Record.
-        // Use real values where they fit; sentinel only when genuinely overflowing.
-        bool entryCountOverflows = entryCount > ushort.MaxValue;
-        bool cdSizeOverflows = centralDirectorySize > uint.MaxValue;
-        bool cdOffsetOverflows = centralDirectoryOffset > uint.MaxValue;
-
+        // Classic End of Central Directory Record — unconditional sentinel constants.
+        // The SDK's EndCentralDirectoryRecord::Read derives m_isZip64 EXCLUSIVELY from
+        // whether any classic EOCD field equals its type-maximum sentinel. If we write
+        // real values here, the SDK reads m_isZip64 == false and ZipObjectWriter's editing
+        // constructor throws "Editing non zip64 packages not supported" — signing fails.
         WriteUInt32(EndOfCentralDirectorySignature);
-        WriteUInt16(0); // disk number
-        WriteUInt16(0); // disk with CD start
-        WriteUInt16(entryCountOverflows ? ushort.MaxValue : (ushort)entryCount);
-        WriteUInt16(entryCountOverflows ? ushort.MaxValue : (ushort)entryCount);
-        WriteUInt32(cdSizeOverflows ? uint.MaxValue : (uint)centralDirectorySize);
-        WriteUInt32(cdOffsetOverflows ? uint.MaxValue : (uint)centralDirectoryOffset);
-        WriteUInt16(0); // comment length
+        WriteUInt16(0);           // number of this disk
+        WriteUInt16(0);           // disk with start of CD
+        WriteUInt16(0xFFFF);      // entries on this disk (sentinel)
+        WriteUInt16(0xFFFF);      // total entries (sentinel)
+        WriteUInt32(0xFFFFFFFF);  // size of central directory (sentinel)
+        WriteUInt32(0xFFFFFFFF);  // offset of start of CD (sentinel)
+        WriteUInt16(0);           // comment length
 
         _output.Flush();
         _disposed = true;
@@ -343,7 +349,8 @@ internal sealed class StoredZipWriter : IDisposable
         uint Crc32,
         long CompressedSize,
         long UncompressedSize,
-        long LocalHeaderOffset);
+        long LocalHeaderOffset,
+        bool HasDataDescriptor);
 
     private sealed class StoredEntryStream(Stream output) : Stream
     {
@@ -416,4 +423,4 @@ internal sealed class Crc32Calculator
 
 internal sealed record StoredZipEntryInfo(int LocalHeaderSize, long ContentOffset, long UncompressedSize);
 
-internal sealed record DeflatedZipEntryContent(uint Crc32, uint CompressedSize, uint UncompressedSize);
+internal sealed record DeflatedZipEntryContent(uint Crc32, long CompressedSize, long UncompressedSize);

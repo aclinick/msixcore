@@ -177,7 +177,7 @@ public sealed class AuthoringTests : IDisposable
             CompressionLevel.Optimal);
 
         Assert.Equal([84L, 10L], result.File.Blocks.Select(static block => block.CompressedSize));
-        Assert.Equal(96U, result.CompressedSize);
+        Assert.Equal(96L, result.CompressedSize);
         Assert.Equal([0x03, 0x00], compressed.ToArray()[^2..]);
 
         XDocument document = LoadXml(BlockMapWriter.Write(
