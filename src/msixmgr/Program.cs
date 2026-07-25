@@ -32,6 +32,8 @@ public static class Program
                 return InspectCommand.Run(rest, Console.Out, Console.Error);
             case "validate":
                 return ValidateCommand.Run(rest, Console.Out, Console.Error);
+            case "unpack":
+                return UnpackCommand.Run(rest, Console.Out, Console.Error);
             default:
                 Console.Error.WriteLine($"msixmgr: verb '{args[0]}' is not implemented yet.");
                 Console.Error.WriteLine("Run 'msixmgr --help' for usage.");
@@ -60,11 +62,11 @@ public static class Program
             Verbs (implemented incrementally):
               inspect <path> [--json]     Show package identity and metadata.
               validate <path> [--json]    Verify integrity (block map + signature); CI exit code.
+              unpack <path> -Destination <dir> [--json]
+                                          Extract a package to a loose layout without installing.
               -AddPackage <path>          Install an MSIX/APPX package.
               -RemovePackage <fullName>   Uninstall a package by full name.
               -FindPackage <pattern>      Query installed packages (supports * and ?).
-              -Unpack <path> -Destination <dir>
-                                          Extract a package without installing.
 
             <path> may be a package file (.msix/.appx) or an unpacked directory.
 
