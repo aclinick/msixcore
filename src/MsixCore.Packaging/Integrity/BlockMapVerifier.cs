@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using MsixCore.Packaging.Opc;
 
@@ -38,12 +39,22 @@ public static class BlockMapVerifier
         var mappedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool allValid = true;
 
-        foreach (BlockMapFile file in blockMap.Files)
+        // Rent a single block buffer and reuse it across every verified file. The pool may return an
+        // array larger than BlockMap.BlockSize, so all reads are capped at exactly BlockMap.BlockSize.
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
+        try
         {
-            mappedNames.Add(file.Name);
-            BlockMapFileResult result = VerifyFile(package, blockMap.HashMethod, file);
-            fileResults.Add(result);
-            allValid &= result.IsValid;
+            foreach (BlockMapFile file in blockMap.Files)
+            {
+                mappedNames.Add(file.Name);
+                BlockMapFileResult result = VerifyFile(package, blockMap.HashMethod, file, buffer);
+                fileResults.Add(result);
+                allValid &= result.IsValid;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         List<string> coverageErrors = CheckCoverage(package, mappedNames);
@@ -71,8 +82,26 @@ public static class BlockMapVerifier
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(file);
 
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
+        try
+        {
+            return VerifyAndCopyCore(content, destination, hashMethod, file, buffer, cancellationToken);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static BlockMapFileResult VerifyAndCopyCore(
+        Stream content,
+        Stream destination,
+        BlockMapHashMethod hashMethod,
+        BlockMapFile file,
+        byte[] buffer,
+        CancellationToken cancellationToken)
+    {
         HashAlgorithmName algorithm = ToAlgorithmName(hashMethod);
-        byte[] buffer = new byte[BlockMap.BlockSize];
         long totalRead = 0;
         int blockIndex = 0;
 
@@ -125,7 +154,7 @@ public static class BlockMapVerifier
             new HashSet<string>(blockMap.Files.Select(static file => file.Name), StringComparer.OrdinalIgnoreCase));
     }
 
-    private static BlockMapFileResult VerifyFile(IOpcPackage package, BlockMapHashMethod hashMethod, BlockMapFile file)
+    private static BlockMapFileResult VerifyFile(IOpcPackage package, BlockMapHashMethod hashMethod, BlockMapFile file, byte[] buffer)
     {
         if (!package.ContainsPart(file.Name))
         {
@@ -135,7 +164,7 @@ public static class BlockMapVerifier
         try
         {
             using Stream content = package.OpenPart(file.Name);
-            return VerifyContent(content, hashMethod, file);
+            return VerifyContent(content, hashMethod, file, buffer);
         }
         catch (IOException ex)
         {
@@ -147,18 +176,21 @@ public static class BlockMapVerifier
         }
     }
 
-    private static BlockMapFileResult VerifyContent(Stream content, BlockMapHashMethod hashMethod, BlockMapFile file)
+    private static BlockMapFileResult VerifyContent(Stream content, BlockMapHashMethod hashMethod, BlockMapFile file, byte[] buffer)
     {
-        return VerifyAndCopy(content, Stream.Null, hashMethod, file);
+        return VerifyAndCopyCore(content, Stream.Null, hashMethod, file, buffer, CancellationToken.None);
     }
 
     private static int ReadBlock(Stream stream, byte[] buffer, CancellationToken cancellationToken = default)
     {
+        // Cap at exactly BlockMap.BlockSize even when the pool returns a larger array; a block must
+        // never exceed 64 KiB or its hash would not match the block map.
+        int limit = Math.Min(buffer.Length, BlockMap.BlockSize);
         int filled = 0;
-        while (filled < buffer.Length)
+        while (filled < limit)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int read = stream.Read(buffer, filled, buffer.Length - filled);
+            int read = stream.Read(buffer, filled, limit - filled);
             if (read == 0)
             {
                 break;
