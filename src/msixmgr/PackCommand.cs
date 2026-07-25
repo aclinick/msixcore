@@ -57,7 +57,7 @@ internal static class PackCommand
             return CliContract.ExitCodes.Success;
         }
         catch (Exception ex) when (
-            ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
+            CliContract.IsOperationalException(ex) || ex is ArgumentException)
         {
             CliContract.WriteError(output, error, json, "msixmgr pack", ex.Message, null, CliContract.ErrorCode(ex));
             return CliContract.ExitCodes.OperationalError;
@@ -97,19 +97,16 @@ internal static class PackCommand
             }
             else if (arg is "-o" or "--output")
             {
-                if (i + 1 >= args.Count)
-                {
-                    error = $"option '{arg}' requires a file argument.";
-                    return false;
-                }
-
                 if (outputPath is not null)
                 {
                     error = "the output option may be specified only once.";
                     return false;
                 }
 
-                outputPath = args[++i];
+                if (!CliContract.TryReadOptionValue(args, ref i, arg, "a file argument", out outputPath, out error))
+                {
+                    return false;
+                }
             }
             else if (arg.StartsWith('-'))
             {

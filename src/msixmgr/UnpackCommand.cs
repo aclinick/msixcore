@@ -48,7 +48,7 @@ internal static class UnpackCommand
 
             return CliContract.ExitCodes.Success;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (CliContract.IsOperationalException(ex))
         {
             CliContract.WriteError(output, error, json, "msixmgr unpack", ex.Message, null, CliContract.ErrorCode(ex));
             return CliContract.ExitCodes.OperationalError;
@@ -76,13 +76,10 @@ internal static class UnpackCommand
             }
             else if (arg is "-Destination" or "-destination" or "--destination" or "-d")
             {
-                if (i + 1 >= args.Count)
+                if (!CliContract.TryReadOptionValue(args, ref i, arg, "a directory argument", out destination, out error))
                 {
-                    error = $"option '{arg}' requires a directory argument.";
                     return false;
                 }
-
-                destination = args[++i];
             }
             else if (arg.StartsWith('-'))
             {

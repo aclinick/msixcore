@@ -40,7 +40,7 @@ internal static class ValidateCommand
 
             return report.IsValid ? CliContract.ExitCodes.Success : CliContract.ExitCodes.NegativeVerdict;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (CliContract.IsOperationalException(ex))
         {
             CliContract.WriteError(output, error, json, "msixmgr validate", ex.Message, null, CliContract.ErrorCode(ex));
             return CliContract.ExitCodes.OperationalError;

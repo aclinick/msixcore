@@ -39,7 +39,7 @@ internal static class InspectCommand
 
             return CliContract.ExitCodes.Success;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (CliContract.IsOperationalException(ex))
         {
             CliContract.WriteError(output, error, json, "msixmgr inspect", ex.Message, null, CliContract.ErrorCode(ex));
             return CliContract.ExitCodes.OperationalError;

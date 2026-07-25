@@ -419,6 +419,71 @@ public class CliCommandTests : IDisposable
     }
 
     [Theory]
+    [InlineData("pack-output")]
+    [InlineData("unpack-destination")]
+    [InlineData("bundle-output")]
+    [InlineData("bundle-version")]
+    public void JsonOptionValues_DoNotSwallowRecognizedOptions(string scenario)
+    {
+        (string x64, _) = CreateBundlePackages();
+
+        (int code, string output, string error) = scenario switch
+        {
+            "pack-output" => RunPack("source", "-o", "--json"),
+            "unpack-destination" => RunUnpack("input.msix", "-Destination", "--json"),
+            "bundle-output" => RunBundle(x64, "-o", "--json"),
+            "bundle-version" => RunBundle(x64, "-o", "out.msixbundle", "--version", "--json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null),
+        };
+
+        Assert.Equal(2, code);
+        Assert.Empty(error);
+        AssertJsonError(output, "usage");
+    }
+
+    [Fact]
+    public void Bundle_OutOfRangeVersion_IsJsonUsageError()
+    {
+        (string x64, _) = CreateBundlePackages();
+
+        (int code, string output, string error) = RunBundle(
+            x64,
+            "-o",
+            "out.msixbundle",
+            "--version",
+            "65536.0.0.0",
+            "--json");
+
+        Assert.Equal(2, code);
+        Assert.Empty(error);
+        AssertJsonError(output, "usage");
+    }
+
+    [Theory]
+    [InlineData("pack")]
+    [InlineData("bundle")]
+    public void PackAndBundle_NotSupportedException_IsOperationalJsonError(string verb)
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var exception = new NotSupportedException("zip64 is not supported");
+
+        CliContract.WriteError(
+            output,
+            error,
+            json: true,
+            $"msixmgr {verb}",
+            exception.Message,
+            usage: null,
+            CliContract.ErrorCode(exception));
+
+        Assert.True(CliContract.IsOperationalException(exception));
+        Assert.Empty(error.ToString());
+        AssertJsonError(output.ToString(), "not_supported");
+        Assert.Equal(3, CliContract.ExitCodes.OperationalError);
+    }
+
+    [Theory]
     [InlineData("inspect", "not_found")]
     [InlineData("validate", "not_found")]
     [InlineData("unpack", "not_found")]
