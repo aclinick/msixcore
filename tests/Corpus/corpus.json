@@ -1,0 +1,1126 @@
+{
+    "meta":  {
+                 "generator":  "tests/Corpus/Build-Corpus.ps1",
+                 "publisher":  "CN=MsixCoreCorpus",
+                 "publisherHash":  "6y6ebj1t0vh9g",
+                 "makeappx":  "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\makeappx.exe",
+                 "generatedUtc":  "2026-07-25T00:55:51.1722146Z",
+                 "fixtureCount":  30
+             },
+    "fixtures":  [
+                     {
+                         "id":  "arch-x64",
+                         "features":  [
+                                          "architecture:x64"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/arch-x64",
+                         "packedFile":  "packed/arch-x64.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ArchX64_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ArchX64",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ArchX64_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ArchX64_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Arch x64",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "arch-x86",
+                         "features":  [
+                                          "architecture:x86"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/arch-x86",
+                         "packedFile":  "packed/arch-x86.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ArchX86_1.0.0.0_x86__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ArchX86",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X86",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ArchX86_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ArchX86_1.0.0.0_x86__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Arch x86",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "arch-arm64",
+                         "features":  [
+                                          "architecture:arm64"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/arch-arm64",
+                         "packedFile":  "packed/arch-arm64.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ArchArm64_1.0.0.0_arm64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ArchArm64",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "Arm64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ArchArm64_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ArchArm64_1.0.0.0_arm64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Arch arm64",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "arch-neutral",
+                         "features":  [
+                                          "architecture:neutral"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/arch-neutral",
+                         "packedFile":  "packed/arch-neutral.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ArchNeutral_1.0.0.0_neutral__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ArchNeutral",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "Neutral",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ArchNeutral_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ArchNeutral_1.0.0.0_neutral__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Arch neutral",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  0
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  5,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "cap-general",
+                         "features":  [
+                                          "capabilities:general",
+                                          "namespace:uap"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/cap-general",
+                         "packedFile":  "packed/cap-general.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.CapGeneral_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.CapGeneral",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.CapGeneral_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.CapGeneral_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus General Caps",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "internetClient",
+                                                               "privateNetworkClientServer",
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "cap-restricted",
+                         "features":  [
+                                          "capabilities:restricted",
+                                          "namespace:rescap"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/cap-restricted",
+                         "packedFile":  "packed/cap-restricted.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.CapRestricted_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.CapRestricted",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.CapRestricted_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.CapRestricted_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Restricted Caps",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust",
+                                                               "broadFileSystemAccess"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "cap-device",
+                         "features":  [
+                                          "capabilities:device"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/cap-device",
+                         "packedFile":  "packed/cap-device.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.CapDevice_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.CapDevice",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.CapDevice_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.CapDevice_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Device Caps",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust",
+                                                               "webcam",
+                                                               "microphone"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-fileassoc",
+                         "features":  [
+                                          "extension:fileTypeAssociation",
+                                          "namespace:uap"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-fileassoc",
+                         "packedFile":  "packed/ext-fileassoc.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtFileAssoc_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtFileAssoc",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtFileAssoc_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtFileAssoc_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus File Assoc",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-protocol",
+                         "features":  [
+                                          "extension:protocol",
+                                          "namespace:uap"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-protocol",
+                         "packedFile":  "packed/ext-protocol.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtProtocol_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtProtocol",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtProtocol_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtProtocol_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Protocol",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-execalias",
+                         "features":  [
+                                          "extension:appExecutionAlias",
+                                          "namespace:uap3",
+                                          "namespace:desktop"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-execalias",
+                         "packedFile":  "packed/ext-execalias.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtExecAlias_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtExecAlias",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtExecAlias_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtExecAlias_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Exec Alias",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-startuptask",
+                         "features":  [
+                                          "extension:startupTask",
+                                          "namespace:desktop"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-startuptask",
+                         "packedFile":  "packed/ext-startuptask.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtStartupTask_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtStartupTask",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtStartupTask_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtStartupTask_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Startup Task",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-com",
+                         "features":  [
+                                          "extension:comServer",
+                                          "namespace:com"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-com",
+                         "packedFile":  "packed/ext-com.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtCom_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtCom",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtCom_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtCom_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus COM Server",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-appservice",
+                         "features":  [
+                                          "extension:appService",
+                                          "namespace:uap"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-appservice",
+                         "packedFile":  "packed/ext-appservice.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtAppService_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtAppService",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtAppService_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtAppService_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus App Service",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-bgtask",
+                         "features":  [
+                                          "extension:backgroundTasks"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-bgtask",
+                         "packedFile":  "packed/ext-bgtask.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "failed",
+                                               "reason":  "Deployment failed with HRESULT: 0x80080204, The Appx package\u0027s manifest is invalid. error 0x80080204: App manifest validation error: Line 29, Column 12, Reason: If it is not an audio background task, it is not allowed to have EntryPoint=\"Corpus.BgTask\" without ActivatableClassId in windows.activatab"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtBgTask",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtBgTask_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtBgTask_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Background Task",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-sharetarget",
+                         "features":  [
+                                          "extension:shareTarget",
+                                          "namespace:uap"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-sharetarget",
+                         "packedFile":  "packed/ext-sharetarget.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtShareTarget_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtShareTarget",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtShareTarget_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtShareTarget_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Share Target",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "ext-contextmenu",
+                         "features":  [
+                                          "extension:fileExplorerContextMenus",
+                                          "namespace:desktop4",
+                                          "namespace:com"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/ext-contextmenu",
+                         "packedFile":  "packed/ext-contextmenu.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.ExtContextMenu_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.ExtContextMenu",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.ExtContextMenu_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.ExtContextMenu_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Context Menu",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "vfs-content",
+                         "features":  [
+                                          "vfs"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/vfs-content",
+                         "packedFile":  "packed/vfs-content.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.Vfs_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Vfs",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Vfs_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Vfs_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus VFS",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  9,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "kind-framework",
+                         "features":  [
+                                          "kind:framework"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/kind-framework",
+                         "packedFile":  "packed/kind-framework.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "expected-not-installable",
+                                               "reason":  "Framework packages cannot be registered via Add-AppxPackage -Register in DevelopmentMode; Windows installs them only as dependencies of apps. Windows: Deployment failed with HRESULT: 0x80073CF9, Install failed. Please contact your software vendor. Windows cannot register the package MsixCoreCorpus.Framework because the specified value from the DeploymentOptions enumeration is DevelopmentMode. DevelopmentMode is not allowed when registering framewo"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Framework",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "2.1.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Framework_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Framework_2.1.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Framework",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+
+                                                           ],
+                                          "isFramework":  true,
+                                          "applicationCount":  0
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  5,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "kind-optional",
+                         "features":  [
+                                          "kind:optional"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/kind-optional",
+                         "packedFile":  "packed/kind-optional.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "expected-not-installable",
+                                               "reason":  "Optional package requires its main package to be installed first. Windows: Deployment failed with HRESULT: 0x80073D12, A main app package is required to install this optional package. Install the main package first and try again. The optional package MsixCoreCorpus.Optional_1.0.0.0_x64__6y6ebj1t0vh9g can\u0027t be installed because its main package dependency MsixCoreCorpus.Arc"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Optional",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Optional_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Optional_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Optional",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  0
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  5,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "kind-modification",
+                         "features":  [
+                                          "kind:modification"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/kind-modification",
+                         "packedFile":  "packed/kind-modification.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "expected-not-installable",
+                                               "reason":  "Modification package requires its host (main) package to be installed first. Windows: Deployment failed with HRESULT: 0x80073D12, A main app package is required to install this optional package. Install the main package first and try again. The optional package MsixCoreCorpus.Modification_1.0.0.0_x64__6y6ebj1t0vh9g can\u0027t be installed because its main package dependency MsixCoreCorpus"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Modification",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Modification_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Modification_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Modification",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  0
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  5,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "kind-sparse",
+                         "features":  [
+                                          "kind:sparse",
+                                          "namespace:uap10"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/kind-sparse",
+                         "packedFile":  "packed/kind-sparse.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "expected-not-installable",
+                                               "reason":  "Sparse (external-content) package requires -ExternalLocation to register. Windows: Deployment failed with HRESULT: 0x80073CF9, Install failed. Please contact your software vendor. (Exception from HRESULT: 0x80073CF9) Windows cannot install package MsixCoreCorpus.Sparse_1.0.0.0_x64__6y6ebj1t0vh9g because it must be installed with an external location. NOTE: For additional informati"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Sparse",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Sparse_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Sparse_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Sparse",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "kind-resource",
+                         "features":  [
+                                          "kind:resource"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/kind-resource",
+                         "packedFile":  "packed/kind-resource.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.Resource_1.0.0.0_x64_en-US_6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Resource",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "en-US",
+                                          "packageFamilyName":  "MsixCoreCorpus.Resource_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Resource_1.0.0.0_x64_en-US_6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Resource",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  0
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  5,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "blockmap-empty",
+                         "features":  [
+                                          "blockmap:emptyFile"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/blockmap-empty",
+                         "packedFile":  "packed/blockmap-empty.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.BlockEmpty_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.BlockEmpty",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.BlockEmpty_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.BlockEmpty_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Empty File",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  7,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "blockmap-multiblock",
+                         "features":  [
+                                          "blockmap:multiBlock"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/blockmap-multiblock",
+                         "packedFile":  "packed/blockmap-multiblock.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.BlockMulti_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.BlockMulti",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.BlockMulti_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.BlockMulti_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Multi Block",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  7,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "blockmap-percentname",
+                         "features":  [
+                                          "blockmap:percentEncodedNames",
+                                          "issue:7"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/blockmap-percentname",
+                         "packedFile":  "packed/blockmap-percentname.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.BlockPercent_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.BlockPercent",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.BlockPercent_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.BlockPercent_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Percent Names",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  9,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  false,
+                         "packedKnownBug":  "#7",
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "blockmap-deepnested",
+                         "features":  [
+                                          "blockmap:deepNesting"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/blockmap-deepnested",
+                         "packedFile":  "packed/blockmap-deepnested.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.BlockDeep_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.BlockDeep",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.BlockDeep_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.BlockDeep_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Deep Nested",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  7,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "meta-multiapp",
+                         "features":  [
+                                          "metadata:multipleApplications"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/meta-multiapp",
+                         "packedFile":  "packed/meta-multiapp.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.MultiApp_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.MultiApp",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.MultiApp_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.MultiApp_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Multi App",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  2
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "meta-logos",
+                         "features":  [
+                                          "metadata:logosAndDescription"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/meta-logos",
+                         "packedFile":  "packed/meta-logos.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.Logos_3.2.1.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Logos",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "3.2.1.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Logos_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Logos_3.2.1.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Logos",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "signed-basic",
+                         "features":  [
+                                          "signing:signed"
+                                      ],
+                         "kind":  "package",
+                         "looseDir":  "fixtures/signed-basic",
+                         "packedFile":  "packed/signed-basic.msix",
+                         "expectedSupported":  true,
+                         "windowsOracle":  {
+                                               "verdict":  "installed",
+                                               "reason":  "Windows accepted the manifest; PackageFullName=MsixCoreCorpus.Signed_1.0.0.0_x64__6y6ebj1t0vh9g"
+                                           },
+                         "expected":  {
+                                          "name":  "MsixCoreCorpus.Signed",
+                                          "publisher":  "CN=MsixCoreCorpus",
+                                          "version":  "1.0.0.0",
+                                          "architecture":  "X64",
+                                          "resourceId":  "",
+                                          "packageFamilyName":  "MsixCoreCorpus.Signed_6y6ebj1t0vh9g",
+                                          "packageFullName":  "MsixCoreCorpus.Signed_1.0.0.0_x64__6y6ebj1t0vh9g",
+                                          "displayName":  "Corpus Signed",
+                                          "publisherDisplayName":  "MSIX Core Corpus",
+                                          "capabilities":  [
+                                                               "runFullTrust"
+                                                           ],
+                                          "isFramework":  false,
+                                          "applicationCount":  1
+                                      },
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  true,
+                         "blockMapFileCount":  6,
+                         "blockMapValidLoose":  true,
+                         "blockMapValidPacked":  true,
+                         "packedKnownBug":  null,
+                         "notes":  ""
+                     },
+                     {
+                         "id":  "bundle-multiarch",
+                         "features":  [
+                                          "bundle:multiArch"
+                                      ],
+                         "kind":  "bundle",
+                         "looseDir":  null,
+                         "packedFile":  "packed/bundle-multiarch.msixbundle",
+                         "expectedSupported":  false,
+                         "windowsOracle":  {
+                                               "verdict":  "not-attempted",
+                                               "reason":  "Bundle install requires signing; library bundle applicability not yet implemented."
+                                           },
+                         "expected":  null,
+                         "isSignedLoose":  false,
+                         "isSignedPacked":  false,
+                         "blockMapFileCount":  null,
+                         "blockMapValidLoose":  null,
+                         "blockMapValidPacked":  null,
+                         "packedKnownBug":  null,
+                         "notes":  "Bundle applicability is not implemented in the reader; opening its manifest as an app manifest throws InvalidDataException (documented current behavior)."
+                     }
+                 ]
+}

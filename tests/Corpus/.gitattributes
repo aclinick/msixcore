@@ -1,0 +1,5 @@
+# The loose AppxBlockMap.xml hashes are computed over the exact on-disk bytes of
+# each fixture file. Disable EOL normalization so block-map verification stays
+# valid on every checkout regardless of the client's core.autocrlf setting.
+fixtures/** -text
+packed/** -text
