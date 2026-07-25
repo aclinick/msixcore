@@ -65,6 +65,13 @@ internal static class BlockMapWriter
             long uncompressedSize = 0;
             long compressedSize = 0;
 
+            // Write compressed output directly to the destination through a gated passthrough
+            // stream.  The gate blocks writes during DeflateStream.Dispose() so the deflate
+            // finalization marker does not reach the output — MSIX blocks are sync-flushed,
+            // not finalized.  This eliminates the per-block MemoryStream, ToArray(), and
+            // buffer-to-destination copy that were the dominant allocation sources.
+            var gate = new GatedCountingStream(destination);
+
             while (true)
             {
                 int length = ReadBlock(source, buffer);
@@ -75,15 +82,17 @@ internal static class BlockMapWriter
 
                 ReadOnlySpan<byte> block = buffer.AsSpan(0, length);
                 crc32.Append(block);
-                byte[] compressed = CompressBlock(block, compressionLevel);
-                destination.Write(compressed);
+
+                gate.Reset();
+                int compressedLength = CompressBlockDirect(block, compressionLevel, gate);
+
                 blocks.Add(new BlockMapBlock
                 {
                     Hash = HashToBase64(block),
-                    CompressedSize = compressed.Length,
+                    CompressedSize = compressedLength,
                 });
                 uncompressedSize += length;
-                compressedSize += compressed.Length;
+                compressedSize += compressedLength;
             }
 
             // MakeAppx terminates the single ZIP deflate stream after its independently restartable,
@@ -168,16 +177,27 @@ internal static class BlockMapWriter
         return filled;
     }
 
-    private static byte[] CompressBlock(ReadOnlySpan<byte> block, CompressionLevel compressionLevel)
+    /// <summary>
+    /// Compresses a single block directly to <paramref name="gate"/>, which wraps the real
+    /// destination.  Returns the compressed byte count.  The gate is closed before
+    /// <see cref="DeflateStream.Dispose"/> so the deflate finalization marker is swallowed
+    /// — MSIX blocks use sync-flush, not stream finalization.
+    /// </summary>
+    private static int CompressBlockDirect(
+        ReadOnlySpan<byte> block,
+        CompressionLevel compressionLevel,
+        GatedCountingStream gate)
     {
-        using var output = new MemoryStream();
         CompressionLevel effectiveLevel = compressionLevel == CompressionLevel.Optimal
             ? CompressionLevel.SmallestSize
             : compressionLevel;
-        using var compressor = new DeflateStream(output, effectiveLevel, leaveOpen: true);
+        var compressor = new DeflateStream(gate, effectiveLevel, leaveOpen: true);
         compressor.Write(block);
         compressor.Flush();
-        return output.ToArray();
+        int compressedLength = gate.BytesWritten;
+        gate.Close();
+        compressor.Dispose();
+        return compressedLength;
     }
 
     private static string HashToBase64(ReadOnlySpan<byte> block)
@@ -202,3 +222,84 @@ internal sealed record CompressedBlockMapFile(
     uint Crc32,
     long CompressedSize,
     long UncompressedSize);
+
+/// <summary>
+/// Write-only passthrough stream that counts bytes written to an inner stream and can be
+/// "closed" (gated) so that subsequent writes are silently discarded.  Used to let
+/// <see cref="DeflateStream"/> write compressed data directly to the destination while
+/// blocking the finalization bytes that <see cref="DeflateStream.Dispose"/> emits.
+/// Reusable across blocks via <see cref="Reset"/>.
+/// </summary>
+internal sealed class GatedCountingStream : Stream
+{
+    private readonly Stream _inner;
+    private int _bytesWritten;
+    private bool _open = true;
+
+    public GatedCountingStream(Stream inner)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+        _inner = inner;
+    }
+
+    public int BytesWritten => _bytesWritten;
+
+    /// <summary>Resets the byte counter and re-opens the gate for the next block.</summary>
+    public void Reset()
+    {
+        _bytesWritten = 0;
+        _open = true;
+    }
+
+    /// <summary>Closes the gate so that subsequent writes are discarded.</summary>
+    public new void Close() => _open = false;
+
+    public override void Write(ReadOnlySpan<byte> buffer)
+    {
+        if (!_open)
+        {
+            return;
+        }
+
+        _inner.Write(buffer);
+        _bytesWritten += buffer.Length;
+    }
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        Write(buffer.AsSpan(offset, count));
+    }
+
+    public override void WriteByte(byte value)
+    {
+        if (!_open)
+        {
+            return;
+        }
+
+        _inner.WriteByte(value);
+        _bytesWritten++;
+    }
+
+    public override void Flush()
+    {
+        // Intentionally a no-op.  DeflateStream.Flush() calls _stream.Flush() after
+        // flushing the deflate engine.  The real destination stream is flushed externally
+        // by the caller (StoredZipWriter.Dispose).  Suppressing per-block file flushes
+        // avoids a measurable wall-clock penalty.
+    }
+
+    public override bool CanRead => false;
+    public override bool CanSeek => false;
+    public override bool CanWrite => true;
+    public override long Length => throw new NotSupportedException();
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+}
