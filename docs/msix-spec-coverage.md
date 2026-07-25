@@ -5,9 +5,10 @@ Microsoft MSIX Core supports **today**, versus what "modern MSIX" defines. It is
 the implementation under `src/` at the current tip of `main` and cross-referencing the official
 MSIX/APPX format and manifest-schema documentation.
 
-- **Scope of the port** (per `README.md`): a cross-platform reader/validator (`MsixCore.Packaging`),
-  a deployment/query layer (`MsixCore.Deployment`), and the `msixmgr` CLI. It re-imagines the
-  original C++ MSIX Core downlevel installer as a memory-safe, cross-platform library.
+- **Scope of the port** (per `README.md`): a cross-platform reader/validator and unsigned
+  authoring layer (`MsixCore.Packaging`), a deployment/query layer (`MsixCore.Deployment`),
+  and the `msixmgr` CLI. Signature production is an explicit non-goal: packages are packed
+  unsigned, signed by external SignTool/CI signing services, then validated here.
 - **Verification method**: every "Supported" claim below points at the concrete file that implements
   it. Where a feature is only partially present, the gap is called out. Nothing is marked supported
   on the strength of a type/interface stub alone (those are marked *partial* or *no*).
@@ -134,6 +135,14 @@ Reference: [MSIX overview – AppxBlockMap.xml](https://learn.microsoft.com/en-u
 
 Reader `MsixCore.Packaging/Integrity/PackageSignatureReader.cs`; model `PackageSignature.cs`.
 Reference: [Sign an MSIX package](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview).
+
+MSIX Core's signature scope is read/verify only. Signature production is an intentional
+non-goal delegated to Windows SignTool/signcode and CI/CD signing services (for example,
+Azure Trusted Signing / Artifact Signing, DigiCert KeyLocker, SSL.com eSigner, and
+SignPath). The expected toolchain is pack here, sign externally, then validate here. Rows marked **no** for APPX
+indirect-data binding, trust-chain evaluation, timestamp validation, and multiple signers
+reflect this read-only, delegate-trust-to-platform stance, not a promise to implement
+signing or platform trust policy.
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |

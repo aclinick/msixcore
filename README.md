@@ -15,14 +15,33 @@ as a modern, memory-safe, **cross-platform** library and CLI.
   `System.IO.Compression`, `System.Xml`, and `System.Security.Cryptography` — no
   Windows-only APIs — so it runs on Linux, macOS, and Windows alike.
 - **Linux CI validation.** `msixmgr validate` verifies block-map integrity and
-  signature-envelope integrity and returns a CI-friendly exit code, so a Linux
-  build agent can gate MSIX packages before they ship.
+  signature-envelope integrity (an integrity verdict, not an authenticity
+  verdict) and returns a CI-friendly exit code, so a Linux build agent can gate
+  MSIX packages before they ship.
 - **Loose (unpacked) registration.** Every reader and the deployment query
   surface work equally on a `.msix`/`.appx` container **or** an unpacked
   directory, enabling loose-layout inspection and registration.
 - **Idiomatic .NET.** The native `IPackage` / `IPackageManager` / `IMsixResponse`
   interfaces are reshaped to properties, exceptions, `Task`-based async, and
   records instead of `HRESULT`s and raw pointers.
+
+## Scope & non-goals
+
+MSIX Core's intended signing pipeline is: **pack** (MSIX Core, cross-platform,
+deterministic, unsigned output) -> **sign** (Windows job, external SignTool or CI
+signing service) -> **validate** (MSIX Core, cross-platform integrity gate).
+
+- **Code signing / signature production is a non-goal.** MSIX Core does not
+  produce signatures and will not implement cross-platform CMS/AX* signature
+  production. Signing is intentionally delegated to Windows SignTool/signcode and
+  CI/CD signing services such as Azure Trusted Signing / Artifact Signing,
+  DigiCert KeyLocker, SSL.com eSigner, and SignPath.
+- **Certificate trust-chain and revocation evaluation are non-goals.** Trust is
+  environment- and policy-dependent, so chain, root, and revocation decisions are
+  delegated to the platform/signing environment.
+- **Windows OS integration is a later phase, not a signing feature.** Shortcuts,
+  registry entries, and file-type/protocol associations remain guarded,
+  platform-specific deployment work.
 
 ## Components
 
@@ -50,11 +69,12 @@ with full test coverage (currently 370 passing tests). The reader
 (transactional add/remove driving `IMsixResponse`, cross-platform extraction,
 and query), package/bundle authoring, and the `unpack`/`pack`/`bundle` CLI verbs are
 implemented; Windows OS-integration handlers (shortcuts, registry,
-associations) are guarded and land in a later phase. Authoring produces
-unsigned `.msix` packages with deterministic Stored output by default and
-opt-in MakeAppx-compatible 64 KiB block DEFLATE compression. It also produces
-deterministic `.msixbundle`/`.appxbundle` containers from completed packages;
-integrated signing remains a separate/future capability.
+associations) are guarded and land in a later phase. Authoring intentionally
+produces unsigned `.msix` packages with deterministic Stored output by default
+and opt-in MakeAppx-compatible 64 KiB block DEFLATE compression. It also
+produces deterministic `.msixbundle`/`.appxbundle` containers from completed
+packages; signing is explicitly out of scope and delegated to SignTool/signcode
+or CI/CD code-signing services.
 
 ## Requirements
 
@@ -110,6 +130,10 @@ INTEGRITY OK      Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 $ echo $?
 0
 ```
+
+`validate` is an integrity gate, not an authenticity guarantee: a valid CMS
+envelope only proves the signature envelope is internally consistent; MSIX Core
+does not verify APPX indirect-data binding or certificate trust chains.
 
 A tampered payload fails the block-map check and returns exit code `1`:
 

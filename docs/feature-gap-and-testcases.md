@@ -36,13 +36,13 @@ Ref: [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/m
 
 **Test cases:**
 - **TC-P0-1a (negative binding):** Take a validly signed package; swap `AppxBlockMap.xml` for a
-  different (self-consistent) block map without re-signing. Assert a future `VerifySignatureBinding`
-  reports **AXBM mismatch** (today: CMS integrity still passes — document as a known false pass).
+  different (self-consistent) block map without re-signing. Assert `validate` continues to warn that
+  APPX indirect-data binding is not verified and the result is not an authenticity guarantee.
 - **TC-P0-1b (tampered payload):** Modify one payload file and regenerate its block-map hash but not
-  the signature. Assert binding verification fails on `AXBM`.
-- **TC-P0-1c (happy path):** A correctly signed package asserts all indirect-data digests match.
-- **TC-P0-1d (regression guard):** Assert `ValidationReport.SignatureBindingVerified == false` today
-  so the "not an authenticity guarantee" contract is locked until binding lands.
+  the signature. Assert the CMS envelope can still be internally consistent while binding remains
+  explicitly unverified.
+- **TC-P0-1c (contract guard):** Assert `ValidationReport.SignatureBindingVerified == false` so the
+  read-only signature scope stays visible unless a separate scope decision changes it.
 
 ### P0-2. Publisher/subject DN comparison — RESOLVED ([#12](https://github.com/aclinick/msixcore/issues/12))
 **Was:** `MatchesPublisher` re-encoded the manifest string and byte-compared DER, so a certificate
