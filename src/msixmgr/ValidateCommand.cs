@@ -81,6 +81,7 @@ internal static class ValidateCommand
     private static ValidationReport Validate(MsixPackage package)
     {
         var errors = new List<string>();
+        var warnings = new List<string>();
 
         BlockMapVerificationResult blockMap = package.VerifyBlockMap();
         foreach (BlockMapFileResult file in blockMap.Files)
@@ -117,7 +118,15 @@ internal static class ValidateCommand
                 {
                     errors.Add("signature: signer subject does not match manifest Publisher.");
                 }
+
+                // Be explicit that a passing signature check here does NOT prove authenticity: we do
+                // not yet verify the APPX indirect-data digest binding or the certificate trust chain.
+                warnings.Add("signature binding (APPX indirect-data digests) and certificate trust are NOT verified; this is not an authenticity guarantee.");
             }
+        }
+        else
+        {
+            warnings.Add("package is unsigned; integrity is self-asserted by its own block map only.");
         }
 
         return new ValidationReport
@@ -128,22 +137,33 @@ internal static class ValidateCommand
             VerifiedFileCount = blockMap.Files.Count,
             IsSigned = signed,
             CmsIntegrityValid = cmsValid,
+            SignatureBindingVerified = signed ? false : null,
+            SignatureTrustVerified = signed ? false : null,
             Errors = errors,
+            Warnings = warnings,
         };
     }
 
     private static void WriteText(ValidationReport r, TextWriter o)
     {
-        o.WriteLine(r.IsValid ? $"VALID    {r.PackageFullName}" : $"INVALID  {r.PackageFullName}");
+        // The verdict is scoped to integrity, not authenticity — say so plainly.
+        o.WriteLine(r.IsValid ? $"INTEGRITY OK      {r.PackageFullName}" : $"INTEGRITY FAILED  {r.PackageFullName}");
         string fileCount = r.VerifiedFileCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
         o.WriteLine($"  Block map : {(r.BlockMapValid ? "ok" : "FAILED")} ({fileCount} files)");
         string signature = !r.IsSigned
             ? "unsigned"
-            : r.CmsIntegrityValid == true ? "CMS integrity ok" : "CMS integrity FAILED";
+            : r.CmsIntegrityValid == true
+                ? "CMS envelope ok (binding + trust NOT verified)"
+                : "CMS envelope FAILED";
         o.WriteLine($"  Signature : {signature}");
         foreach (string err in r.Errors)
         {
-            o.WriteLine($"  - {err}");
+            o.WriteLine($"  error: {err}");
+        }
+
+        foreach (string warn in r.Warnings)
+        {
+            o.WriteLine($"  note:  {warn}");
         }
     }
 }

@@ -93,8 +93,9 @@ public class CliCommandTests : IDisposable
         (int code, string output, _) = RunValidate(dir);
 
         Assert.Equal(0, code);
-        Assert.Contains("VALID", output);
+        Assert.Contains("INTEGRITY OK", output);
         Assert.Contains("Block map : ok", output);
+        Assert.Contains("note:", output);
     }
 
     [Fact]
@@ -106,7 +107,7 @@ public class CliCommandTests : IDisposable
         (int code, string output, _) = RunValidate(dir);
 
         Assert.Equal(1, code);
-        Assert.Contains("INVALID", output);
+        Assert.Contains("INTEGRITY FAILED", output);
     }
 
     [Fact]
