@@ -11,6 +11,7 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/MsixCore.CorpusRoundtrip/MsixCore.CorpusRoundtrip.csproj" />
+    <Project Path="tools/MsixCore.OSAcceptance/MsixCore.OSAcceptance.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MsixCore.Deployment.Tests/MsixCore.Deployment.Tests.csproj" />
