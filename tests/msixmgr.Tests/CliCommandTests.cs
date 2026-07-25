@@ -77,16 +77,18 @@ public class CliCommandTests : IDisposable
         (int code, string output, _) = RunInspect(dir, "--json");
 
         Assert.Equal(0, code);
+        using JsonDocument document = JsonDocument.Parse(output);
+        Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Contains("\"Name\": \"Contoso.MyApp\"", output);
         Assert.Contains("\"PackageFamilyName\"", output);
     }
 
     [Fact]
-    public void Inspect_MissingPath_ReturnsUsageError()
+    public void Inspect_MissingPath_ReturnsOperationalError()
     {
         (int code, _, string err) = RunInspect(Path.Combine(_root, "nope"));
 
-        Assert.Equal(1, code);
+        Assert.Equal(3, code);
         Assert.Contains("msixmgr inspect", err);
     }
 
@@ -136,6 +138,8 @@ public class CliCommandTests : IDisposable
         (int code, string output, _) = RunValidate(dir, "--json");
 
         Assert.Equal(0, code);
+        using JsonDocument document = JsonDocument.Parse(output);
+        Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Contains("\"IsValid\": true", output);
         Assert.Contains("\"BlockMapValid\": true", output);
     }
@@ -175,6 +179,8 @@ public class CliCommandTests : IDisposable
         (int code, string output, _) = RunUnpack(dir, "-Destination", dest, "--json");
 
         Assert.Equal(0, code);
+        using JsonDocument document = JsonDocument.Parse(output);
+        Assert.Equal(1, document.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Contains("\"ExtractedPartCount\"", output);
         Assert.Contains("\"Destination\"", output);
     }
@@ -230,6 +236,7 @@ public class CliCommandTests : IDisposable
         Assert.Equal(0, code);
         using JsonDocument document = JsonDocument.Parse(output);
         JsonElement root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(Path.GetFullPath(outputPath), root.GetProperty("OutputPath").GetString());
         Assert.Equal("Contoso.MyApp", root.GetProperty("Name").GetString());
         Assert.Equal("1.2.3.4", root.GetProperty("Version").GetString());
@@ -279,7 +286,7 @@ public class CliCommandTests : IDisposable
 
         (int code, _, string error) = RunPack(source, "-o", outputPath);
 
-        Assert.Equal(1, code);
+        Assert.Equal(3, code);
         Assert.Contains("AppxManifest.xml", error);
         Assert.False(File.Exists(outputPath));
     }
@@ -308,7 +315,7 @@ public class CliCommandTests : IDisposable
         (int withoutOverwrite, _, string error) = RunPack(source, "-o", outputPath);
         (int withOverwrite, _, _) = RunPack(source, "-o", outputPath, "--overwrite");
 
-        Assert.Equal(1, withoutOverwrite);
+        Assert.Equal(3, withoutOverwrite);
         Assert.Contains("already exists", error);
         Assert.Equal(0, withOverwrite);
     }
@@ -366,9 +373,11 @@ public class CliCommandTests : IDisposable
         Assert.Equal(0, code);
         Assert.Empty(error);
         using JsonDocument document = JsonDocument.Parse(output);
-        Assert.Equal(2, document.RootElement.GetProperty("PackageCount").GetInt32());
-        Assert.Equal(2, document.RootElement.GetProperty("Packages").GetArrayLength());
-        Assert.Equal("application", document.RootElement.GetProperty("Packages")[0].GetProperty("Type").GetString());
+        JsonElement root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(2, root.GetProperty("PackageCount").GetInt32());
+        Assert.Equal(2, root.GetProperty("Packages").GetArrayLength());
+        Assert.Equal("application", root.GetProperty("Packages")[0].GetProperty("Type").GetString());
     }
 
     [Theory]
@@ -384,6 +393,188 @@ public class CliCommandTests : IDisposable
 
         Assert.Equal(2, code);
         Assert.Contains("Usage: msixmgr bundle", error);
+    }
+
+    [Theory]
+    [InlineData("inspect")]
+    [InlineData("validate")]
+    [InlineData("unpack")]
+    [InlineData("pack")]
+    [InlineData("bundle")]
+    public void JsonUsageErrors_EmitErrorReportOnStdout(string verb)
+    {
+        (int code, string output, string error) = verb switch
+        {
+            "inspect" => RunInspect("--bogus", "--json"),
+            "validate" => RunValidate("--bogus", "--json"),
+            "unpack" => RunUnpack("--bogus", "--json"),
+            "pack" => RunPack("--bogus", "--json"),
+            "bundle" => RunBundle("--bogus", "--json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(verb), verb, null),
+        };
+
+        Assert.Equal(2, code);
+        Assert.Empty(error);
+        AssertJsonError(output, "usage");
+    }
+
+    [Theory]
+    [InlineData("pack-output")]
+    [InlineData("unpack-destination")]
+    [InlineData("bundle-output")]
+    [InlineData("bundle-version")]
+    public void JsonOptionValues_DoNotSwallowRecognizedOptions(string scenario)
+    {
+        (string x64, _) = CreateBundlePackages();
+
+        (int code, string output, string error) = scenario switch
+        {
+            "pack-output" => RunPack("source", "-o", "--json"),
+            "unpack-destination" => RunUnpack("input.msix", "-Destination", "--json"),
+            "bundle-output" => RunBundle(x64, "-o", "--json"),
+            "bundle-version" => RunBundle(x64, "-o", "out.msixbundle", "--version", "--json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null),
+        };
+
+        Assert.Equal(2, code);
+        Assert.Empty(error);
+        AssertJsonError(output, "usage");
+    }
+
+    [Fact]
+    public void Bundle_OutOfRangeVersion_IsJsonUsageError()
+    {
+        (string x64, _) = CreateBundlePackages();
+
+        (int code, string output, string error) = RunBundle(
+            x64,
+            "-o",
+            "out.msixbundle",
+            "--version",
+            "65536.0.0.0",
+            "--json");
+
+        Assert.Equal(2, code);
+        Assert.Empty(error);
+        AssertJsonError(output, "usage");
+    }
+
+    [Theory]
+    [InlineData("pack")]
+    [InlineData("bundle")]
+    public void PackAndBundle_NotSupportedException_IsOperationalJsonError(string verb)
+    {
+        Func<string, string, MsixCore.Packaging.Authoring.PackOptions?, MsixCore.Packaging.Authoring.PackResult> originalPack
+            = PackCommand.BuildPackage;
+        Func<IEnumerable<string>, string, MsixCore.Packaging.Authoring.BundleOptions?, MsixCore.Packaging.Authoring.BundleResult> originalBundle
+            = BundleCommand.BuildBundle;
+        try
+        {
+            PackCommand.BuildPackage = (_, _, _) => throw new NotSupportedException("zip64 is not supported");
+            BundleCommand.BuildBundle = (_, _, _) => throw new NotSupportedException("zip64 is not supported");
+
+            (int code, string output, string error) = verb switch
+            {
+                "pack" => RunPack("source", "-o", "out.msix", "--json"),
+                "bundle" => RunBundle("input.msix", "-o", "out.msixbundle", "--json"),
+                _ => throw new ArgumentOutOfRangeException(nameof(verb), verb, null),
+            };
+
+            Assert.Equal(3, code);
+            Assert.Empty(error);
+            AssertJsonError(output, "not_supported");
+        }
+        finally
+        {
+            PackCommand.BuildPackage = originalPack;
+            BundleCommand.BuildBundle = originalBundle;
+        }
+    }
+
+    [Theory]
+    [InlineData("inspect", "not_found")]
+    [InlineData("validate", "not_found")]
+    [InlineData("unpack", "not_found")]
+    [InlineData("pack", "invalid_data")]
+    [InlineData("bundle", "invalid_data")]
+    public void JsonOperationalErrors_EmitErrorReportOnStdout(string verb, string expectedCode)
+    {
+        string missingPath = Path.Combine(_root, "missing.msix");
+        string source = Path.Combine(_root, "pack-no-manifest-json");
+        Directory.CreateDirectory(source);
+        string child = Path.Combine(_root, "child.txt");
+        File.WriteAllText(child, "not a package");
+
+        (int code, string output, string error) = verb switch
+        {
+            "inspect" => RunInspect(missingPath, "--json"),
+            "validate" => RunValidate(missingPath, "--json"),
+            "unpack" => RunUnpack(missingPath, "-Destination", Path.Combine(_root, "unpack-json-error"), "--json"),
+            "pack" => RunPack(source, "-o", Path.Combine(_root, "out.msix"), "--json"),
+            "bundle" => RunBundle(child, "-o", Path.Combine(_root, "out.msixbundle"), "--json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(verb), verb, null),
+        };
+
+        Assert.Equal(3, code);
+        Assert.Empty(error);
+        AssertJsonError(output, expectedCode);
+    }
+
+    [Fact]
+    public void ExitCodeMatrix_UsesContractCodes()
+    {
+        string valid = LooseCliPackage.Create(_root, "exit-valid");
+        string invalid = LooseCliPackage.Create(_root, "exit-invalid");
+        LooseCliPackage.CorruptBlockMap(invalid);
+        string missing = Path.Combine(_root, "does-not-exist.msix");
+
+        Assert.Equal(0, RunValidate(valid).Code);
+        Assert.Equal(1, RunValidate(invalid).Code);
+        Assert.Equal(2, RunValidate("--bogus").Code);
+        Assert.Equal(3, RunValidate(missing).Code);
+    }
+
+    [Theory]
+    [InlineData("inspect")]
+    [InlineData("validate")]
+    [InlineData("unpack")]
+    [InlineData("pack")]
+    [InlineData("bundle")]
+    public void HumanErrors_WritePlainTextToStderrAndUseContractCodes(string verb)
+    {
+        string missingPath = Path.Combine(_root, "missing.msix");
+        string source = Path.Combine(_root, "pack-no-manifest-human");
+        Directory.CreateDirectory(source);
+        string child = Path.Combine(_root, "child-human.txt");
+        File.WriteAllText(child, "not a package");
+
+        (int usageCode, string usageOutput, string usageError) = verb switch
+        {
+            "inspect" => RunInspect("--bogus"),
+            "validate" => RunValidate("--bogus"),
+            "unpack" => RunUnpack("--bogus"),
+            "pack" => RunPack("--bogus"),
+            "bundle" => RunBundle("--bogus"),
+            _ => throw new ArgumentOutOfRangeException(nameof(verb), verb, null),
+        };
+        (int operationalCode, string operationalOutput, string operationalError) = verb switch
+        {
+            "inspect" => RunInspect(missingPath),
+            "validate" => RunValidate(missingPath),
+            "unpack" => RunUnpack(missingPath, "-Destination", Path.Combine(_root, "unpack-human-error")),
+            "pack" => RunPack(source, "-o", Path.Combine(_root, "human.msix")),
+            "bundle" => RunBundle(child, "-o", Path.Combine(_root, "human.msixbundle")),
+            _ => throw new ArgumentOutOfRangeException(nameof(verb), verb, null),
+        };
+
+        Assert.Equal(2, usageCode);
+        Assert.Empty(usageOutput);
+        Assert.Contains($"Usage: msixmgr {verb}", usageError);
+        Assert.Equal(3, operationalCode);
+        Assert.Empty(operationalOutput);
+        Assert.Contains($"msixmgr {verb}:", operationalError);
+        Assert.DoesNotContain("\"schemaVersion\"", usageError);
+        Assert.DoesNotContain("\"schemaVersion\"", operationalError);
     }
 
     [Fact]
@@ -437,6 +628,15 @@ public class CliCommandTests : IDisposable
     {
         int code = Program.Main(["--version"]);
         Assert.Equal(0, code);
+    }
+
+    private static void AssertJsonError(string output, string expectedCode)
+    {
+        using JsonDocument document = JsonDocument.Parse(output);
+        JsonElement root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(expectedCode, root.GetProperty("code").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("message").GetString()));
     }
 
     private (string X64, string Arm64) CreateBundlePackages()

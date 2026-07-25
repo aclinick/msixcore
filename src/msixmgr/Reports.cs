@@ -5,6 +5,9 @@ namespace MsixMgr;
 /// <summary>Machine-readable result of the <c>inspect</c> verb.</summary>
 internal sealed record InspectionReport
 {
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; init; } = CliContract.SchemaVersion;
+
     public required string Name { get; init; }
 
     public required string PackageFullName { get; init; }
@@ -31,6 +34,9 @@ internal sealed record InspectionReport
 /// <summary>Machine-readable result of the <c>validate</c> verb.</summary>
 internal sealed record ValidationReport
 {
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; init; } = CliContract.SchemaVersion;
+
     public required string PackageFullName { get; init; }
 
     /// <summary>
@@ -69,6 +75,9 @@ internal sealed record ValidationReport
 /// <summary>Machine-readable result of the <c>unpack</c> verb.</summary>
 internal sealed record UnpackReport
 {
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; init; } = CliContract.SchemaVersion;
+
     public required string Destination { get; init; }
 
     public required int ExtractedPartCount { get; init; }
@@ -77,6 +86,9 @@ internal sealed record UnpackReport
 /// <summary>Machine-readable result of the <c>pack</c> verb.</summary>
 internal sealed record PackReport
 {
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; init; } = CliContract.SchemaVersion;
+
     public required string OutputPath { get; init; }
 
     public required string Name { get; init; }
@@ -101,6 +113,9 @@ internal sealed record PackReport
 /// <summary>Machine-readable result of the <c>bundle</c> verb.</summary>
 internal sealed record BundleReport
 {
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; init; } = CliContract.SchemaVersion;
+
     public required string OutputPath { get; init; }
 
     public required string Name { get; init; }
@@ -138,6 +153,19 @@ internal sealed record BundlePackageReport
     public required long Size { get; init; }
 }
 
+/// <summary>Machine-readable error result emitted under <c>--json</c>.</summary>
+internal sealed record ErrorReport
+{
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; init; } = CliContract.SchemaVersion;
+
+    [JsonPropertyName("code")]
+    public required string Code { get; init; }
+
+    [JsonPropertyName("message")]
+    public required string Message { get; init; }
+}
+
 /// <summary>Source-generated JSON metadata for CLI reports.</summary>
 [JsonSourceGenerationOptions(
     WriteIndented = true,
@@ -147,6 +175,7 @@ internal sealed record BundlePackageReport
 [JsonSerializable(typeof(UnpackReport))]
 [JsonSerializable(typeof(PackReport))]
 [JsonSerializable(typeof(BundleReport))]
+[JsonSerializable(typeof(ErrorReport))]
 internal sealed partial class ReportJsonContext : JsonSerializerContext
 {
 }

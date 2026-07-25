@@ -14,9 +14,14 @@ internal static class InspectCommand
     {
         if (!TryParse(args, out string? path, out bool json, out string? parseError))
         {
-            error.WriteLine($"msixmgr inspect: {parseError}");
-            error.WriteLine("Usage: msixmgr inspect <package-file-or-directory> [--json]");
-            return 2;
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr inspect",
+                parseError!,
+                "Usage: msixmgr inspect <package-file-or-directory> [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
@@ -32,12 +37,12 @@ internal static class InspectCommand
                 WriteText(report, output);
             }
 
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception ex) when (CliContract.IsOperationalException(ex))
         {
-            error.WriteLine($"msixmgr inspect: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr inspect", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 

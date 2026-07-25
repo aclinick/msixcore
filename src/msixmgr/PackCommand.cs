@@ -9,6 +9,8 @@ namespace MsixMgr;
 /// <summary><c>pack</c> verb: builds an unsigned MSIX package from a source directory.</summary>
 internal static class PackCommand
 {
+    internal static Func<string, string, PackOptions?, PackResult> BuildPackage { get; set; } = MsixPackageBuilder.Build;
+
     public static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter error)
     {
         if (!TryParse(
@@ -20,14 +22,19 @@ internal static class PackCommand
             out bool json,
             out string? parseError))
         {
-            error.WriteLine($"msixmgr pack: {parseError}");
-            error.WriteLine("Usage: msixmgr pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]");
-            return 2;
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr pack",
+                parseError!,
+                "Usage: msixmgr pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
         {
-            PackResult result = MsixPackageBuilder.Build(
+            PackResult result = BuildPackage(
                 sourceDirectory!,
                 outputPath!,
                 new PackOptions
@@ -49,13 +56,13 @@ internal static class PackCommand
                 output.WriteLine($"Identity: {result.Identity.PackageFullName}");
             }
 
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
         catch (Exception ex) when (
-            ex is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
+            CliContract.IsOperationalException(ex) || ex is ArgumentException)
         {
-            error.WriteLine($"msixmgr pack: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr pack", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 
@@ -92,19 +99,16 @@ internal static class PackCommand
             }
             else if (arg is "-o" or "--output")
             {
-                if (i + 1 >= args.Count)
-                {
-                    error = $"option '{arg}' requires a file argument.";
-                    return false;
-                }
-
                 if (outputPath is not null)
                 {
                     error = "the output option may be specified only once.";
                     return false;
                 }
 
-                outputPath = args[++i];
+                if (!CliContract.TryReadOptionValue(args, ref i, arg, "a file argument", out outputPath, out error))
+                {
+                    return false;
+                }
             }
             else if (arg.StartsWith('-'))
             {

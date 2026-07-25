@@ -9,6 +9,8 @@ namespace MsixMgr;
 /// <summary><c>bundle</c> verb: builds an unsigned bundle from MSIX/APPX packages.</summary>
 internal static class BundleCommand
 {
+    internal static Func<IEnumerable<string>, string, BundleOptions?, BundleResult> BuildBundle { get; set; } = MsixBundleBuilder.Build;
+
     public static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter error)
     {
         if (!TryParse(
@@ -20,16 +22,20 @@ internal static class BundleCommand
             out bool json,
             out string? parseError))
         {
-            error.WriteLine($"msixmgr bundle: {parseError}");
-            error.WriteLine(
+            CliContract.WriteError(
+                output,
+                error,
+                json || CliContract.HasJsonFlag(args),
+                "msixmgr bundle",
+                parseError!,
                 "Usage: msixmgr bundle <package.msix>... -o|--output <file.msixbundle> "
-                + "[--version <a.b.c.d>] [--overwrite] [--json]");
-            return 2;
+                    + "[--version <a.b.c.d>] [--overwrite] [--json]");
+            return CliContract.ExitCodes.Usage;
         }
 
         try
         {
-            BundleResult result = MsixBundleBuilder.Build(
+            BundleResult result = BuildBundle(
                 packagePaths,
                 outputPath!,
                 new BundleOptions { Overwrite = overwrite, Version = version });
@@ -48,17 +54,13 @@ internal static class BundleCommand
                 output.WriteLine($"Identity: {result.Identity.PackageFullName}");
             }
 
-            return 0;
+            return CliContract.ExitCodes.Success;
         }
         catch (Exception ex) when (
-            ex is IOException
-                or InvalidDataException
-                or UnauthorizedAccessException
-                or ArgumentException
-                or InvalidOperationException)
+            CliContract.IsOperationalException(ex) || ex is ArgumentException or InvalidOperationException)
         {
-            error.WriteLine($"msixmgr bundle: {ex.Message}");
-            return 1;
+            CliContract.WriteError(output, error, json, "msixmgr bundle", ex.Message, null, CliContract.ErrorCode(ex));
+            return CliContract.ExitCodes.OperationalError;
         }
     }
 
@@ -98,7 +100,7 @@ internal static class BundleCommand
                     return false;
                 }
 
-                if (!TryReadOptionValue(args, ref i, arg, out outputPath, out error))
+                if (!CliContract.TryReadOptionValue(args, ref i, arg, "an argument", out outputPath, out error))
                 {
                     return false;
                 }
@@ -111,7 +113,7 @@ internal static class BundleCommand
                     return false;
                 }
 
-                if (!TryReadOptionValue(args, ref i, arg, out string? versionText, out error))
+                if (!CliContract.TryReadOptionValue(args, ref i, arg, "an argument", out string? versionText, out error))
                 {
                     return false;
                 }
@@ -122,7 +124,11 @@ internal static class BundleCommand
                     || version.Major < 0
                     || version.Minor < 0
                     || version.Build < 0
-                    || version.Revision < 0)
+                    || version.Revision < 0
+                    || version.Major > ushort.MaxValue
+                    || version.Minor > ushort.MaxValue
+                    || version.Build > ushort.MaxValue
+                    || version.Revision > ushort.MaxValue)
                 {
                     error = $"option '{arg}' requires a four-part version (for example, 1.2.3.4).";
                     return false;
@@ -151,25 +157,6 @@ internal static class BundleCommand
             return false;
         }
 
-        return true;
-    }
-
-    private static bool TryReadOptionValue(
-        IReadOnlyList<string> args,
-        ref int index,
-        string option,
-        out string? value,
-        out string? error)
-    {
-        value = null;
-        error = null;
-        if (index + 1 >= args.Count)
-        {
-            error = $"option '{option}' requires an argument.";
-            return false;
-        }
-
-        value = args[++index];
         return true;
     }
 
