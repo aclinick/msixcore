@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace MsixCore.Packaging.Integrity;
@@ -14,6 +15,13 @@ public sealed record PackageSignature
 {
     /// <summary>The signer certificate subject distinguished name (the package publisher DN).</summary>
     public required string SubjectName { get; init; }
+
+    /// <summary>
+    /// The raw DER-encoded bytes of the signer certificate subject distinguished name. Retained
+    /// verbatim from the certificate so that publisher matching can compare against the original ASN.1
+    /// encoding and RDN ordering rather than a lossy re-encoding of the formatted <see cref="SubjectName"/>.
+    /// </summary>
+    public required ReadOnlyMemory<byte> SubjectNameRawData { get; init; }
 
     /// <summary>The signer certificate issuer distinguished name.</summary>
     public required string IssuerName { get; init; }
@@ -50,16 +58,80 @@ public sealed record PackageSignature
     {
         ArgumentNullException.ThrowIfNull(manifestPublisher);
 
+        X500DistinguishedName manifestDn;
+        X500DistinguishedName signerDn;
         try
         {
-            byte[] fromManifest = new X500DistinguishedName(manifestPublisher).RawData;
-            byte[] fromSigner = new X500DistinguishedName(SubjectName).RawData;
-            return fromManifest.AsSpan().SequenceEqual(fromSigner);
+            manifestDn = new X500DistinguishedName(manifestPublisher);
+
+            // Decode the signer DN from the certificate's original DER bytes when available, preserving
+            // its exact RDN order and attribute value encodings. Re-parsing the formatted SubjectName
+            // string would reorder/reformat RDNs and lose the encoding, producing false mismatches.
+            signerDn = SubjectNameRawData.IsEmpty
+                ? new X500DistinguishedName(SubjectName)
+                : new X500DistinguishedName(SubjectNameRawData.Span);
         }
-        catch (System.Security.Cryptography.CryptographicException)
+        catch (CryptographicException)
         {
             // Fall back to an ordinal comparison when a value is not a parseable DN.
             return string.Equals(manifestPublisher, SubjectName, StringComparison.Ordinal);
+        }
+
+        return DistinguishedNamesEqual(manifestDn, signerDn);
+    }
+
+    /// <summary>
+    /// Compares two distinguished names by their relative distinguished name (RDN) sequence, matching
+    /// each RDN's attribute type (OID) and decoded string value. Comparing decoded values makes the
+    /// result independent of the underlying ASN.1 string encoding (e.g. <c>PrintableString</c> vs
+    /// <c>UTF8String</c>), which the raw-byte comparison used previously was sensitive to.
+    /// </summary>
+    private static bool DistinguishedNamesEqual(X500DistinguishedName left, X500DistinguishedName right)
+    {
+        using IEnumerator<X500RelativeDistinguishedName> l =
+            left.EnumerateRelativeDistinguishedNames().GetEnumerator();
+        using IEnumerator<X500RelativeDistinguishedName> r =
+            right.EnumerateRelativeDistinguishedNames().GetEnumerator();
+
+        while (true)
+        {
+            bool hasL = l.MoveNext();
+            bool hasR = r.MoveNext();
+            if (hasL != hasR)
+            {
+                return false; // Different number of RDNs.
+            }
+
+            if (!hasL)
+            {
+                return true; // Both exhausted with all RDNs equal.
+            }
+
+            if (!RelativeDistinguishedNamesEqual(l.Current, r.Current))
+            {
+                return false;
+            }
+        }
+    }
+
+    private static bool RelativeDistinguishedNamesEqual(X500RelativeDistinguishedName left, X500RelativeDistinguishedName right)
+    {
+        try
+        {
+            // Single-valued RDNs (the norm for publisher DNs): compare type + decoded value.
+            return string.Equals(
+                    left.GetSingleElementType().Value,
+                    right.GetSingleElementType().Value,
+                    StringComparison.Ordinal)
+                && string.Equals(
+                    left.GetSingleElementValue(),
+                    right.GetSingleElementValue(),
+                    StringComparison.Ordinal);
+        }
+        catch (CryptographicException)
+        {
+            // Multi-valued RDN (rare): fall back to comparing this RDN's raw encoding.
+            return left.RawData.Span.SequenceEqual(right.RawData.Span);
         }
     }
 }
