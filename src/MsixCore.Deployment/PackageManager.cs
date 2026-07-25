@@ -62,16 +62,34 @@ public sealed class PackageManager : IPackageManager
         ArgumentException.ThrowIfNullOrEmpty(searchParameter);
 
         var matches = new List<IInstalledPackage>();
-        foreach (IInstalledPackage package in _store.EnumeratePackages())
+        IReadOnlyList<IInstalledPackage> candidates = _store.EnumeratePackages();
+        int index = 0;
+        try
         {
-            if (Wildcard.IsMatch(searchParameter, package.Identity.PackageFullName))
+            for (; index < candidates.Count; index++)
             {
-                matches.Add(package);
+                IInstalledPackage package = candidates[index];
+                if (Wildcard.IsMatch(searchParameter, package.Identity.PackageFullName))
+                {
+                    matches.Add(package);
+                }
+                else
+                {
+                    package.Dispose();
+                }
             }
-            else
+        }
+        catch
+        {
+            // Dispose everything not handed back to the caller: matches accumulated so far and any
+            // remaining candidates we never examined.
+            DisposeAll(matches);
+            for (int i = index; i < candidates.Count; i++)
             {
-                package.Dispose();
+                Dispose(candidates[i]);
             }
+
+            throw;
         }
 
         return matches;
@@ -87,18 +105,54 @@ public sealed class PackageManager : IPackageManager
     private IInstalledPackage? FindSingle(Func<IInstalledPackage, bool> predicate)
     {
         IInstalledPackage? found = null;
-        foreach (IInstalledPackage package in _store.EnumeratePackages())
+        IReadOnlyList<IInstalledPackage> candidates = _store.EnumeratePackages();
+        int index = 0;
+        try
         {
-            if (found is null && predicate(package))
+            for (; index < candidates.Count; index++)
             {
-                found = package;
+                IInstalledPackage package = candidates[index];
+                if (found is null && predicate(package))
+                {
+                    found = package;
+                }
+                else
+                {
+                    package.Dispose();
+                }
             }
-            else
+        }
+        catch
+        {
+            found?.Dispose();
+            for (int i = index; i < candidates.Count; i++)
             {
-                package.Dispose();
+                Dispose(candidates[i]);
             }
+
+            throw;
         }
 
         return found;
+    }
+
+    private static void DisposeAll(IEnumerable<IInstalledPackage> packages)
+    {
+        foreach (IInstalledPackage package in packages)
+        {
+            Dispose(package);
+        }
+    }
+
+    private static void Dispose(IInstalledPackage package)
+    {
+        try
+        {
+            package.Dispose();
+        }
+        catch
+        {
+            // Best-effort cleanup: never mask the original failure.
+        }
     }
 }

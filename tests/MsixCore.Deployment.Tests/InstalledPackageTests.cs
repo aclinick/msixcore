@@ -64,6 +64,20 @@ public class InstalledPackageTests : IDisposable
     }
 
     [Fact]
+    public void ExecutionInfo_NullWhenExecutableEscapesInstallLocation()
+    {
+        string dir = LoosePackageBuilder.Create(
+            _root,
+            "pkgEscape",
+            LoosePackageBuilder.ManifestXml(executable: @"..\..\evil.exe"),
+            includeExecutable: false);
+
+        using var package = InstalledPackage.OpenDirectory(dir);
+
+        Assert.Null(package.ExecutionInfo);
+    }
+
+    [Fact]
     public void OpenLogo_ReturnsStreamWhenLogoPresent()
     {
         string dir = LoosePackageBuilder.Create(_root, "pkgLogo");

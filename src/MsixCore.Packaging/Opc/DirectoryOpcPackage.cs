@@ -49,7 +49,11 @@ public sealed class DirectoryOpcPackage : IOpcPackage
         var partToFullPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var partNames = new List<string>();
 
-        foreach (string fullPath in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        foreach (string fullPath in EnumeratePayloadFiles(root))
         {
             string relative = Path.GetRelativePath(root, fullPath).Replace(Path.DirectorySeparatorChar, '/');
             if (Path.AltDirectorySeparatorChar != '/')
@@ -62,6 +66,13 @@ public sealed class DirectoryOpcPackage : IOpcPackage
                 throw new InvalidDataException($"The package directory contains an invalid part name: '{relative}'.");
             }
 
+            // Defense in depth: the canonical path must stay within the package root, so a crafted
+            // layout cannot expose files outside it.
+            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException($"The package directory contains a part that escapes the root: '{relative}'.");
+            }
+
             if (!partToFullPath.TryAdd(relative, fullPath))
             {
                 throw new InvalidDataException($"The package directory contains a duplicate part name: '{relative}'.");
@@ -71,6 +82,38 @@ public sealed class DirectoryOpcPackage : IOpcPackage
         }
 
         return new DirectoryOpcPackage(root, partToFullPath, partNames);
+    }
+
+    /// <summary>
+    /// Recursively enumerates payload files under <paramref name="root"/>, skipping symlinks/reparse
+    /// points (both files and directories) so a loose package cannot follow a link outside its root.
+    /// </summary>
+    private static IEnumerable<string> EnumeratePayloadFiles(string root)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            string current = pending.Pop();
+            foreach (string entry in Directory.EnumerateFileSystemEntries(current))
+            {
+                var attributes = File.GetAttributes(entry);
+                if (attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
+
+                if (attributes.HasFlag(FileAttributes.Directory))
+                {
+                    pending.Push(entry);
+                }
+                else
+                {
+                    yield return entry;
+                }
+            }
+        }
     }
 
     /// <inheritdoc/>

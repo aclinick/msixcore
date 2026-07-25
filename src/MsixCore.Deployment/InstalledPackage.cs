@@ -73,10 +73,28 @@ public sealed class InstalledPackage : IInstalledPackage
 
         string relative = executable.Replace('\\', Path.DirectorySeparatorChar)
             .Replace('/', Path.DirectorySeparatorChar);
+
+        // A manifest is untrusted input: reject rooted paths or ".." escapes that would resolve the
+        // executable outside the install location.
+        if (Path.IsPathRooted(relative))
+        {
+            return null;
+        }
+
+        string root = Path.GetFullPath(InstalledLocation);
+        string resolved = Path.GetFullPath(Path.Combine(root, relative));
+        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        if (!resolved.StartsWith(rootWithSeparator, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
         return new ExecutionInfo
         {
-            ResolvedExecutableFilePath = Path.Combine(InstalledLocation, relative),
-            WorkingDirectory = InstalledLocation,
+            ResolvedExecutableFilePath = resolved,
+            WorkingDirectory = root,
         };
     }
 }
