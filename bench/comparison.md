@@ -75,6 +75,41 @@ msixmgr is faster or uses less memory**; below 1.00× would honestly show a Make
 win. Min/max are included because filesystem and security-scanner interference is
 visible on this workstation; medians are the comparison statistic.
 
+## PR #51 authoring optimization A/B
+
+This A/B isolates the PR #51 authoring changes by running the new
+`bench\MsixCore.Benchmarks` harness against both the optimized code and a
+throwaway `HEAD~1` worktree with only the benchmark project copied forward.
+
+| Item | Value |
+| --- | --- |
+| Optimized commit | `4fd34e4c56861c121407eeccf11d823458eaf7eb` |
+| Baseline commit | `9ba5b227f61163b651442772d9de2692a1ab61bc` |
+| Command | `dotnet run -c Release --project bench\MsixCore.Benchmarks\MsixCore.Benchmarks.csproj -- --filter "*PackPackage*" "*Crc*"` |
+| BenchmarkDotNet | v0.15.4, 3 warmups, 5 measured iterations, `MemoryDiagnoser` |
+| Host | Windows 11 10.0.26300.8935, Snapdragon X X1P64100, Arm64, .NET SDK 10.0.300 |
+| Baseline reconciliation | Added `System.IO.Hashing` only to the copied benchmark project so the new CRC micro-benchmark compiled against the old authoring code. Baseline `src\` was not changed. |
+
+| Benchmark | Baseline mean | Optimized mean | Delta | Time reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Pack loose directory to MSIX, large package, Stored | 80.686 ms | 36.659 ms | -44.028 ms | **54.6% faster** |
+| Pack loose directory to MSIX, large package, Optimal/deflate | 287.325 ms | 243.791 ms | -43.534 ms | **15.2% faster** |
+| CRC-32, 64 KiB payload: scalar before vs. `System.IO.Hashing` after | 154.794 μs | 2.102 μs | -152.692 μs | **98.6% faster** |
+| CRC-32, 10 MiB payload: scalar before vs. `System.IO.Hashing` after | 24,771.464 μs | 390.453 μs | -24,381.011 μs | **98.4% faster** |
+
+| Benchmark | Baseline allocated | Optimized allocated | Delta | Allocation reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Pack loose directory to MSIX, large package, Stored | 5,059,936 B | 690,928 B | -4,369,008 B | **86.3% less** |
+| Pack loose directory to MSIX, large package, Optimal/deflate | 57,005,664 B | 52,505,424 B | -4,500,240 B | **7.9% less** |
+| CRC-32, 64 KiB payload | 0 B | 0 B | 0 B | no allocation change |
+| CRC-32, 10 MiB payload | 0 B | 0 B | 0 B | no allocation change |
+
+For the default Stored authoring path, the measured 10 MiB CRC delta is
+24.381 ms. That is **30.2% of the old 80.686 ms Stored pack time** and explains
+about **55.4% of the observed 44.028 ms end-to-end pack improvement**. The
+remaining measured win comes from pooled authoring buffers and related
+authoring-path allocation reduction.
+
 ## Pack results
 
 **Summary:** msixmgr wins the two throughput-dominated rows (10 MiB **1.87×**,
