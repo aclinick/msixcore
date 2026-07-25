@@ -212,6 +212,32 @@ public class FileSystemPackageStoreTests : IDisposable
         Assert.True(File.Exists(Path.Combine(store.GetInstallLocation(fullName), "AppxManifest.xml")));
     }
 
+    [Fact]
+    public void Commit_ConcurrentCommits_DifferentRootCasing_LeaveConsistentState()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return; // Only Windows resolves differently-cased paths to the same directory.
+        }
+
+        // Two stores whose roots differ only by case address the same directory on Windows; the
+        // promotion gate must treat them as the same destination so concurrent commits still serialize.
+        var lower = new FileSystemPackageStore(_root);
+        var upper = new FileSystemPackageStore(_root.ToUpperInvariant());
+        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
+
+        Parallel.For(0, 16, i =>
+        {
+            FileSystemPackageStore store = (i % 2 == 0) ? lower : upper;
+            string staging = store.CreateStagingLocation();
+            File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+            store.Commit(staging, fullName);
+        });
+
+        Assert.True(lower.Contains(fullName));
+        Assert.True(File.Exists(Path.Combine(lower.GetInstallLocation(fullName), "AppxManifest.xml")));
+    }
+
     [Theory]
     [InlineData("../escape")]
     [InlineData("a/b")]

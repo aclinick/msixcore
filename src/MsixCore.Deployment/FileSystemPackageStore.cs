@@ -45,7 +45,7 @@ public sealed class FileSystemPackageStore : IPackageStore
     // so it also covers separate store instances over the same root. NOTE: this guards a single process
     // only; cross-process coordination over a shared store root is tracked separately (see issue #14).
     private static readonly ConcurrentDictionary<string, object> PromotionGates =
-        new(StringComparer.Ordinal);
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public IReadOnlyList<IInstalledPackage> EnumeratePackages()
