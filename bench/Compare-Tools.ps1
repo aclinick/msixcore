@@ -58,6 +58,16 @@ function Get-PercentileMedian([double[]]$values) {
     return ([double]$ordered[$count / 2 - 1] + [double]$ordered[$count / 2]) / 2
 }
 
+function Format-Speedup([double]$value) {
+    if ($value -ge 1) { return ('{0:N2}× faster' -f $value) }
+    return ('{0:N2}× (MakeAppx faster)' -f $value)
+}
+
+function Format-MemoryReduction([double]$value) {
+    if ($value -ge 1) { return ('{0:N2}× less' -f $value) }
+    return ('{0:N2}× (MakeAppx uses less)' -f $value)
+}
+
 function New-DeterministicFile {
     param([string]$Path, [long]$Length, [int]$Seed)
 
@@ -446,25 +456,46 @@ $sb = [Text.StringBuilder]::new()
 [void]$sb.AppendLine("- MakeAppx: ``$(Quote-Markdown $selectedMakeAppxPath)`` ($($metadata.MakeAppxVersion))")
 [void]$sb.AppendLine("- Repetitions: $Iterations measured after one discarded warmup")
 [void]$sb.AppendLine("- Packages are unsigned and stored/uncompressed (MakeAppx ``/nc``), matching msixmgr's current authoring mode.")
-[void]$sb.AppendLine("- Ratio is **msixmgr / MakeAppx**; below 1.00 means msixmgr used less time or memory.")
+[void]$sb.AppendLine("- Headline multipliers are **MakeAppx / msixmgr**; **greater than 1.00× means msixmgr is faster or uses less memory**.")
 [void]$sb.AppendLine()
 
 foreach ($operation in @('Pack', 'Unpack')) {
     [void]$sb.AppendLine("## $operation")
     [void]$sb.AppendLine()
-    [void]$sb.AppendLine('| Corpus | msixmgr time median [min–max] ms | MakeAppx time median [min–max] ms | Time ratio | msixmgr peak WS | MakeAppx peak WS | WS ratio |')
+    $operationRows = foreach ($corpus in $corpora) {
+        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+        $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
+        [pscustomobject]@{
+            Speedup = $sdk.MedianMs / $our.MedianMs
+            WorkingSetReduction = $sdk.MedianPeakWorkingSetBytes / $our.MedianPeakWorkingSetBytes
+        }
+    }
+    $minSpeedup = ($operationRows.Speedup | Measure-Object -Minimum).Minimum
+    $maxSpeedup = ($operationRows.Speedup | Measure-Object -Maximum).Maximum
+    $minWorkingSetReduction = ($operationRows.WorkingSetReduction | Measure-Object -Minimum).Minimum
+    $maxWorkingSetReduction = ($operationRows.WorkingSetReduction | Measure-Object -Maximum).Maximum
+    if ($minSpeedup -ge 1 -and $minWorkingSetReduction -ge 1) {
+        [void]$sb.AppendLine(("**Summary:** msixmgr is {0:N2}–{1:N2}× faster and uses {2:N2}–{3:N2}× less peak working set." -f
+            $minSpeedup, $maxSpeedup, $minWorkingSetReduction, $maxWorkingSetReduction))
+    }
+    else {
+        [void]$sb.AppendLine(("**Summary:** speedup is {0:N2}–{1:N2}× and peak-working-set reduction is {2:N2}–{3:N2}×; values below 1× favor MakeAppx." -f
+            $minSpeedup, $maxSpeedup, $minWorkingSetReduction, $maxWorkingSetReduction))
+    }
+    [void]$sb.AppendLine()
+    [void]$sb.AppendLine('| Corpus | Speedup (MakeAppx / msixmgr) | msixmgr time median [min–max] ms | MakeAppx time median [min–max] ms | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |')
     [void]$sb.AppendLine('| --- | ---: | ---: | ---: | ---: | ---: | ---: |')
     foreach ($corpus in $corpora) {
         $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
         $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
-        [void]$sb.AppendLine(('| {0} ({1}) | {2:N2} [{3:N2}–{4:N2}] | {5:N2} [{6:N2}–{7:N2}] | {8:N2}x | {9} | {10} | {11:N2}x |' -f
+        [void]$sb.AppendLine(('| {0} ({1}) | **{2}** | {3:N2} [{4:N2}–{5:N2}] | {6:N2} [{7:N2}–{8:N2}] | **{9}** | {10} | {11} |' -f
             $corpus.Name, (Format-Size $corpus.PayloadBytes),
+            (Format-Speedup ($sdk.MedianMs / $our.MedianMs)),
             $our.MedianMs, $our.MinMs, $our.MaxMs,
             $sdk.MedianMs, $sdk.MinMs, $sdk.MaxMs,
-            ($our.MedianMs / $sdk.MedianMs),
+            (Format-MemoryReduction ($sdk.MedianPeakWorkingSetBytes / $our.MedianPeakWorkingSetBytes)),
             (Format-Size $our.MedianPeakWorkingSetBytes),
-            (Format-Size $sdk.MedianPeakWorkingSetBytes),
-            ($our.MedianPeakWorkingSetBytes / $sdk.MedianPeakWorkingSetBytes)))
+            (Format-Size $sdk.MedianPeakWorkingSetBytes)))
     }
     [void]$sb.AppendLine()
 }
@@ -488,17 +519,40 @@ foreach ($corpus in $corpora) {
 [void]$sb.AppendLine()
 [void]$sb.AppendLine('Private bytes are sampled every 5 ms, so short-lived peaks can be missed; peak working set above uses the OS-reported process peak sampled while the process is alive.')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('| Operation | Corpus | msixmgr | MakeAppx | Ratio |')
+$privateReductions = @{}
+foreach ($operation in @('Pack', 'Unpack')) {
+    $privateReductions[$operation] = @(
+        foreach ($corpus in $corpora) {
+            $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+            $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
+            $sdk.MedianSampledPeakPrivateBytes / $our.MedianSampledPeakPrivateBytes
+        }
+    )
+}
+$packPrivateMin = ($privateReductions.Pack | Measure-Object -Minimum).Minimum
+$packPrivateMax = ($privateReductions.Pack | Measure-Object -Maximum).Maximum
+$unpackPrivateMin = ($privateReductions.Unpack | Measure-Object -Minimum).Minimum
+$unpackPrivateMax = ($privateReductions.Unpack | Measure-Object -Maximum).Maximum
+if ($packPrivateMin -ge 1 -and $unpackPrivateMin -ge 1) {
+    [void]$sb.AppendLine(("**Summary:** msixmgr uses {0:N2}–{1:N2}× less sampled private memory for pack and {2:N2}–{3:N2}× less for unpack." -f
+        $packPrivateMin, $packPrivateMax, $unpackPrivateMin, $unpackPrivateMax))
+}
+else {
+    [void]$sb.AppendLine(("**Summary:** private-memory reduction is {0:N2}–{1:N2}× for pack and {2:N2}–{3:N2}× for unpack; values below 1× favor MakeAppx." -f
+        $packPrivateMin, $packPrivateMax, $unpackPrivateMin, $unpackPrivateMax))
+}
+[void]$sb.AppendLine()
+[void]$sb.AppendLine('| Operation | Corpus | Memory reduction (MakeAppx / msixmgr) | msixmgr | MakeAppx |')
 [void]$sb.AppendLine('| --- | --- | ---: | ---: | ---: |')
 foreach ($operation in @('Pack', 'Unpack')) {
     foreach ($corpus in $corpora) {
         $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
         $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
-        [void]$sb.AppendLine(('| {0} | {1} | {2} | {3} | {4:N2}x |' -f
+        [void]$sb.AppendLine(('| {0} | {1} | **{2}** | {3} | {4} |' -f
             $operation, $corpus.Name,
+            (Format-MemoryReduction ($sdk.MedianSampledPeakPrivateBytes / $our.MedianSampledPeakPrivateBytes)),
             (Format-Size $our.MedianSampledPeakPrivateBytes),
-            (Format-Size $sdk.MedianSampledPeakPrivateBytes),
-            ($our.MedianSampledPeakPrivateBytes / $sdk.MedianSampledPeakPrivateBytes)))
+            (Format-Size $sdk.MedianSampledPeakPrivateBytes)))
     }
 }
 [void]$sb.AppendLine()

@@ -65,27 +65,51 @@ Correctness is part of the harness:
 - each MakeAppx-authored package is opened by `msixmgr inspect`;
 - timed unpack results from both tools are checked against the source layout.
 
-Ratios below are **msixmgr / MakeAppx**. Below 1.00 means msixmgr used less time or
-memory. Min/max are included because filesystem and security-scanner interference is
+Headline multipliers below are **MakeAppx / msixmgr**. **Greater than 1.00× means
+msixmgr is faster or uses less memory**; below 1.00× would honestly show a MakeAppx
+win. Min/max are included because filesystem and security-scanner interference is
 visible on this workstation; medians are the comparison statistic.
 
 ## Pack results
 
-| Corpus | msixmgr median [min–max] | MakeAppx median [min–max] | Time ratio | msixmgr peak WS | MakeAppx peak WS | WS ratio |
+**Summary:** msixmgr packs 1.43–2.40× faster and uses 1.01–2.41× less peak
+working set.
+
+| Corpus | Speedup (MakeAppx / msixmgr) | msixmgr median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 MiB / 8 files | 177.68 [122.65–220.24] ms | 253.41 [174.87–405.58] ms | 0.70x | 30.34 MB | 30.76 MB | 0.99x |
-| 10 MiB / 64 files | 307.59 [185.93–656.97] ms | 738.49 [518.32–787.27] ms | 0.42x | 33.59 MB | 37.52 MB | 0.90x |
-| 64 MiB / 128 files | 765.14 [635.45–887.02] ms | 1,427.76 [861.62–1,490.26] ms | 0.54x | 39.14 MB | 94.45 MB | 0.41x |
+| 1 MiB / 8 files | **1.43× faster** | 177.68 [122.65–220.24] ms | 253.41 [174.87–405.58] ms | **1.01× less** | 30.34 MB | 30.76 MB |
+| 10 MiB / 64 files | **2.40× faster** | 307.59 [185.93–656.97] ms | 738.49 [518.32–787.27] ms | **1.12× less** | 33.59 MB | 37.52 MB |
+| 64 MiB / 128 files | **1.87× faster** | 765.14 [635.45–887.02] ms | 1,427.76 [861.62–1,490.26] ms | **2.41× less** | 39.14 MB | 94.45 MB |
 
 ## Unpack results
 
 Both tools unpack the same uncompressed package authored by MakeAppx.
 
-| Corpus | msixmgr median [min–max] | MakeAppx median [min–max] | Time ratio | msixmgr peak WS | MakeAppx peak WS | WS ratio |
+**Summary:** msixmgr unpacks 1.69–1.88× faster, with the lead growing with
+package size, and uses 1.29–1.31× less peak working set.
+
+| Corpus | Speedup (MakeAppx / msixmgr) | msixmgr median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 MiB / 8 files | 130.27 [74.13–150.71] ms | 220.29 [139.39–326.57] ms | 0.59x | 23.67 MB | 30.55 MB | 0.77x |
-| 10 MiB / 64 files | 208.03 [146.96–257.20] ms | 383.76 [203.81–424.59] ms | 0.54x | 23.79 MB | 30.83 MB | 0.77x |
-| 64 MiB / 128 files | 298.05 [220.69–329.23] ms | 561.69 [431.45–734.55] ms | 0.53x | 23.79 MB | 31.25 MB | 0.76x |
+| 1 MiB / 8 files | **1.69× faster** | 130.27 [74.13–150.71] ms | 220.29 [139.39–326.57] ms | **1.29× less** | 23.67 MB | 30.55 MB |
+| 10 MiB / 64 files | **1.84× faster** | 208.03 [146.96–257.20] ms | 383.76 [203.81–424.59] ms | **1.30× less** | 23.79 MB | 30.83 MB |
+| 64 MiB / 128 files | **1.88× faster** | 298.05 [220.69–329.23] ms | 561.69 [431.45–734.55] ms | **1.31× less** | 23.79 MB | 31.25 MB |
+
+## Sampled peak private memory
+
+Private bytes are sampled every 5 ms and can miss short-lived peaks; peak working
+set above remains the primary memory metric.
+
+**Summary:** msixmgr uses 1.90–5.12× less sampled private memory for pack and
+about 2.39× less for unpack.
+
+| Operation | Corpus | Memory reduction (MakeAppx / msixmgr) | msixmgr | MakeAppx |
+| --- | --- | ---: | ---: | ---: |
+| Pack | 1 MiB / 8 files | **1.90× less** | 8.01 MB | 15.21 MB |
+| Pack | 10 MiB / 64 files | **1.97× less** | 11.19 MB | 22.00 MB |
+| Pack | 64 MiB / 128 files | **5.12× less** | 15.50 MB | 79.36 MB |
+| Unpack | 1 MiB / 8 files | **2.38× less** | 6.20 MB | 14.78 MB |
+| Unpack | 10 MiB / 64 files | **2.39× less** | 6.40 MB | 15.27 MB |
+| Unpack | 64 MiB / 128 files | **2.39× less** | 6.54 MB | 15.61 MB |
 
 ## Validate: asymmetric capability
 
@@ -128,8 +152,8 @@ than MakeAppx's SDK-local files, but that comparison excludes the shared .NET ru
 
 ## Interpretation
 
-- On this run, msixmgr won every measured runtime row: pack used 42–70% of MakeAppx
-  time and unpack used 53–59%. This is a real result for these uncompressed corpora,
+- On this run, msixmgr won every measured runtime row: pack was 1.43–2.40× faster
+  and unpack was 1.69–1.88× faster. This is a real result for these uncompressed corpora,
   but not evidence that managed code is universally faster.
 - The primary result is a fair native-Arm64 fight and is **not explained by
   emulation**. The optional x64 MakeAppx run is secondary only.
