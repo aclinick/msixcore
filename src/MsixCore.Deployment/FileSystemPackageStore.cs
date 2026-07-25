@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.Json;
 using MsixCore.Packaging;
 
@@ -16,26 +17,26 @@ public sealed class FileSystemPackageStore : IPackageStore
 
     private readonly string _root;
     private readonly Func<string, IEnumerable<string>> _enumerateDirectories;
-    private readonly Func<CommitFaultPoint, bool>? _faultInjector;
+    private readonly IDurableFileSystem _fileSystem;
 
     /// <summary>Creates a store rooted at the given directory (created on demand).</summary>
     /// <param name="rootDirectory">The store-root directory that holds unpacked package folders.</param>
     /// <exception cref="ArgumentException"><paramref name="rootDirectory"/> is null or empty.</exception>
     public FileSystemPackageStore(string rootDirectory)
-        : this(rootDirectory, Directory.EnumerateDirectories, null)
+        : this(rootDirectory, Directory.EnumerateDirectories, DurableFileSystem.Instance)
     {
     }
 
     internal FileSystemPackageStore(
         string rootDirectory,
         Func<string, IEnumerable<string>> enumerateDirectories,
-        Func<CommitFaultPoint, bool>? faultInjector = null)
+        IDurableFileSystem? fileSystem = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(rootDirectory);
         ArgumentNullException.ThrowIfNull(enumerateDirectories);
         _root = Path.GetFullPath(rootDirectory);
         _enumerateDirectories = enumerateDirectories;
-        _faultInjector = faultInjector;
+        _fileSystem = fileSystem ?? DurableFileSystem.Instance;
     }
 
     /// <summary>The absolute store-root directory.</summary>
@@ -224,13 +225,13 @@ public sealed class FileSystemPackageStore : IPackageStore
     {
         ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
         MoveOriginalsToBackups(resolved);
+        _fileSystem.FlushDirectory(_root);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterBackupsDurableBeforePromotion);
 
-        if (_faultInjector?.Invoke(CommitFaultPoint.AfterBackupsMovedBeforePromotion) == true)
-        {
-            throw new SimulatedProcessCrashException();
-        }
-
-        Directory.Move(resolved.StagingLocation, resolved.Destination);
+        _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterPromotionBeforeDurable);
+        FlushPromotionDirectories(resolved);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterPromotionDurableBeforeJournalClear);
         CleanupBackups(resolved);
         DeleteCommitJournal();
     }
@@ -238,7 +239,7 @@ public sealed class FileSystemPackageStore : IPackageStore
     private void RecoverIncompleteCommitLocked()
     {
         string journalPath = Path.Combine(_root, CommitJournalFileName);
-        if (!File.Exists(journalPath))
+        if (!_fileSystem.FileExists(journalPath))
         {
             return;
         }
@@ -247,8 +248,9 @@ public sealed class FileSystemPackageStore : IPackageStore
         try
         {
             using FileStream journal = File.OpenRead(journalPath);
-            transaction = JsonSerializer.Deserialize<CommitTransaction>(journal)
+            CommitJournal envelope = JsonSerializer.Deserialize<CommitJournal>(journal)
                 ?? throw new InvalidDataException("The commit journal is empty.");
+            transaction = ReadCommitJournal(envelope);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
         {
@@ -260,18 +262,20 @@ public sealed class FileSystemPackageStore : IPackageStore
         ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
         // The staging-to-destination rename is atomic: staging present means promotion has not
         // completed, while staging absent plus destination present means it has.
-        if (Directory.Exists(resolved.StagingLocation))
+        if (_fileSystem.DirectoryExists(resolved.StagingLocation))
         {
             MoveOriginalsToBackups(resolved);
-            if (Directory.Exists(resolved.Destination))
+            _fileSystem.FlushDirectory(_root);
+            if (_fileSystem.DirectoryExists(resolved.Destination))
             {
                 throw new InvalidOperationException(
                     $"Cannot recover package-store commit because destination '{resolved.Destination}' already exists.");
             }
 
-            Directory.Move(resolved.StagingLocation, resolved.Destination);
+            _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
+            FlushPromotionDirectories(resolved);
         }
-        else if (!Directory.Exists(resolved.Destination))
+        else if (!_fileSystem.DirectoryExists(resolved.Destination))
         {
             if (resolved.Backups.Count == 0)
             {
@@ -280,6 +284,7 @@ public sealed class FileSystemPackageStore : IPackageStore
             }
 
             RestoreBackups(resolved);
+            _fileSystem.FlushDirectory(_root);
         }
 
         CleanupBackups(resolved);
@@ -289,7 +294,7 @@ public sealed class FileSystemPackageStore : IPackageStore
     private void WriteCommitJournal(CommitTransaction transaction)
     {
         string journalPath = Path.Combine(_root, CommitJournalFileName);
-        if (File.Exists(journalPath))
+        if (_fileSystem.FileExists(journalPath))
         {
             throw new InvalidOperationException(
                 $"The package store contains an unrecovered commit journal at '{journalPath}'.");
@@ -304,36 +309,86 @@ public sealed class FileSystemPackageStore : IPackageStore
                 FileAccess.Write,
                 FileShare.None))
             {
-                JsonSerializer.Serialize(stream, transaction);
+                byte[] payload = JsonSerializer.SerializeToUtf8Bytes(transaction);
+                var journal = new CommitJournal
+                {
+                    FormatVersion = 1,
+                    Payload = Convert.ToBase64String(payload),
+                    Sha256 = Convert.ToHexString(SHA256.HashData(payload)),
+                };
+                JsonSerializer.Serialize(stream, journal);
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporary, journalPath);
+            _fileSystem.MoveFile(temporary, journalPath);
+            _fileSystem.CommitPoint(CommitFaultPoint.BeforeJournalDurable);
+            _fileSystem.FlushDirectory(_root);
+            _fileSystem.CommitPoint(CommitFaultPoint.AfterJournalDurableBeforeBackups);
         }
         finally
         {
-            if (File.Exists(temporary))
+            if (_fileSystem.FileExists(temporary))
             {
-                File.Delete(temporary);
+                _fileSystem.DeleteFile(temporary);
             }
         }
+    }
+
+    private static CommitTransaction ReadCommitJournal(CommitJournal journal)
+    {
+        if (journal.FormatVersion != 1)
+        {
+            throw new InvalidDataException(
+                $"The commit journal has unsupported format version '{journal.FormatVersion}'.");
+        }
+
+        if (string.IsNullOrEmpty(journal.Payload) || string.IsNullOrEmpty(journal.Sha256))
+        {
+            throw new InvalidDataException("The commit journal is missing integrity data.");
+        }
+
+        try
+        {
+            byte[] payload = Convert.FromBase64String(journal.Payload);
+            byte[] expectedHash = Convert.FromHexString(journal.Sha256);
+            byte[] actualHash = SHA256.HashData(payload);
+            if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash))
+            {
+                throw new InvalidDataException("The commit journal failed its integrity check.");
+            }
+
+            return JsonSerializer.Deserialize<CommitTransaction>(payload)
+                ?? throw new InvalidDataException("The commit journal transaction is empty.");
+        }
+        catch (Exception ex) when (ex is FormatException or JsonException)
+        {
+            throw new InvalidDataException("The commit journal is malformed.", ex);
+        }
+    }
+
+    private void FlushPromotionDirectories(ResolvedCommitTransaction transaction)
+    {
+        _fileSystem.FlushDirectory(Path.GetDirectoryName(transaction.StagingLocation)!);
+        _fileSystem.FlushDirectory(_root);
     }
 
     private void RollBackCommitTransaction(CommitTransaction transaction)
     {
         ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
         RestoreBackups(resolved);
+        _fileSystem.FlushDirectory(_root);
     }
 
-    private static void MoveOriginalsToBackups(ResolvedCommitTransaction transaction)
+    private void MoveOriginalsToBackups(ResolvedCommitTransaction transaction)
     {
         foreach ((string original, string backup) in transaction.Backups)
         {
-            bool originalExists = Directory.Exists(original);
-            bool backupExists = Directory.Exists(backup);
+            bool originalExists = _fileSystem.DirectoryExists(original);
+            bool backupExists = _fileSystem.DirectoryExists(backup);
             if (originalExists && !backupExists)
             {
-                Directory.Move(original, backup);
+                _fileSystem.MoveDirectory(original, backup);
+                _fileSystem.CommitPoint(CommitFaultPoint.MidBackup);
             }
             else if (originalExists == backupExists)
             {
@@ -343,29 +398,29 @@ public sealed class FileSystemPackageStore : IPackageStore
         }
     }
 
-    private static void RestoreBackups(ResolvedCommitTransaction transaction)
+    private void RestoreBackups(ResolvedCommitTransaction transaction)
     {
         foreach ((string original, string backup) in transaction.Backups.AsEnumerable().Reverse())
         {
-            if (!Directory.Exists(original) && Directory.Exists(backup))
+            if (!_fileSystem.DirectoryExists(original) && _fileSystem.DirectoryExists(backup))
             {
-                Directory.Move(backup, original);
+                _fileSystem.MoveDirectory(backup, original);
             }
         }
     }
 
-    private static void CleanupBackups(ResolvedCommitTransaction transaction)
+    private void CleanupBackups(ResolvedCommitTransaction transaction)
     {
         foreach ((_, string backup) in transaction.Backups)
         {
-            if (!Directory.Exists(backup))
+            if (!_fileSystem.DirectoryExists(backup))
             {
                 continue;
             }
 
             try
             {
-                Directory.Delete(backup, recursive: true);
+                _fileSystem.DeleteDirectory(backup, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -378,7 +433,7 @@ public sealed class FileSystemPackageStore : IPackageStore
     {
         try
         {
-            File.Delete(Path.Combine(_root, CommitJournalFileName));
+            _fileSystem.DeleteFile(Path.Combine(_root, CommitJournalFileName));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -647,6 +702,15 @@ public sealed class FileSystemPackageStore : IPackageStore
         public required List<CommitBackup> Backups { get; init; }
     }
 
+    private sealed class CommitJournal
+    {
+        public int FormatVersion { get; init; }
+
+        public required string Payload { get; init; }
+
+        public required string Sha256 { get; init; }
+    }
+
     private sealed class CommitBackup
     {
         public required string OriginalName { get; init; }
@@ -666,7 +730,12 @@ public sealed class FileSystemPackageStore : IPackageStore
 
 internal enum CommitFaultPoint
 {
-    AfterBackupsMovedBeforePromotion,
+    BeforeJournalDurable,
+    AfterJournalDurableBeforeBackups,
+    MidBackup,
+    AfterBackupsDurableBeforePromotion,
+    AfterPromotionBeforeDurable,
+    AfterPromotionDurableBeforeJournalClear,
 }
 
 internal sealed class SimulatedProcessCrashException : Exception

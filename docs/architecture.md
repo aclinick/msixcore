@@ -143,8 +143,11 @@ part-name rules.
   installs aside and atomically promoting staging with `Directory.Move`. Every
   query or mutation recovers an incomplete journal while holding the cross-process
   store lock, so a crash between backup and promotion rolls forward or restores a
-  valid package. Commit-time metadata reads fail closed before version policy is
-  evaluated. `.`-prefixed internal directories are excluded from enumeration.
+  valid package. The journal carries a SHA-256 integrity check. POSIX systems
+  `fsync` affected directories at each phase barrier; Windows uses
+  `MoveFileEx(MOVEFILE_WRITE_THROUGH)` durable renames behind `IDurableFileSystem`.
+  Commit-time metadata reads fail closed before version policy is evaluated.
+  `.`-prefixed internal directories are excluded from enumeration.
 - **`InstalledPackageInfo`** reads only `AppxManifest.xml`; **`InstalledPackage`**
   wraps that metadata and opens a loose `MsixPackage` only when payload content
   such as the logo is requested.

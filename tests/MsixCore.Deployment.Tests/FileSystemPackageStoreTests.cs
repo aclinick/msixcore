@@ -284,39 +284,101 @@ public class FileSystemPackageStoreTests : IDisposable
             FileShare.None);
     }
 
-    [Fact]
-    public void Query_AfterCrashBetweenBackupAndPromotion_RecoversPackage()
+    [Theory]
+    [InlineData((int)CommitFaultPoint.BeforeJournalDurable)]
+    [InlineData((int)CommitFaultPoint.AfterJournalDurableBeforeBackups)]
+    [InlineData((int)CommitFaultPoint.MidBackup)]
+    [InlineData((int)CommitFaultPoint.AfterBackupsDurableBeforePromotion)]
+    [InlineData((int)CommitFaultPoint.AfterPromotionBeforeDurable)]
+    [InlineData((int)CommitFaultPoint.AfterPromotionDurableBeforeJournalClear)]
+    public void Query_AfterPowerLossAtCommitOrderingPoint_RecoversPackage(int faultPointValue)
     {
-        var initialStore = new FileSystemPackageStore(_root);
-        string version1 = initialStore.CreateStagingLocation();
-        File.WriteAllText(
-            Path.Combine(version1, "AppxManifest.xml"),
-            LoosePackageBuilder.ManifestXml(version: "1.0.0.0"));
-        InstalledPackageInfo version1Info = InstalledPackageInfo.ReadFromDirectory(version1);
-        initialStore.Commit(version1, version1Info, DeploymentOptions.None);
-
-        string version2 = initialStore.CreateStagingLocation();
-        File.WriteAllText(
-            Path.Combine(version2, "AppxManifest.xml"),
-            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
-        InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
+        var faultPoint = (CommitFaultPoint)faultPointValue;
+        InstalledPackageInfo version1Info = CreateInstalledLayout("1.0.0.0");
+        _ = CreateInstalledLayout("2.0.0.0");
+        var fileSystem = new RecordingDurableFileSystem(_root, faultPoint);
         var crashingStore = new FileSystemPackageStore(
             _root,
             Directory.EnumerateDirectories,
-            static point => point == CommitFaultPoint.AfterBackupsMovedBeforePromotion);
+            fileSystem);
+        string version3 = crashingStore.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version3, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "3.0.0.0"));
+        InstalledPackageInfo version3Info = InstalledPackageInfo.ReadFromDirectory(version3);
 
         Assert.Throws<SimulatedProcessCrashException>(
-            () => crashingStore.Commit(version2, version2Info, DeploymentOptions.None));
-        Assert.True(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+            () => crashingStore.Commit(version3, version3Info, DeploymentOptions.None));
 
         var recoveredStore = new FileSystemPackageStore(_root);
         InstalledPackageInfo? recovered =
             recoveredStore.FindByFamilyName(version1Info.Identity.PackageFamilyName);
 
         Assert.NotNull(recovered);
-        Assert.Equal(new Version(2, 0, 0, 0), recovered!.Identity.Version);
-        Assert.Single(recoveredStore.EnumeratePackages());
+        Version expectedVersion = faultPoint == CommitFaultPoint.BeforeJournalDurable
+            ? new Version(2, 0, 0, 0)
+            : new Version(3, 0, 0, 0);
+        Assert.Equal(expectedVersion, recovered!.Identity.Version);
+        Assert.NotEmpty(recoveredStore.EnumeratePackages());
         Assert.False(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+    }
+
+    [Fact]
+    public void Commit_DurabilityBarriers_PrecedeDestructivePhases()
+    {
+        _ = CreateInstalledLayout("1.0.0.0");
+        var fileSystem = new RecordingDurableFileSystem(_root);
+        var store = new FileSystemPackageStore(_root, Directory.EnumerateDirectories, fileSystem);
+        string staging = store.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(staging, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(staging);
+
+        store.Commit(staging, info, DeploymentOptions.None);
+
+        int journalMove = fileSystem.IndexOf("move-journal");
+        int beforeJournalDurable = fileSystem.IndexOf(CommitFaultPoint.BeforeJournalDurable);
+        int journalFlush = fileSystem.IndexOf("flush-root", beforeJournalDurable + 1);
+        int afterJournalDurable = fileSystem.IndexOf(CommitFaultPoint.AfterJournalDurableBeforeBackups);
+        int backupMove = fileSystem.IndexOf("move-backup");
+        int backupFlush = fileSystem.IndexOf("flush-root", backupMove + 1);
+        int afterBackupsDurable = fileSystem.IndexOf(CommitFaultPoint.AfterBackupsDurableBeforePromotion);
+        int promotionMove = fileSystem.IndexOf("move-promotion");
+        int afterPromotionMove = fileSystem.IndexOf(CommitFaultPoint.AfterPromotionBeforeDurable);
+        int promotionFlush = fileSystem.IndexOf("flush-root", afterPromotionMove + 1);
+        int afterPromotionDurable =
+            fileSystem.IndexOf(CommitFaultPoint.AfterPromotionDurableBeforeJournalClear);
+        int journalDelete = fileSystem.IndexOf("delete-journal");
+
+        Assert.True(journalMove < beforeJournalDurable);
+        Assert.True(beforeJournalDurable < journalFlush);
+        Assert.True(journalFlush < afterJournalDurable);
+        Assert.True(afterJournalDurable < backupMove);
+        Assert.True(backupMove < backupFlush);
+        Assert.True(backupFlush < afterBackupsDurable);
+        Assert.True(afterBackupsDurable < promotionMove);
+        Assert.True(promotionMove < afterPromotionMove);
+        Assert.True(afterPromotionMove < promotionFlush);
+        Assert.True(promotionFlush < afterPromotionDurable);
+        Assert.True(afterPromotionDurable < journalDelete);
+    }
+
+    [Theory]
+    [InlineData("""{"FormatVersion":1,"Payload":"truncated""")]
+    [InlineData("""{"FormatVersion":1,"Payload":"e30=","Sha256":"00"}""")]
+    public void Query_TornOrCorruptCommitJournal_FailsClosed(string journal)
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(
+            Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName),
+            journal);
+        var store = new FileSystemPackageStore(_root);
+
+        InvalidOperationException error =
+            Assert.Throws<InvalidOperationException>(() => store.EnumeratePackages());
+
+        Assert.Contains("journal", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -423,6 +485,98 @@ public class FileSystemPackageStoreTests : IDisposable
         Assert.Equal("Contoso.MyApp", info.Identity.Name);
         Assert.Equal("Contoso My App", info.DisplayName);
         Assert.Equal(Path.GetFullPath(directory), info.InstalledLocation);
+    }
+
+    private InstalledPackageInfo CreateInstalledLayout(string version)
+    {
+        string temporary = LoosePackageBuilder.Create(
+            _root,
+            "temporary-" + Guid.NewGuid().ToString("N"),
+            LoosePackageBuilder.ManifestXml(version: version));
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(temporary);
+        string destination = Path.Combine(_root, info.Identity.PackageFullName);
+        Directory.Move(temporary, destination);
+        return InstalledPackageInfo.ReadFromDirectory(destination);
+    }
+
+    private sealed class RecordingDurableFileSystem(
+        string root,
+        CommitFaultPoint? faultPoint = null) : IDurableFileSystem
+    {
+        private readonly DurableFileSystem _inner = DurableFileSystem.Instance;
+        private readonly List<string> _events = [];
+
+        public bool FileExists(string path) => _inner.FileExists(path);
+
+        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+
+        public void MoveFile(string source, string destination)
+        {
+            _events.Add(Path.GetFileName(destination) == FileSystemPackageStore.CommitJournalFileName
+                ? "move-journal"
+                : "move-file");
+            _inner.MoveFile(source, destination);
+        }
+
+        public void MoveDirectory(string source, string destination)
+        {
+            string destinationName = Path.GetFileName(destination);
+            _events.Add(destinationName.Contains(".bak-", StringComparison.Ordinal)
+                ? "move-backup"
+                : "move-promotion");
+            _inner.MoveDirectory(source, destination);
+        }
+
+        public void DeleteFile(string path)
+        {
+            _events.Add(Path.GetFileName(path) == FileSystemPackageStore.CommitJournalFileName
+                ? "delete-journal"
+                : "delete-file");
+            _inner.DeleteFile(path);
+        }
+
+        public void DeleteDirectory(string path, bool recursive)
+        {
+            _events.Add("delete-directory");
+            _inner.DeleteDirectory(path, recursive);
+        }
+
+        public void FlushDirectory(string path)
+        {
+            _events.Add(string.Equals(Path.GetFullPath(path), Path.GetFullPath(root), PathComparison)
+                ? "flush-root"
+                : "flush-other");
+            _inner.FlushDirectory(path);
+        }
+
+        public void CommitPoint(CommitFaultPoint point)
+        {
+            _events.Add("point:" + point);
+            if (faultPoint != point)
+            {
+                return;
+            }
+
+            if (point == CommitFaultPoint.BeforeJournalDurable)
+            {
+                _inner.DeleteFile(Path.Combine(root, FileSystemPackageStore.CommitJournalFileName));
+            }
+
+            throw new SimulatedProcessCrashException();
+        }
+
+        public int IndexOf(string value, int startIndex = 0)
+        {
+            int index = _events.FindIndex(startIndex, item => item == value);
+            Assert.True(index >= 0, $"Missing durable-filesystem event '{value}'.");
+            return index;
+        }
+
+        public int IndexOf(CommitFaultPoint point) => IndexOf("point:" + point);
+
+        private static StringComparison PathComparison => OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
     }
 
     [Theory]
