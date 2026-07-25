@@ -35,19 +35,9 @@ public class FileSystemPackageStoreTests : IDisposable
         LoosePackageBuilder.Create(_root, "pkgB", LoosePackageBuilder.ManifestXml(name: "Contoso.Other"));
 
         var store = new FileSystemPackageStore(_root);
-        IReadOnlyList<IInstalledPackage> packages = store.EnumeratePackages();
+        IReadOnlyList<InstalledPackageInfo> packages = store.EnumeratePackages();
 
-        try
-        {
-            Assert.Equal(2, packages.Count);
-        }
-        finally
-        {
-            foreach (IInstalledPackage p in packages)
-            {
-                p.Dispose();
-            }
-        }
+        Assert.Equal(2, packages.Count);
     }
 
     [Fact]
@@ -63,18 +53,8 @@ public class FileSystemPackageStoreTests : IDisposable
         var store = new FileSystemPackageStore(_root);
         Assert.True(store.Contains("pkgA"));
 
-        IReadOnlyList<IInstalledPackage> packages = store.EnumeratePackages();
-        try
-        {
-            Assert.Single(packages);
-        }
-        finally
-        {
-            foreach (IInstalledPackage package in packages)
-            {
-                package.Dispose();
-            }
-        }
+        IReadOnlyList<InstalledPackageInfo> packages = store.EnumeratePackages();
+        Assert.Single(packages);
     }
 
     [Fact]
@@ -84,19 +64,9 @@ public class FileSystemPackageStoreTests : IDisposable
         LoosePackageBuilder.Create(_root, "pkgA");
 
         var store = new FileSystemPackageStore(_root);
-        IReadOnlyList<IInstalledPackage> packages = store.EnumeratePackages();
+        IReadOnlyList<InstalledPackageInfo> packages = store.EnumeratePackages();
 
-        try
-        {
-            Assert.Single(packages);
-        }
-        finally
-        {
-            foreach (IInstalledPackage p in packages)
-            {
-                p.Dispose();
-            }
-        }
+        Assert.Single(packages);
     }
 
     [Fact]
@@ -117,14 +87,13 @@ public class FileSystemPackageStoreTests : IDisposable
     public void Commit_PromotesStagingAndContainsFindsIt()
     {
         var store = new FileSystemPackageStore(_root);
-        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
-
-        Assert.False(store.Contains(fullName));
-
         string staging = store.CreateStagingLocation();
         File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(staging);
+        string fullName = info.Identity.PackageFullName;
 
-        store.Commit(staging, fullName);
+        Assert.False(store.Contains(fullName));
+        store.Commit(staging, info, DeploymentOptions.None);
 
         Assert.True(store.Contains(fullName));
         Assert.False(Directory.Exists(staging));
@@ -135,16 +104,17 @@ public class FileSystemPackageStoreTests : IDisposable
     public void Commit_ReplacesExistingPayload()
     {
         var store = new FileSystemPackageStore(_root);
-        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
-
         string first = store.CreateStagingLocation();
         File.WriteAllText(Path.Combine(first, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
         File.WriteAllText(Path.Combine(first, "old.txt"), "old");
-        store.Commit(first, fullName);
+        InstalledPackageInfo firstInfo = InstalledPackageInfo.ReadFromDirectory(first);
+        string fullName = firstInfo.Identity.PackageFullName;
+        store.Commit(first, firstInfo, DeploymentOptions.None);
 
         string second = store.CreateStagingLocation();
         File.WriteAllText(Path.Combine(second, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
-        store.Commit(second, fullName);
+        InstalledPackageInfo secondInfo = InstalledPackageInfo.ReadFromDirectory(second);
+        store.Commit(second, secondInfo, DeploymentOptions.ForceReinstall);
 
         Assert.True(store.Contains(fullName));
         Assert.False(File.Exists(Path.Combine(store.GetInstallLocation(fullName), "old.txt")));
@@ -154,10 +124,11 @@ public class FileSystemPackageStoreTests : IDisposable
     public void Delete_RemovesPayload()
     {
         var store = new FileSystemPackageStore(_root);
-        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
         string staging = store.CreateStagingLocation();
         File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
-        store.Commit(staging, fullName);
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(staging);
+        string fullName = info.Identity.PackageFullName;
+        store.Commit(staging, info, DeploymentOptions.None);
 
         store.Delete(fullName);
 
@@ -186,13 +157,13 @@ public class FileSystemPackageStoreTests : IDisposable
     public void Commit_BackupDeleteFailure_StillReportsSuccess()
     {
         var store = new FileSystemPackageStore(_root);
-        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
-
         string first = store.CreateStagingLocation();
         File.WriteAllText(Path.Combine(first, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
         string readOnly = Path.Combine(first, "readonly.txt");
         File.WriteAllText(readOnly, "v1");
-        store.Commit(first, fullName);
+        InstalledPackageInfo firstInfo = InstalledPackageInfo.ReadFromDirectory(first);
+        string fullName = firstInfo.Identity.PackageFullName;
+        store.Commit(first, firstInfo, DeploymentOptions.None);
 
         // Mark a file in the installed payload read-only. On the next commit that payload is moved
         // aside to the backup (renaming tolerates read-only files), the new payload is promoted, and
@@ -204,8 +175,9 @@ public class FileSystemPackageStoreTests : IDisposable
         {
             string second = store.CreateStagingLocation();
             File.WriteAllText(Path.Combine(second, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+            InstalledPackageInfo secondInfo = InstalledPackageInfo.ReadFromDirectory(second);
 
-            store.Commit(second, fullName);
+            store.Commit(second, secondInfo, DeploymentOptions.ForceReinstall);
 
             Assert.True(store.Contains(fullName));
             Assert.False(Directory.Exists(second));
@@ -224,17 +196,19 @@ public class FileSystemPackageStoreTests : IDisposable
     public void Commit_ConcurrentCommitsOfSamePackage_LeaveConsistentState()
     {
         var store = new FileSystemPackageStore(_root);
-        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
-
         // Many concurrent commits of the same package must be serialized so no commit's rollback can
         // delete another's promoted install; the end state must be a single valid installation.
         Parallel.For(0, 16, _ =>
         {
             string staging = store.CreateStagingLocation();
             File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
-            store.Commit(staging, fullName);
+            InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(staging);
+            store.Commit(staging, info, DeploymentOptions.ForceReinstall);
         });
 
+        string fullName = InstalledPackageInfo.ReadFromDirectory(
+            Directory.EnumerateDirectories(_root).Single(path => !Path.GetFileName(path).StartsWith('.')))
+            .Identity.PackageFullName;
         Assert.True(store.Contains(fullName));
         Assert.True(File.Exists(Path.Combine(store.GetInstallLocation(fullName), "AppxManifest.xml")));
     }
@@ -246,18 +220,119 @@ public class FileSystemPackageStoreTests : IDisposable
         // promotion gate must treat them as the same destination so concurrent commits still serialize.
         var lower = new FileSystemPackageStore(_root);
         var upper = new FileSystemPackageStore(_root.ToUpperInvariant());
-        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
-
         Parallel.For(0, 16, i =>
         {
             FileSystemPackageStore store = (i % 2 == 0) ? lower : upper;
             string staging = store.CreateStagingLocation();
             File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
-            store.Commit(staging, fullName);
+            InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(staging);
+            store.Commit(staging, info, DeploymentOptions.ForceReinstall);
         });
 
+        string fullName = lower.EnumeratePackages().Single().Identity.PackageFullName;
         Assert.True(lower.Contains(fullName));
         Assert.True(File.Exists(Path.Combine(lower.GetInstallLocation(fullName), "AppxManifest.xml")));
+    }
+
+    [Fact]
+    public async Task Commit_WaitsForCrossProcessLock_ThenPromotes()
+    {
+        var store = new FileSystemPackageStore(_root);
+        string staging = store.CreateStagingLocation();
+        File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(staging);
+        string lockPath = Path.Combine(_root, FileSystemPackageStore.CommitLockFileName);
+
+        Task commit;
+        using (var externalLock = new FileStream(
+            lockPath,
+            FileMode.OpenOrCreate,
+            FileAccess.ReadWrite,
+            FileShare.None))
+        {
+            commit = Task.Run(() => store.Commit(staging, info, DeploymentOptions.None));
+            await Task.Delay(150);
+            Assert.False(commit.IsCompleted);
+        }
+
+        await commit.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(store.Contains(info.Identity.PackageFullName));
+    }
+
+    [Fact]
+    public void Commit_Failure_ReleasesCrossProcessLock()
+    {
+        var store = new FileSystemPackageStore(_root);
+        string first = store.CreateStagingLocation();
+        File.WriteAllText(Path.Combine(first, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+        InstalledPackageInfo firstInfo = InstalledPackageInfo.ReadFromDirectory(first);
+        store.Commit(first, firstInfo, DeploymentOptions.None);
+
+        string duplicate = store.CreateStagingLocation();
+        File.WriteAllText(Path.Combine(duplicate, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+        InstalledPackageInfo duplicateInfo = InstalledPackageInfo.ReadFromDirectory(duplicate);
+        Assert.Throws<InvalidOperationException>(
+            () => store.Commit(duplicate, duplicateInfo, DeploymentOptions.None));
+
+        using var externalLock = new FileStream(
+            Path.Combine(_root, FileSystemPackageStore.CommitLockFileName),
+            FileMode.OpenOrCreate,
+            FileAccess.ReadWrite,
+            FileShare.None);
+    }
+
+    [Fact]
+    public void FindByFullName_DoesNotEnumerateStoreOrPayload()
+    {
+        string temporary = LoosePackageBuilder.Create(_root, "temporary");
+        InstalledPackageInfo temporaryInfo = InstalledPackageInfo.ReadFromDirectory(temporary);
+        string directory = Path.Combine(_root, temporaryInfo.Identity.PackageFullName);
+        Directory.Move(temporary, directory);
+        InstalledPackageInfo expected = InstalledPackageInfo.ReadFromDirectory(directory);
+        var store = new FileSystemPackageStore(
+            _root,
+            _ => throw new InvalidOperationException("Directory enumeration must not occur."));
+
+        InstalledPackageInfo? found = store.FindByFullName(expected.Identity.PackageFullName);
+
+        Assert.NotNull(found);
+        Assert.Equal(expected.Identity, found!.Identity);
+    }
+
+    [Fact]
+    public void FindByFamilyName_LegacySideBySideState_ReturnsNewestDeterministically()
+    {
+        string version1 = LoosePackageBuilder.Create(
+            _root,
+            "v1",
+            LoosePackageBuilder.ManifestXml(version: "1.0.0.0"));
+        string version2 = LoosePackageBuilder.Create(
+            _root,
+            "v2",
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo v1 = InstalledPackageInfo.ReadFromDirectory(version1);
+        InstalledPackageInfo v2 = InstalledPackageInfo.ReadFromDirectory(version2);
+        Directory.Move(version1, Path.Combine(_root, v1.Identity.PackageFullName));
+        Directory.Move(version2, Path.Combine(_root, v2.Identity.PackageFullName));
+        var store = new FileSystemPackageStore(_root);
+
+        InstalledPackageInfo? found = store.FindByFamilyName(v1.Identity.PackageFamilyName);
+
+        Assert.NotNull(found);
+        Assert.Equal(new Version(2, 0, 0, 0), found!.Identity.Version);
+    }
+
+    [Fact]
+    public void EnumeratePackages_ReturnsManifestMetadata()
+    {
+        string directory = LoosePackageBuilder.Create(_root, "pkgA");
+        var store = new FileSystemPackageStore(_root);
+
+        InstalledPackageInfo info = Assert.Single(store.EnumeratePackages());
+
+        Assert.Equal("Contoso.MyApp", info.Identity.Name);
+        Assert.Equal("Contoso My App", info.DisplayName);
+        Assert.Equal(Path.GetFullPath(directory), info.InstalledLocation);
     }
 
     [Theory]

@@ -61,22 +61,22 @@ public sealed class CorpusTests
 
     [Theory]
     [MemberData(nameof(CorpusRepository.BundleCases), MemberType = typeof(CorpusRepository))]
-    public void Bundle_DocumentedCurrentBehavior(string id)
+    public void Bundle_UsesExplicitBundleReader_AndPackageReaderRejectsItClearly(string id)
     {
         CorpusFixture fx = CorpusRepository.Get(id);
-        Assert.False(fx.ExpectedSupported, "Bundles are documented as not-yet-supported by the reader.");
-
         string file = CorpusRepository.ResolvePath(fx.PackedFile!);
         Assert.True(File.Exists(file), $"Bundle fixture missing: {file}");
 
-        using MsixPackage package = MsixPackage.Open(file);
+        Assert.True(MsixPackage.IsBundle(file));
+        MsixPackageTypeException error = Assert.Throws<MsixPackageTypeException>(() => MsixPackage.Open(file));
+        Assert.Contains("MsixBundle.Open", error.Message, StringComparison.Ordinal);
 
-        // The container opens as an OPC package and carries the bundle manifest, but not an app
-        // manifest. Bundle applicability is not implemented, so reading it as an app manifest
-        // throws. This asserts the current documented behavior rather than the eventual ideal.
-        Assert.True(package.Opc.ContainsPart(OpcPartNames.AppxBundleManifest));
-        Assert.False(package.Opc.ContainsPart(OpcPartNames.AppxManifest));
-        Assert.Throws<InvalidDataException>(() => package.Manifest);
+        using MsixBundle bundle = MsixBundle.Open(file);
+        Assert.Equal("MsixCoreCorpus.Bundle", bundle.Identity.Name);
+        Assert.NotEmpty(bundle.Packages);
+        Assert.Contains(
+            bundle.Packages,
+            package => package.Type == MsixCore.Packaging.Manifest.BundlePackageType.Application);
     }
 
     private static void AssertIdentityAndMetadata(MsixPackage package, CorpusFixture fx)

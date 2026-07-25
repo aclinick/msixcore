@@ -112,9 +112,10 @@ Ref: [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview).
 
 ## P1 — High-value modern MSIX surface
 
-### P1-1. Bundle reading is not wired into the package reader
-**Gap:** `BundleManifestParser` exists but nothing opens `AppxMetadata/AppxBundleManifest.xml` or
-detects a `.msixbundle`. Ref:
+### P1-1. Bundle reading — IMPLEMENTED
+**Done:** `MsixPackage.IsBundle` detects bundle containers, `MsixBundle.Open`
+parses `AppxMetadata/AppxBundleManifest.xml`, and `MsixPackage.Open` reports a
+specific type-mismatch error. Ref:
 [Bundle manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/bundlemanifestschema/root-elements-bundle-manifest).
 
 **Test cases:**
@@ -163,11 +164,11 @@ can report them, before OS registration. Ref:
 - **TC-P1-4f:** `desktop:Extension` shortcut / `windows.fullTrustProcess` → assert parsed.
 - **TC-P1-4g (round-trip):** Package with several extensions; `inspect --json` lists them all.
 
-### P1-5. Install engine — IMPLEMENTED; remaining: pluggable handlers, version policy, OS integration
+### P1-5. Install engine — IMPLEMENTED; remaining: pluggable handlers and OS integration
 **Done:** `AddPackage`/`RemovePackage` now run a real extract → stage → commit pipeline
 (`PackageManager.RunAdd`/`RunRemove`) over `IPackageStore`. `FileSystemPackageStore` implements
-`CreateStagingLocation`/`Commit` (move-aside backup + atomic promote + rollback) and `Delete`; the
-block map is verified **before** commit; progress is surfaced via `IMsixResponse`/`InstallationStep`;
+`CreateStagingLocation`/`Commit` (move-aside backup + atomic promote + rollback) and `Delete`; payloads
+are hashed while extracted and committed only after validation; progress is surfaced via `IMsixResponse`/`InstallationStep`;
 `PackageExtractor` provides containment-checked loose extraction. The test cases below are now
 **runnable regression tests**. Ref:
 [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview).
@@ -179,8 +180,10 @@ block map is verified **before** commit; progress is surfaced via `IMsixResponse
   store unchanged and the pre-existing install (if any) intact (rollback).
 - **TC-P1-5c:** `RemovePackage` deletes the install root; the package is no longer found; removing a
   non-installed full name reports failure.
-- **TC-P1-5d:** Re-add an already-installed full name without `ForceApplicationShutdown` fails; with
-  it, the reinstall succeeds.
+- **TC-P1-5d:** Re-add an already-installed full name without `ForceReinstall` fails; with it, the
+  reinstall succeeds. `ForceApplicationShutdown` does not change version policy.
+- **TC-P1-5g:** Upgrades replace the installed family; downgrades fail unless `AllowDowngrade` is set.
+- **TC-P1-5h:** A cross-process lock file serializes commits sharing one store root.
 - **TC-P1-5e (cancellation):** Cancelling mid-extraction leaves no committed install and cleans up the
   staging directory.
 
@@ -188,11 +191,6 @@ block map is verified **before** commit; progress is surfaced via `IMsixResponse
 - **TC-P1-5f (pluggable handlers):** Extraction is inlined in `RunAdd`, not run through
   `IPackageHandler` handlers ordered on add / reversed on remove. Assert (future) a fake handler's
   call order once the pipeline is wired.
-- **TC-P1-5g (version/downgrade policy):** Installing an **older** version over a newer one should be
-  blocked by policy (today only presence, not version, is checked). Assert downgrade is rejected
-  unless explicitly forced.
-- **TC-P1-5h (cross-process store lock):** Concurrent commits from **separate processes** over one
-  store root (tracked as issue #14) — assert no torn install once addressed.
 
 ### P1-6. Richer VisualElements / capability categorization
 **Gap:** VisualElements omits many logos/tiles; capabilities aren't categorized by type/namespace.

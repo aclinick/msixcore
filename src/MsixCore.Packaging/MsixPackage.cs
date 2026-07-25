@@ -80,21 +80,34 @@ public sealed class MsixPackage : IPackage
     }
 
     /// <summary>Opens an MSIX/APPX package from a file path.</summary>
-    /// <param name="path">Path to a <c>.msix</c>/<c>.appx</c> (or bundle) file.</param>
+    /// <param name="path">Path to a <c>.msix</c>/<c>.appx</c> file.</param>
     /// <returns>An open <see cref="MsixPackage"/>.</returns>
-    public static MsixPackage Open(string path) => new(OpcPackage.Open(path));
+    /// <exception cref="MsixPackageTypeException">
+    /// The container is a bundle and must be opened with <see cref="MsixBundle.Open(string)"/>.
+    /// </exception>
+    public static MsixPackage Open(string path) => Create(OpcPackage.Open(path));
 
     /// <summary>Opens an MSIX/APPX package from a seekable stream.</summary>
     /// <param name="stream">A readable, seekable stream positioned at the start of the package.</param>
     /// <param name="leaveOpen">Whether to leave <paramref name="stream"/> open when this package is disposed.</param>
     /// <returns>An open <see cref="MsixPackage"/>.</returns>
+    /// <exception cref="MsixPackageTypeException">
+    /// The container is a bundle and must be opened with <see cref="MsixBundle.Open(Stream, bool)"/>.
+    /// </exception>
     public static MsixPackage Open(Stream stream, bool leaveOpen = false) =>
-        new(OpcPackage.Open(stream, leaveOpen));
+        Create(OpcPackage.Open(stream, leaveOpen));
 
     /// <summary>Opens a package from an unpacked ("loose") layout on disk.</summary>
     /// <param name="directory">A directory containing the unpacked package (with <c>AppxManifest.xml</c>).</param>
     /// <returns>An open <see cref="MsixPackage"/> over the loose layout.</returns>
     public static MsixPackage OpenDirectory(string directory) => new(DirectoryOpcPackage.Open(directory));
+
+    /// <summary>Returns whether the container at <paramref name="path"/> is an MSIX/APPX bundle.</summary>
+    public static bool IsBundle(string path)
+    {
+        using OpcPackage opc = OpcPackage.Open(path);
+        return opc.ContainsPart(OpcPartNames.AppxBundleManifest);
+    }
 
     /// <summary>
     /// Verifies the package payload against its block map: every block-mapped file's content hashes
@@ -175,5 +188,17 @@ public sealed class MsixPackage : IPackage
 
         using Stream blockMapStream = _opc.OpenPart(OpcPartNames.AppxBlockMap);
         return BlockMapParser.Parse(blockMapStream);
+    }
+
+    private static MsixPackage Create(OpcPackage opc)
+    {
+        if (opc.ContainsPart(OpcPartNames.AppxBundleManifest))
+        {
+            opc.Dispose();
+            throw new MsixPackageTypeException(
+                "The container is an MSIX bundle. Open it with MsixBundle.Open instead of MsixPackage.Open.");
+        }
+
+        return new MsixPackage(opc);
     }
 }

@@ -6,10 +6,6 @@ namespace MsixCore.Deployment;
 /// <summary>
 /// Default <see cref="IPackageManager"/> implementation.
 /// </summary>
-/// <remarks>
-/// Phase 4 implements the query surface over an <see cref="IPackageStore"/>. Add/remove land in
-/// Phase 5 (extraction pipeline); Windows OS-integration handlers land in Phase 6.
-/// </remarks>
 public sealed class PackageManager : IPackageManager
 {
     private readonly IPackageStore _store;
@@ -63,31 +59,27 @@ public sealed class PackageManager : IPackageManager
 
             // The package (and its underlying file handle) is fully released before commit/complete so
             // callers awaiting Completion never race with the still-open source file.
-            string fullName;
             using (MsixPackage package = MsixPackage.Open(packageFilePath))
             {
-                fullName = package.Identity.PackageFullName;
-
-                BlockMapVerificationResult verification = package.VerifyBlockMap();
-                if (!verification.IsValid)
-                {
-                    throw new InvalidDataException(
-                        $"Package integrity check failed for '{fullName}': the payload does not match its block map.");
-                }
-
-                if (_store.Contains(fullName) && !options.HasFlag(DeploymentOptions.ForceApplicationShutdown))
-                {
-                    throw new InvalidOperationException(
-                        $"Package '{fullName}' is already installed. Use ForceApplicationShutdown to reinstall.");
-                }
-
                 response.Token.ThrowIfCancellationRequested();
                 response.Report(InstallationStep.Extraction, 10f, "Extracting package payload.");
                 staging = _store.CreateStagingLocation();
                 var progress = new SynchronousProgress<float>(p =>
                     response.Report(InstallationStep.Extraction, 10f + (p * 0.85f), "Extracting package payload."));
-                PackageExtractor.Extract(package.Opc, staging, progress, response.Token);
+                BlockMapVerificationResult verification = PackageExtractor.ExtractAndVerify(
+                    package.Opc,
+                    package.BlockMap,
+                    staging,
+                    progress,
+                    response.Token);
+                if (!verification.IsValid)
+                {
+                    throw new InvalidDataException(
+                        "Package integrity check failed: the extracted payload does not match its block map.");
+                }
             }
+
+            InstalledPackageInfo packageInfo = InstalledPackageInfo.ReadFromDirectory(staging);
 
             // Re-check cancellation after the (uncancelable-in-the-final-chunk) copy so a cancel during
             // the last file does not still result in a committed installation.
@@ -99,7 +91,7 @@ public sealed class PackageManager : IPackageManager
                     : "Registering package.");
 
             // OS-integration handlers (shortcuts, associations, etc.) land in a later Windows phase.
-            _store.Commit(staging, fullName);
+            _store.Commit(staging, packageInfo, options);
             staging = null;
 
             response.Complete();
@@ -156,16 +148,16 @@ public sealed class PackageManager : IPackageManager
     public IInstalledPackage? FindPackage(string packageFullName)
     {
         ArgumentException.ThrowIfNullOrEmpty(packageFullName);
-        return FindSingle(package =>
-            string.Equals(package.Identity.PackageFullName, packageFullName, StringComparison.OrdinalIgnoreCase));
+        InstalledPackageInfo? info = _store.FindByFullName(packageFullName);
+        return info is null ? null : InstalledPackage.FromInfo(info);
     }
 
     /// <inheritdoc/>
     public IInstalledPackage? FindPackageByFamilyName(string packageFamilyName)
     {
         ArgumentException.ThrowIfNullOrEmpty(packageFamilyName);
-        return FindSingle(package =>
-            string.Equals(package.Identity.PackageFamilyName, packageFamilyName, StringComparison.OrdinalIgnoreCase));
+        InstalledPackageInfo? info = _store.FindByFamilyName(packageFamilyName);
+        return info is null ? null : InstalledPackage.FromInfo(info);
     }
 
     /// <inheritdoc/>
@@ -173,38 +165,10 @@ public sealed class PackageManager : IPackageManager
     {
         ArgumentException.ThrowIfNullOrEmpty(searchParameter);
 
-        var matches = new List<IInstalledPackage>();
-        IReadOnlyList<IInstalledPackage> candidates = _store.EnumeratePackages();
-        int index = 0;
-        try
-        {
-            for (; index < candidates.Count; index++)
-            {
-                IInstalledPackage package = candidates[index];
-                if (Wildcard.IsMatch(searchParameter, package.Identity.PackageFullName))
-                {
-                    matches.Add(package);
-                }
-                else
-                {
-                    package.Dispose();
-                }
-            }
-        }
-        catch
-        {
-            // Dispose everything not handed back to the caller: matches accumulated so far and any
-            // remaining candidates we never examined.
-            DisposeAll(matches);
-            for (int i = index; i < candidates.Count; i++)
-            {
-                Dispose(candidates[i]);
-            }
-
-            throw;
-        }
-
-        return matches;
+        return _store.EnumeratePackages()
+            .Where(package => Wildcard.IsMatch(searchParameter, package.Identity.PackageFullName))
+            .Select(static package => (IInstalledPackage)InstalledPackage.FromInfo(package))
+            .ToList();
     }
 
     /// <inheritdoc/>
@@ -214,57 +178,4 @@ public sealed class PackageManager : IPackageManager
         return MsixPackage.Open(msixFilePath);
     }
 
-    private IInstalledPackage? FindSingle(Func<IInstalledPackage, bool> predicate)
-    {
-        IInstalledPackage? found = null;
-        IReadOnlyList<IInstalledPackage> candidates = _store.EnumeratePackages();
-        int index = 0;
-        try
-        {
-            for (; index < candidates.Count; index++)
-            {
-                IInstalledPackage package = candidates[index];
-                if (found is null && predicate(package))
-                {
-                    found = package;
-                }
-                else
-                {
-                    package.Dispose();
-                }
-            }
-        }
-        catch
-        {
-            found?.Dispose();
-            for (int i = index; i < candidates.Count; i++)
-            {
-                Dispose(candidates[i]);
-            }
-
-            throw;
-        }
-
-        return found;
-    }
-
-    private static void DisposeAll(IEnumerable<IInstalledPackage> packages)
-    {
-        foreach (IInstalledPackage package in packages)
-        {
-            Dispose(package);
-        }
-    }
-
-    private static void Dispose(IInstalledPackage package)
-    {
-        try
-        {
-            package.Dispose();
-        }
-        catch
-        {
-            // Best-effort cleanup: never mask the original failure.
-        }
-    }
 }

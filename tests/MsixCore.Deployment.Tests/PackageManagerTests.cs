@@ -33,6 +33,7 @@ public class PackageManagerTests : IDisposable
             familyName = probe.Identity.PackageFamilyName;
         }
 
+        Directory.Move(dir, Path.Combine(_root, fullName));
         var manager = new PackageManager(new FileSystemPackageStore(_root));
         return (manager, fullName, familyName);
     }
@@ -54,6 +55,17 @@ public class PackageManagerTests : IDisposable
         (PackageManager manager, _, _) = BuildStoreWithOnePackage();
 
         Assert.Null(manager.FindPackage("Fabrikam.Nope_9.9.9.9_x86__zzzzzzzzzzzzz"));
+    }
+
+    [Fact]
+    public void FindPackage_ByFullName_IsCaseInsensitive()
+    {
+        (PackageManager manager, string fullName, _) = BuildStoreWithOnePackage();
+
+        using IInstalledPackage? found = manager.FindPackage(fullName.ToUpperInvariant());
+
+        Assert.NotNull(found);
+        Assert.Equal(fullName, found!.Identity.PackageFullName);
     }
 
     [Fact]
@@ -163,13 +175,15 @@ public class PackageManagerTests : IDisposable
     public async Task AddPackage_CorruptBlockMap_Fails()
     {
         string msix = PackedMsixBuilder.Create(_root, "bad.msix", validBlockMap: false);
-        var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
+        var store = new FileSystemPackageStore(Path.Combine(_root, "store"));
+        var manager = new PackageManager(store);
 
         IMsixResponse add = manager.AddPackage(msix);
 
         await Assert.ThrowsAnyAsync<Exception>(() => add.Completion);
         Assert.Equal(InstallationStep.Error, add.Status);
         Assert.NotNull(add.Failure);
+        Assert.Empty(store.EnumeratePackages());
     }
 
     [Fact]
@@ -185,7 +199,7 @@ public class PackageManagerTests : IDisposable
     }
 
     [Fact]
-    public async Task AddPackage_AlreadyInstalled_WithForce_Succeeds()
+    public async Task AddPackage_AlreadyInstalled_WithForceApplicationShutdown_StillFails()
     {
         string msix = PackedMsixBuilder.Create(_root, "app.msix");
         var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
@@ -193,8 +207,88 @@ public class PackageManagerTests : IDisposable
         await manager.AddPackage(msix).Completion;
         IMsixResponse second = manager.AddPackage(msix, DeploymentOptions.ForceApplicationShutdown);
 
+        await Assert.ThrowsAsync<InvalidOperationException>(() => second.Completion);
+    }
+
+    [Fact]
+    public async Task AddPackage_AlreadyInstalled_WithForceReinstall_Succeeds()
+    {
+        string msix = PackedMsixBuilder.Create(_root, "app.msix");
+        var manager = new PackageManager(new FileSystemPackageStore(Path.Combine(_root, "store")));
+
+        await manager.AddPackage(msix).Completion;
+        IMsixResponse second = manager.AddPackage(msix, DeploymentOptions.ForceReinstall);
+
         await second.Completion;
         Assert.Equal(InstallationStep.Completed, second.Status);
+    }
+
+    [Fact]
+    public async Task AddPackage_Upgrade_ReplacesInstalledFamily()
+    {
+        string version1 = PackedMsixBuilder.Create(
+            _root,
+            "v1.msix",
+            LoosePackageBuilder.ManifestXml(version: "1.0.0.0"));
+        string version2 = PackedMsixBuilder.Create(
+            _root,
+            "v2.msix",
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        var store = new FileSystemPackageStore(Path.Combine(_root, "store"));
+        var manager = new PackageManager(store);
+
+        await manager.AddPackage(version1).Completion;
+        await manager.AddPackage(version2).Completion;
+
+        InstalledPackageInfo installed = Assert.Single(store.EnumeratePackages());
+        Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
+    }
+
+    [Fact]
+    public async Task AddPackage_Downgrade_IsRejectedUnlessAllowed()
+    {
+        string version2 = PackedMsixBuilder.Create(
+            _root,
+            "v2.msix",
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        string version1 = PackedMsixBuilder.Create(
+            _root,
+            "v1.msix",
+            LoosePackageBuilder.ManifestXml(version: "1.0.0.0"));
+        var store = new FileSystemPackageStore(Path.Combine(_root, "store"));
+        var manager = new PackageManager(store);
+
+        await manager.AddPackage(version2).Completion;
+        IMsixResponse rejected = manager.AddPackage(version1);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => rejected.Completion);
+        Assert.Equal(new Version(2, 0, 0, 0), Assert.Single(store.EnumeratePackages()).Identity.Version);
+
+        await manager.AddPackage(version1, DeploymentOptions.AllowDowngrade).Completion;
+        Assert.Equal(new Version(1, 0, 0, 0), Assert.Single(store.EnumeratePackages()).Identity.Version);
+    }
+
+    [Fact]
+    public async Task QueryMetadata_DoesNotOpenContentUntilRequested()
+    {
+        var parts = new Dictionary<string, byte[]>
+        {
+            ["Assets/StoreLogo.png"] = [0x89, 0x50, 0x4E, 0x47],
+        };
+        string msix = PackedMsixBuilder.Create(_root, "app.msix", extraParts: parts);
+        var store = new FileSystemPackageStore(Path.Combine(_root, "store"));
+        var manager = new PackageManager(store);
+        await manager.AddPackage(msix).Completion;
+
+        InstalledPackageInfo info = Assert.Single(store.EnumeratePackages());
+        using IInstalledPackage? installed = manager.FindPackage(info.Identity.PackageFullName);
+
+        Assert.NotNull(installed);
+        Assert.Equal(info.DisplayName, installed!.DisplayName);
+        using Stream? logo = installed.OpenLogo();
+        Assert.NotNull(logo);
+        Assert.Equal(4, logo!.Length);
+        using MsixPackage content = info.OpenPackage();
+        Assert.True(content.Opc.ContainsPart("Assets/StoreLogo.png"));
     }
 
     [Fact]

@@ -148,9 +148,9 @@ part-name rules.
   are excluded from enumeration. `Contains`, `GetInstallLocation`, and `Delete`
   round out the surface; `GetInstallLocation` validates the full name is a single,
   non-traversing path segment.
-- **`InstalledPackage`** wraps a loose `MsixPackage` and adds
-  `InstalledLocation` and resolved `ExecutionInfo` (the primary app's executable
-  path, safely resolved within the install root).
+- **`InstalledPackageInfo`** reads only `AppxManifest.xml`; **`InstalledPackage`**
+  wraps that metadata and opens a loose `MsixPackage` only when payload content
+  such as the logo is requested.
 - **`Wildcard`** implements case-insensitive, whole-string glob matching (`*` and
   `?`) used by `FindPackages`, with a regex timeout guard.
 
@@ -158,13 +158,10 @@ part-name rules.
 
 - **`PackageManager : IPackageManager`** implements the full lifecycle.
   `AddPackage`/`RemovePackage` return an `IMsixResponse` **immediately** and run
-  the operation on a background task. `AddPackage` reads the package, gates on
-  `VerifyBlockMap()` (a failing block map aborts the install), rejects an
-  already-installed package unless `ForceApplicationShutdown` is set, extracts to
-  a staging directory via `PackageExtractor`, then `Commit`s it — cleaning up
-  staging and reporting failure on any error. The query surface (`FindPackage`,
-  `FindPackageByFamilyName`, `FindPackages`, `GetMsixPackageInfo`) is unchanged,
-  with careful ownership/disposal of enumerated packages.
+  the operation on a background task. `AddPackage` hashes each payload while
+  extracting to staging, then commits only validated content. Commit enforces one
+  installed version per family, upgrades replace the family, downgrades require
+  `AllowDowngrade`, and duplicate installs require `ForceReinstall`.
 - **`PackageExtractor`** (public, static) extracts an `IOpcPackage`'s parts to a
   directory as a loose layout. Pure managed and cross-platform, it powers both
   the `unpack` CLI verb and the install engine's extraction step. It reports
@@ -186,7 +183,7 @@ part-name rules.
   extraction/commit (add) and delete (remove) directly. Wiring the pipeline and the
   Windows OS-integration handlers lands in a later phase.
 - **`DeploymentOptions`** is a `[Flags]` enum (`None`, `ForceApplicationShutdown`,
-  `ExtractOnly`).
+  `ExtractOnly`, `ForceReinstall`, `AllowDowngrade`).
 
 ## Layer 6 — CLI (`msixmgr`)
 

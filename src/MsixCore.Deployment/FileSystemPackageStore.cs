@@ -1,6 +1,5 @@
-using System.Collections.Concurrent;
+using System.Diagnostics;
 using MsixCore.Packaging;
-using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Deployment;
 
@@ -15,14 +14,24 @@ public sealed class FileSystemPackageStore : IPackageStore
     public const string DefaultStoreFolderName = "MsixCore/Packages";
 
     private readonly string _root;
+    private readonly Func<string, IEnumerable<string>> _enumerateDirectories;
 
     /// <summary>Creates a store rooted at the given directory (created on demand).</summary>
     /// <param name="rootDirectory">The store-root directory that holds unpacked package folders.</param>
     /// <exception cref="ArgumentException"><paramref name="rootDirectory"/> is null or empty.</exception>
     public FileSystemPackageStore(string rootDirectory)
+        : this(rootDirectory, Directory.EnumerateDirectories)
+    {
+    }
+
+    internal FileSystemPackageStore(
+        string rootDirectory,
+        Func<string, IEnumerable<string>> enumerateDirectories)
     {
         ArgumentException.ThrowIfNullOrEmpty(rootDirectory);
+        ArgumentNullException.ThrowIfNull(enumerateDirectories);
         _root = Path.GetFullPath(rootDirectory);
+        _enumerateDirectories = enumerateDirectories;
     }
 
     /// <summary>The absolute store-root directory.</summary>
@@ -38,54 +47,64 @@ public sealed class FileSystemPackageStore : IPackageStore
 
     /// <summary>The store subdirectory used for in-progress extraction; excluded from enumeration.</summary>
     private const string StagingFolderName = ".staging";
-
-    // Serializes the move-aside / promote / rollback sequence per install location so two concurrent
-    // commits of the same package cannot interleave — otherwise one commit's rollback could delete the
-    // other commit's already-promoted installation. Keyed by absolute destination path (process-wide)
-    // so it also covers separate store instances over the same root. NOTE: this guards a single process
-    // only; cross-process coordination over a shared store root is tracked separately (see issue #14).
-    private static readonly ConcurrentDictionary<string, object> PromotionGates =
-        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    internal const string CommitLockFileName = ".commit.lock";
 
     /// <inheritdoc/>
-    public IReadOnlyList<IInstalledPackage> EnumeratePackages()
+    public IReadOnlyList<InstalledPackageInfo> EnumeratePackages()
     {
         if (!Directory.Exists(_root))
         {
             return [];
         }
 
-        var packages = new List<IInstalledPackage>();
-        try
+        var packages = new List<InstalledPackageInfo>();
+        foreach (string directory in EnumeratePackageDirectories())
         {
-            foreach (string directory in Directory.EnumerateDirectories(_root))
+            try
             {
-                // Skip reserved/internal directories (e.g. staging) so partial installs aren't listed.
-                if (Path.GetFileName(directory).StartsWith('.'))
-                {
-                    continue;
-                }
-
-                if (!ContainsManifest(directory))
-                {
-                    continue;
-                }
-
-                packages.Add(InstalledPackage.OpenDirectory(directory));
+                packages.Add(InstalledPackageInfo.ReadFromDirectory(directory));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                continue;
             }
         }
-        catch
-        {
-            // Dispose anything opened before the failure to avoid leaks, then rethrow.
-            foreach (IInstalledPackage package in packages)
-            {
-                package.Dispose();
-            }
 
-            throw;
+        return packages
+            .OrderBy(static package => package.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <inheritdoc/>
+    public InstalledPackageInfo? FindByFullName(string packageFullName)
+    {
+        string location = GetInstallLocation(packageFullName);
+        InstalledPackageInfo? direct = TryReadInfo(location);
+        if (direct is not null || !Directory.Exists(_root))
+        {
+            return direct;
         }
 
-        return packages;
+        string? caseInsensitiveMatch = _enumerateDirectories(_root)
+            .FirstOrDefault(directory => string.Equals(
+                Path.GetFileName(directory),
+                packageFullName,
+                StringComparison.OrdinalIgnoreCase));
+        return caseInsensitiveMatch is null ? null : TryReadInfo(caseInsensitiveMatch);
+    }
+
+    /// <inheritdoc/>
+    public InstalledPackageInfo? FindByFamilyName(string packageFamilyName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(packageFamilyName);
+        return EnumeratePackageInfos()
+            .Where(package => string.Equals(
+                package.Identity.PackageFamilyName,
+                packageFamilyName,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static package => package.Identity.Version)
+            .ThenBy(static package => package.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
     }
 
     /// <inheritdoc/>
@@ -99,6 +118,7 @@ public sealed class FileSystemPackageStore : IPackageStore
     /// <inheritdoc/>
     public void Delete(string packageFullName)
     {
+        using FileStream storeLock = AcquireCommitLock();
         string location = GetInstallLocation(packageFullName);
         if (Directory.Exists(location))
         {
@@ -115,66 +135,102 @@ public sealed class FileSystemPackageStore : IPackageStore
     }
 
     /// <inheritdoc/>
-    public void Commit(string stagingLocation, string packageFullName)
+    public void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options)
     {
         ArgumentException.ThrowIfNullOrEmpty(stagingLocation);
-        string destination = GetInstallLocation(packageFullName);
-
-        // Serialize the whole aside/promote/rollback transaction for this destination so a concurrent
-        // commit of the same package cannot observe or clobber our intermediate state.
-        lock (PromotionGates.GetOrAdd(destination, static _ => new object()))
-        {
-            CommitLocked(stagingLocation, destination, packageFullName);
-        }
+        ArgumentNullException.ThrowIfNull(package);
+        string staging = ValidateStagingLocation(stagingLocation, package);
+        using FileStream storeLock = AcquireCommitLock();
+        CommitLocked(staging, package, options);
     }
 
-    private void CommitLocked(string stagingLocation, string destination, string packageFullName)
+    private void CommitLocked(
+        string stagingLocation,
+        InstalledPackageInfo package,
+        DeploymentOptions options)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        PackageIdentity identity = package.Identity;
+        string packageFullName = identity.PackageFullName;
+        string destination = GetInstallLocation(packageFullName);
+        Directory.CreateDirectory(_root);
 
-        // Move any existing installation aside (rather than deleting it) so a failed promotion can be
-        // rolled back instead of destroying the previously-installed package. The backup name starts
-        // with '.' so it is excluded from EnumeratePackages while it exists.
-        string? backup = null;
-        if (Directory.Exists(destination))
+        List<InstalledPackageInfo> familyPackages = EnumeratePackageInfos()
+            .Where(installed => string.Equals(
+                installed.Identity.PackageFamilyName,
+                identity.PackageFamilyName,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        InstalledPackageInfo? exact = familyPackages.FirstOrDefault(installed => string.Equals(
+            installed.Identity.PackageFullName,
+            packageFullName,
+            StringComparison.OrdinalIgnoreCase));
+        if (exact is not null && !options.HasFlag(DeploymentOptions.ForceReinstall))
         {
-            backup = Path.Combine(_root, "." + packageFullName + ".bak-" + Guid.NewGuid().ToString("N"));
-            Directory.Move(destination, backup);
+            throw new InvalidOperationException(
+                $"Package '{packageFullName}' is already installed. Use ForceReinstall to reinstall it.");
         }
 
+        InstalledPackageInfo? newest = familyPackages
+            .OrderByDescending(static installed => installed.Identity.Version)
+            .ThenBy(static installed => installed.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (newest is not null
+            && identity.Version < newest.Identity.Version
+            && !options.HasFlag(DeploymentOptions.AllowDowngrade))
+        {
+            throw new InvalidOperationException(
+                $"Package family '{identity.PackageFamilyName}' has newer version '{newest.Identity.Version}' installed. "
+                + "Use AllowDowngrade to replace it with an older version.");
+        }
+
+        var backups = new List<(string Original, string Backup)>();
+        bool promoted = false;
         try
         {
+            foreach (InstalledPackageInfo installed in familyPackages)
+            {
+                string original = installed.InstalledLocation;
+                string backup = Path.Combine(
+                    _root,
+                    "." + Path.GetFileName(original) + ".bak-" + Guid.NewGuid().ToString("N"));
+                Directory.Move(original, backup);
+                backups.Add((original, backup));
+            }
+
             Directory.Move(stagingLocation, destination);
+            promoted = true;
         }
         catch
         {
-            // Promotion failed: restore the previous installation, if any.
-            if (backup is not null)
+            if (promoted && Directory.Exists(destination))
             {
-                if (Directory.Exists(destination))
-                {
-                    Directory.Delete(destination, recursive: true);
-                }
+                Directory.Delete(destination, recursive: true);
+            }
 
-                Directory.Move(backup, destination);
+            foreach ((string original, string backup) in backups.AsEnumerable().Reverse())
+            {
+                if (Directory.Exists(backup))
+                {
+                    Directory.Move(backup, original);
+                }
             }
 
             throw;
         }
 
-        // The new installation is already in place and the operation has succeeded. Removing the
-        // backup is pure cleanup, so a failure here (e.g. a transient lock on the old files) must not
-        // fail an otherwise-successful install. Leave the stale ('.'-prefixed, enumeration-excluded)
-        // backup behind for later cleanup rather than reporting a false failure.
-        if (backup is not null && Directory.Exists(backup))
+        foreach ((_, string backup) in backups)
         {
-            try
+            if (Directory.Exists(backup))
             {
-                Directory.Delete(backup, recursive: true);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Best-effort cleanup; the successful promotion stands.
+                try
+                {
+                    Directory.Delete(backup, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // The promoted package is valid; stale dot-prefixed backups are ignored by queries.
+                }
             }
         }
     }
@@ -196,24 +252,98 @@ public sealed class FileSystemPackageStore : IPackageStore
         return packageFullName;
     }
 
+    private string ValidateStagingLocation(string stagingLocation, InstalledPackageInfo package)
+    {
+        string staging = Path.GetFullPath(stagingLocation);
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!string.Equals(staging, Path.GetFullPath(package.InstalledLocation), comparison))
+        {
+            throw new ArgumentException(
+                "The package metadata must have been read from the staging location.",
+                nameof(package));
+        }
+
+        string stagingRoot = Path.GetFullPath(Path.Combine(_root, StagingFolderName));
+        string stagingPrefix = stagingRoot.EndsWith(Path.DirectorySeparatorChar)
+            ? stagingRoot
+            : stagingRoot + Path.DirectorySeparatorChar;
+        if (!staging.StartsWith(stagingPrefix, comparison))
+        {
+            throw new ArgumentException(
+                "The staging location must be created by this package store.",
+                nameof(stagingLocation));
+        }
+
+        return staging;
+    }
+
     private static bool ContainsManifest(string directory)
     {
-        if (!Directory.Exists(directory))
+        return InstalledPackageInfo.FindManifest(directory) is not null;
+    }
+
+    private IEnumerable<string> EnumeratePackageDirectories()
+    {
+        if (!Directory.Exists(_root))
         {
-            return false;
+            yield break;
+        }
+
+        foreach (string directory in _enumerateDirectories(_root))
+        {
+            if (!Path.GetFileName(directory).StartsWith('.') && ContainsManifest(directory))
+            {
+                yield return directory;
+            }
+        }
+    }
+
+    private IEnumerable<InstalledPackageInfo> EnumeratePackageInfos()
+    {
+        foreach (string directory in EnumeratePackageDirectories())
+        {
+            InstalledPackageInfo? info = TryReadInfo(directory);
+            if (info is not null)
+            {
+                yield return info;
+            }
+        }
+    }
+
+    private static InstalledPackageInfo? TryReadInfo(string directory)
+    {
+        if (!ContainsManifest(directory))
+        {
+            return null;
         }
 
         try
         {
-            return Directory.EnumerateFiles(directory)
-                .Any(file => string.Equals(
-                    Path.GetFileName(file),
-                    OpcPartNames.AppxManifest,
-                    StringComparison.OrdinalIgnoreCase));
+            return InstalledPackageInfo.ReadFromDirectory(directory);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            return false;
+            return null;
+        }
+    }
+
+    private FileStream AcquireCommitLock()
+    {
+        Directory.CreateDirectory(_root);
+        string path = Path.Combine(_root, CommitLockFileName);
+        var timeout = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (timeout.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                Thread.Sleep(25);
+            }
         }
     }
 }
