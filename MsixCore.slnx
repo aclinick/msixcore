@@ -4,6 +4,9 @@
     <Project Path="src/MsixCore.Packaging/MsixCore.Packaging.csproj" />
     <Project Path="src/msixmgr/msixmgr.csproj" />
   </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/MsixCore.Benchmarks/MsixCore.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MsixCore.Deployment.Tests/MsixCore.Deployment.Tests.csproj" />
     <Project Path="tests/MsixCore.Corpus.Tests/MsixCore.Corpus.Tests.csproj" />
