@@ -148,7 +148,10 @@ part-name rules.
   interrupted. The journal carries a SHA-256 integrity check. POSIX systems
   `fsync` files and affected directories at each phase barrier; Windows uses
   `FlushFileBuffers`, write-through journal renames, and directory-handle flushing
-  behind `IDurableFileSystem`.
+  behind `IDurableFileSystem`. Backup deletion is synchronized while the journal
+  remains present; only then is the journal deleted and the store synchronized
+  again. Synchronous recovery reports success when it durably rolls forward and
+  preserves the original failure when it rolls back.
   Commit-time metadata reads fail closed before version policy is evaluated.
   `.`-prefixed internal directories are excluded from enumeration.
 - **`InstalledPackageInfo`** reads only `AppxManifest.xml`; **`InstalledPackage`**

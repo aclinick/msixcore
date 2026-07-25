@@ -157,7 +157,7 @@ public class FileSystemPackageStoreTests : IDisposable
     }
 
     [WindowsFact]
-    public void Commit_BackupDeleteFailure_StillReportsSuccess()
+    public void Commit_BackupDeleteFailure_RetainsJournalUntilRecovery()
     {
         var store = new FileSystemPackageStore(_root);
         string first = store.CreateStagingLocation();
@@ -168,10 +168,8 @@ public class FileSystemPackageStoreTests : IDisposable
         string fullName = firstInfo.Identity.PackageFullName;
         store.Commit(first, firstInfo, DeploymentOptions.None);
 
-        // Mark a file in the installed payload read-only. On the next commit that payload is moved
-        // aside to the backup (renaming tolerates read-only files), the new payload is promoted, and
-        // then the best-effort backup deletion throws UnauthorizedAccessException on the read-only
-        // file. The promotion has already succeeded, so Commit must swallow that and report success.
+        // Renaming tolerates the read-only payload, but backup deletion cannot complete until the
+        // attribute is cleared. The journal must remain so a later operation retries cleanup.
         string installedReadOnly = Path.Combine(store.GetInstallLocation(fullName), "readonly.txt");
         File.SetAttributes(installedReadOnly, FileAttributes.ReadOnly);
         try
@@ -180,19 +178,27 @@ public class FileSystemPackageStoreTests : IDisposable
             File.WriteAllText(Path.Combine(second, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
             InstalledPackageInfo secondInfo = InstalledPackageInfo.ReadFromDirectory(second);
 
-            store.Commit(second, secondInfo, DeploymentOptions.ForceReinstall);
+            Assert.Throws<AggregateException>(
+                () => store.Commit(second, secondInfo, DeploymentOptions.ForceReinstall));
 
-            Assert.True(store.Contains(fullName));
             Assert.False(Directory.Exists(second));
+            Assert.True(Directory.Exists(store.GetInstallLocation(fullName)));
+            Assert.True(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+            Assert.Contains(
+                Directory.EnumerateDirectories(_root),
+                directory => Path.GetFileName(directory).Contains(".bak-", StringComparison.Ordinal));
         }
         finally
         {
-            // Clear the read-only attribute on the leaked backup so test teardown can delete _root.
             foreach (string file in Directory.EnumerateFiles(_root, "readonly.txt", SearchOption.AllDirectories))
             {
                 File.SetAttributes(file, FileAttributes.Normal);
             }
         }
+
+        var recoveredStore = new FileSystemPackageStore(_root);
+        Assert.Single(recoveredStore.EnumeratePackages());
+        AssertNoTransactionArtifacts();
     }
 
     [Fact]
@@ -294,6 +300,7 @@ public class FileSystemPackageStoreTests : IDisposable
     [InlineData((int)CommitFaultPoint.AfterBackupsDurableBeforePromotion)]
     [InlineData((int)CommitFaultPoint.AfterPromotionBeforeDurable)]
     [InlineData((int)CommitFaultPoint.AfterPromotionDurableBeforeJournalClear)]
+    [InlineData((int)CommitFaultPoint.AfterBackupCleanupBeforeDurable)]
     public void Query_AfterPowerLossAtCommitOrderingPoint_RecoversPackage(int faultPointValue)
     {
         var faultPoint = (CommitFaultPoint)faultPointValue;
@@ -374,7 +381,12 @@ public class FileSystemPackageStoreTests : IDisposable
         int promotionFlush = fileSystem.IndexOf("flush-root", afterPromotionMove + 1);
         int afterPromotionDurable =
             fileSystem.IndexOf(CommitFaultPoint.AfterPromotionDurableBeforeJournalClear);
+        int backupDelete = fileSystem.IndexOf("delete-backup");
+        int afterBackupCleanup =
+            fileSystem.IndexOf(CommitFaultPoint.AfterBackupCleanupBeforeDurable);
+        int backupCleanupFlush = fileSystem.IndexOf("flush-root", afterBackupCleanup + 1);
         int journalDelete = fileSystem.IndexOf("delete-journal");
+        int journalDeleteFlush = fileSystem.IndexOf("flush-root", journalDelete + 1);
 
         Assert.True(manifestFlush < payloadDirectoryFlush);
         Assert.True(payloadFlush < payloadDirectoryFlush);
@@ -391,7 +403,11 @@ public class FileSystemPackageStoreTests : IDisposable
         Assert.True(promotionMove < afterPromotionMove);
         Assert.True(afterPromotionMove < promotionFlush);
         Assert.True(promotionFlush < afterPromotionDurable);
-        Assert.True(afterPromotionDurable < journalDelete);
+        Assert.True(afterPromotionDurable < backupDelete);
+        Assert.True(backupDelete < afterBackupCleanup);
+        Assert.True(afterBackupCleanup < backupCleanupFlush);
+        Assert.True(backupCleanupFlush < journalDelete);
+        Assert.True(journalDelete < journalDeleteFlush);
         Assert.True(fileSystem.PromotionObservedAllFilesFlushed);
     }
 
@@ -407,8 +423,7 @@ public class FileSystemPackageStoreTests : IDisposable
             LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
         InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
 
-        Assert.Throws<IOException>(
-            () => store.Commit(version2, version2Info, DeploymentOptions.None));
+        store.Commit(version2, version2Info, DeploymentOptions.None);
 
         InstalledPackageInfo installed = Assert.Single(store.EnumeratePackages());
         Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
@@ -430,12 +445,89 @@ public class FileSystemPackageStoreTests : IDisposable
         File.WriteAllText(Path.Combine(replacement, "new.txt"), "new");
         InstalledPackageInfo replacementInfo = InstalledPackageInfo.ReadFromDirectory(replacement);
 
-        Assert.Throws<IOException>(
-            () => store.Commit(replacement, replacementInfo, DeploymentOptions.ForceReinstall));
+        store.Commit(replacement, replacementInfo, DeploymentOptions.ForceReinstall);
 
         InstalledPackageInfo installed = Assert.Single(store.EnumeratePackages());
         Assert.True(File.Exists(Path.Combine(installed.InstalledLocation, "new.txt")));
         Assert.False(File.Exists(Path.Combine(installed.InstalledLocation, "old.txt")));
+        AssertNoTransactionArtifacts();
+    }
+
+    [Fact]
+    public void Commit_PromotionSyncFailureThatRollsBack_ReportsFailure()
+    {
+        InstalledPackageInfo version1 = CreateInstalledLayout("1.0.0.0");
+        var fileSystem = new RecordingDurableFileSystem(
+            _root,
+            promotionFlushFailures: 1,
+            loseDestinationOnPromotionFlushFailure: true);
+        var store = new FileSystemPackageStore(_root, Directory.EnumerateDirectories, fileSystem);
+        string version2 = store.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version2, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
+
+        Assert.Throws<IOException>(
+            () => store.Commit(version2, version2Info, DeploymentOptions.None));
+
+        InstalledPackageInfo installed = Assert.Single(store.EnumeratePackages());
+        Assert.Equal(version1.Identity.PackageFullName, installed.Identity.PackageFullName);
+        AssertNoTransactionArtifacts();
+    }
+
+    [Fact]
+    public void Query_CrashBeforeBackupCleanupIsDurable_RemovesStrandedBackup()
+    {
+        _ = CreateInstalledLayout("1.0.0.0");
+        var fileSystem = new RecordingDurableFileSystem(
+            _root,
+            CommitFaultPoint.AfterBackupCleanupBeforeDurable);
+        var crashingStore = new FileSystemPackageStore(
+            _root,
+            Directory.EnumerateDirectories,
+            fileSystem);
+        string version2 = crashingStore.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version2, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
+
+        Assert.Throws<SimulatedProcessCrashException>(
+            () => crashingStore.Commit(version2, version2Info, DeploymentOptions.None));
+        Assert.True(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+        Assert.Contains(
+            Directory.EnumerateDirectories(_root),
+            directory => Path.GetFileName(directory).Contains(".bak-", StringComparison.Ordinal));
+
+        var recoveredStore = new FileSystemPackageStore(_root);
+        InstalledPackageInfo installed = Assert.Single(recoveredStore.EnumeratePackages());
+        Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
+        AssertNoTransactionArtifacts();
+    }
+
+    [Fact]
+    public void Commit_BackupDeletionFailure_RetainsJournalForRetry()
+    {
+        _ = CreateInstalledLayout("1.0.0.0");
+        var fileSystem = new RecordingDurableFileSystem(_root, backupDeleteFailures: 2);
+        var store = new FileSystemPackageStore(_root, Directory.EnumerateDirectories, fileSystem);
+        string version2 = store.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version2, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
+
+        Assert.Throws<AggregateException>(
+            () => store.Commit(version2, version2Info, DeploymentOptions.None));
+        Assert.True(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+        Assert.Contains(
+            Directory.EnumerateDirectories(_root),
+            directory => Path.GetFileName(directory).Contains(".bak-", StringComparison.Ordinal));
+
+        var recoveredStore = new FileSystemPackageStore(_root);
+        InstalledPackageInfo installed = Assert.Single(recoveredStore.EnumeratePackages());
+        Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
         AssertNoTransactionArtifacts();
     }
 
@@ -713,7 +805,9 @@ public class FileSystemPackageStoreTests : IDisposable
         CommitFaultPoint? faultPoint = null,
         int promotionFlushFailures = 0,
         PromotionCrashState promotionCrashState = PromotionCrashState.Persisted,
-        int restoreFlushFailures = 0) : IDurableFileSystem
+        int restoreFlushFailures = 0,
+        bool loseDestinationOnPromotionFlushFailure = false,
+        int backupDeleteFailures = 0) : IDurableFileSystem
     {
         private readonly DurableFileSystem _inner = DurableFileSystem.Instance;
         private readonly List<string> _events = [];
@@ -721,8 +815,10 @@ public class FileSystemPackageStoreTests : IDisposable
             new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         private int _remainingPromotionFlushFailures = promotionFlushFailures;
         private int _remainingRestoreFlushFailures = restoreFlushFailures;
+        private int _remainingBackupDeleteFailures = backupDeleteFailures;
         private bool _promotionOccurred;
         private bool _restoreOccurred;
+        private string? _lastDeletedBackup;
         private string? _promotionSource;
         private string? _promotionDestination;
 
@@ -793,8 +889,19 @@ public class FileSystemPackageStoreTests : IDisposable
 
         public void DeleteDirectory(string path, bool recursive)
         {
-            _events.Add("delete-directory");
+            bool backup = Path.GetFileName(path).Contains(".bak-", StringComparison.Ordinal);
+            _events.Add(backup ? "delete-backup" : "delete-directory");
+            if (backup && _remainingBackupDeleteFailures > 0)
+            {
+                _remainingBackupDeleteFailures--;
+                throw new IOException("Injected backup deletion failure.");
+            }
+
             _inner.DeleteDirectory(path, recursive);
+            if (backup)
+            {
+                _lastDeletedBackup = path;
+            }
         }
 
         public void FlushDirectory(string path)
@@ -805,6 +912,13 @@ public class FileSystemPackageStoreTests : IDisposable
             if (_promotionOccurred && _remainingPromotionFlushFailures > 0)
             {
                 _remainingPromotionFlushFailures--;
+                if (loseDestinationOnPromotionFlushFailure
+                    && _promotionDestination is not null
+                    && _inner.DirectoryExists(_promotionDestination))
+                {
+                    _inner.DeleteDirectory(_promotionDestination, recursive: true);
+                }
+
                 throw new IOException("Injected promotion durability barrier failure.");
             }
 
@@ -846,6 +960,11 @@ public class FileSystemPackageStoreTests : IDisposable
                 && _promotionDestination is not null)
             {
                 CopyDirectory(_promotionDestination, _promotionSource);
+            }
+            else if (point == CommitFaultPoint.AfterBackupCleanupBeforeDurable
+                && _lastDeletedBackup is not null)
+            {
+                Directory.CreateDirectory(_lastDeletedBackup);
             }
 
             throw new SimulatedProcessCrashException();

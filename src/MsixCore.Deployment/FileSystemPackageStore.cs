@@ -218,9 +218,10 @@ public sealed class FileSystemPackageStore : IPackageStore
         }
         catch (Exception commitFailure)
         {
+            CommitRecoveryOutcome recoveryOutcome;
             try
             {
-                RecoverIncompleteCommitLocked();
+                recoveryOutcome = RecoverIncompleteCommitLocked();
             }
             catch (Exception recoveryFailure)
             {
@@ -228,6 +229,11 @@ public sealed class FileSystemPackageStore : IPackageStore
                     "The package commit failed and recovery was interrupted; the durable journal remains for retry.",
                     commitFailure,
                     recoveryFailure);
+            }
+
+            if (recoveryOutcome is CommitRecoveryOutcome.NoJournal or CommitRecoveryOutcome.RolledForward)
+            {
+                return;
             }
 
             ExceptionDispatchInfo.Capture(commitFailure).Throw();
@@ -246,16 +252,15 @@ public sealed class FileSystemPackageStore : IPackageStore
         _fileSystem.CommitPoint(CommitFaultPoint.AfterPromotionBeforeDurable);
         FlushPromotionDirectories(resolved);
         _fileSystem.CommitPoint(CommitFaultPoint.AfterPromotionDurableBeforeJournalClear);
-        CleanupBackups(resolved);
-        DeleteCommitJournal();
+        CompleteCommitTransaction(resolved);
     }
 
-    private void RecoverIncompleteCommitLocked()
+    private CommitRecoveryOutcome RecoverIncompleteCommitLocked()
     {
         string journalPath = Path.Combine(_root, CommitJournalFileName);
         if (!_fileSystem.FileExists(journalPath))
         {
-            return;
+            return CommitRecoveryOutcome.NoJournal;
         }
 
         CommitTransaction transaction;
@@ -281,17 +286,17 @@ public sealed class FileSystemPackageStore : IPackageStore
                 $"The commit journal has unsupported recovery mode '{transaction.RecoveryMode}'.");
         }
 
-        ConvergeCommitTransaction(transaction, resolved);
+        return ConvergeCommitTransaction(transaction, resolved);
     }
 
-    private void ConvergeCommitTransaction(
+    private CommitRecoveryOutcome ConvergeCommitTransaction(
         CommitTransaction transaction,
         ResolvedCommitTransaction resolved)
     {
         if (transaction.RecoveryMode == CommitRecoveryMode.RollBack)
         {
             ConvergeRollback(resolved);
-            return;
+            return CommitRecoveryOutcome.RolledBack;
         }
 
         // Staging present means promotion has not completed. Destination present means promotion
@@ -302,7 +307,7 @@ public sealed class FileSystemPackageStore : IPackageStore
             {
                 ChangeRecoveryMode(transaction, CommitRecoveryMode.RollBack);
                 ConvergeRollback(resolved);
-                return;
+                return CommitRecoveryOutcome.RolledBack;
             }
 
             MoveOriginalsToBackups(resolved);
@@ -320,12 +325,12 @@ public sealed class FileSystemPackageStore : IPackageStore
         {
             ChangeRecoveryMode(transaction, CommitRecoveryMode.RollBack);
             ConvergeRollback(resolved);
-            return;
+            return CommitRecoveryOutcome.RolledBack;
         }
 
         FlushPromotionDirectories(resolved);
-        CleanupBackups(resolved);
-        DeleteCommitJournal();
+        CompleteCommitTransaction(resolved);
+        return CommitRecoveryOutcome.RolledForward;
     }
 
     private void ConvergeRollback(ResolvedCommitTransaction resolved)
@@ -344,8 +349,7 @@ public sealed class FileSystemPackageStore : IPackageStore
 
         RestoreBackups(resolved);
         _fileSystem.FlushDirectory(_root);
-        CleanupBackups(resolved);
-        DeleteCommitJournal();
+        CompleteCommitTransaction(resolved);
     }
 
     private void WriteCommitJournal(CommitTransaction transaction)
@@ -535,27 +539,26 @@ public sealed class FileSystemPackageStore : IPackageStore
                 continue;
             }
 
-            try
+            _fileSystem.DeleteDirectory(backup, recursive: true);
+            if (_fileSystem.DirectoryExists(backup))
             {
-                _fileSystem.DeleteDirectory(backup, recursive: true);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // The promoted package is valid; stale dot-prefixed backups are ignored by queries.
+                throw new IOException($"Could not remove package-store backup '{backup}'.");
             }
         }
     }
 
+    private void CompleteCommitTransaction(ResolvedCommitTransaction transaction)
+    {
+        CleanupBackups(transaction);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterBackupCleanupBeforeDurable);
+        _fileSystem.FlushDirectory(_root);
+        DeleteCommitJournal();
+        _fileSystem.FlushDirectory(_root);
+    }
+
     private void DeleteCommitJournal()
     {
-        try
-        {
-            _fileSystem.DeleteFile(Path.Combine(_root, CommitJournalFileName));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Recovery is idempotent and will retry journal cleanup on the next locked operation.
-        }
+        _fileSystem.DeleteFile(Path.Combine(_root, CommitJournalFileName));
     }
 
     private ResolvedCommitTransaction ResolveTransaction(CommitTransaction transaction)
@@ -858,12 +861,20 @@ internal enum CommitFaultPoint
     AfterBackupsDurableBeforePromotion,
     AfterPromotionBeforeDurable,
     AfterPromotionDurableBeforeJournalClear,
+    AfterBackupCleanupBeforeDurable,
 }
 
 internal enum CommitRecoveryMode
 {
     RollForward,
     RollBack,
+}
+
+internal enum CommitRecoveryOutcome
+{
+    NoJournal,
+    RolledForward,
+    RolledBack,
 }
 
 internal sealed class SimulatedProcessCrashException : Exception
