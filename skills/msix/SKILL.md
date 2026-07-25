@@ -21,11 +21,13 @@ description: >-
   unpack paths run on **Windows, Linux, and macOS** (no OS integration required), so they work in CI.
 - **`MsixCore.Packaging`** — the library for opening a package (container file *or* loose folder),
   reading identity/manifest/block-map/signature, and verifying integrity.
-- **`MsixCore.Deployment`** — extraction (`PackageExtractor`) and, on **Windows only**, install/remove
-  (`PackageManager`).
+- **`MsixCore.Deployment`** — extraction (`PackageExtractor`) and a **cross-platform package store**
+  (`PackageManager`) that stages/removes packages into a filesystem store. This is *not* Windows OS
+  registration — actual OS install/integration is future work.
 
-Everything accepts either a **package file** (`.msix`/`.appx`) or an **unpacked directory** (a loose
-layout containing `AppxManifest.xml`).
+The packaging **reads** and the `msixmgr` verbs (`inspect`/`validate`/`unpack`) each accept either a
+**package file** (`.msix`/`.appx`) or an **unpacked directory** (a loose layout containing
+`AppxManifest.xml`). `PackageManager.AddPackage` takes a package file.
 
 ## Quick reference (`msixmgr` CLI)
 
@@ -104,6 +106,7 @@ Reference `MsixCore.Packaging` (+ `MsixCore.Deployment` for extract/install).
 
 ```csharp
 using MsixCore.Packaging;
+using MsixCore.Packaging.Integrity;
 using MsixCore.Deployment;
 
 // Open a package file OR a loose directory:
@@ -132,12 +135,12 @@ if (package.ReadSignature() is { } sig)
 PackageExtractor.Extract(package.Opc, "./out");
 ```
 
-**Install / remove (Windows only):**
+**Stage / remove in a cross-platform package store** (filesystem store; not Windows OS registration):
 
 ```csharp
 var manager = new MsixCore.Deployment.PackageManager();       // default per-user file-system store
 IMsixResponse add = manager.AddPackage("App.msix", DeploymentOptions.None);
-add.ProgressChanged += (_, r) => Console.WriteLine($"{r.Percentage:P0} {r.StatusText}");
+add.ProgressChanged += (_, r) => Console.WriteLine($"{r.Percentage:F0}% {r.StatusText}");
 await add.Completion;                                          // throws on failure
 IMsixResponse remove = manager.RemovePackage(id.PackageFullName);
 await remove.Completion;
@@ -165,15 +168,17 @@ skill; this skill focuses on reading/validating/unpacking existing packages.
   Linux, and macOS — this is the point of the .NET 10 port (great for Linux CI/CD).
 - Filenames inside a package are matched per the OPC canonicalization rules (percent-decoded); the
   library is careful about case-sensitive filesystems on Linux.
-- **Windows-only:** actual install/registration (`PackageManager.AddPackage`/`RemovePackage`) and
-  anything touching the certificate store or OS integration.
+- **Cross-platform staging:** `PackageManager.AddPackage`/`RemovePackage` operate on a filesystem
+  package store on any OS. Actual OS **install/registration** (and anything touching the certificate
+  store or OS integration) is **not yet implemented** — future Windows-only work.
 
 ## Current limitations
 
 - **Bundles** (`.msixbundle`) are recognized as containers but bundle applicability/flattening is not
   yet implemented — reading a bundle as an app package throws `InvalidDataException`.
 - Signature **binding + trust chain** verification is not yet implemented (see the `validate` note).
-- CLI install/remove verbs are not yet wired; use the `PackageManager` library API on Windows.
+- CLI install/remove verbs are not yet wired; use the `PackageManager` library API (cross-platform
+  filesystem store).
 
 ## Build & test
 
