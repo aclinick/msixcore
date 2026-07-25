@@ -1,33 +1,34 @@
 # SDK tool comparison — generated results
 
-Generated: 2026-07-25T08:08:51.1203118-07:00
+Generated: 2026-07-25T08:32:49.0632368-07:00
 
 - Host: `Microsoft Windows 10.0.26300` (Arm64)
 - .NET SDK: `10.0.300`
 - MakeAppx: `C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\arm64\makeappx.exe` (10.0.26100.8249 (WinBuild.160101.0800))
 - Repetitions: 7 measured after one discarded warmup
 - Packages are unsigned and stored/uncompressed (MakeAppx `/nc`), matching msixmgr's current authoring mode.
+- Timed MakeAppx pack/unpack runs use `/nv` to exclude its extra semantic validation; untimed correctness checks keep validation enabled.
 - Headline multipliers are **MakeAppx / msixmgr**; **greater than 1.00× means msixmgr is faster or uses less memory**.
 
 ## Pack
 
-**Summary:** msixmgr is 1.43–2.40× faster and uses 1.01–2.41× less peak working set.
+**Summary:** speedup is 0.81–2.55× and peak-working-set reduction is 0.89–2.24×; values below 1× favor MakeAppx.
 
 | Corpus | Speedup (MakeAppx / msixmgr) | msixmgr time median [min–max] ms | MakeAppx time median [min–max] ms | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| small-1MiB-8files (1.00 MB) | **1.43× faster** | 177.68 [122.65–220.24] | 253.41 [174.87–405.58] | **1.01× less** | 30.34 MB | 30.76 MB |
-| medium-10MiB-64files (10.00 MB) | **2.40× faster** | 307.59 [185.93–656.97] | 738.49 [518.32–787.27] | **1.12× less** | 33.59 MB | 37.52 MB |
-| large-64MiB-128files (64.00 MB) | **1.87× faster** | 765.14 [635.45–887.02] | 1,427.76 [861.62–1,490.26] | **2.41× less** | 39.14 MB | 94.45 MB |
+| small-1MiB-8files (1.00 MB) | **1.32× faster** | 106.06 [95.95–150.49] | 140.34 [86.43–159.34] | **0.90× (MakeAppx uses less)** | 30.30 MB | 27.40 MB |
+| medium-10MiB-64files (10.00 MB) | **0.81× (MakeAppx faster)** | 244.45 [207.86–253.35] | 197.43 [135.51–215.29] | **0.89× (MakeAppx uses less)** | 33.59 MB | 30.02 MB |
+| large-64MiB-128files (64.00 MB) | **2.55× faster** | 680.58 [571.43–765.28] | 1,735.00 [350.38–3,407.32] | **2.24× less** | 37.24 MB | 83.25 MB |
 
 ## Unpack
 
-**Summary:** msixmgr is 1.69–1.88× faster and uses 1.29–1.31× less peak working set.
+**Summary:** msixmgr is 1.07–1.46× faster and uses 1.12–1.20× less peak working set.
 
 | Corpus | Speedup (MakeAppx / msixmgr) | msixmgr time median [min–max] ms | MakeAppx time median [min–max] ms | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| small-1MiB-8files (1.00 MB) | **1.69× faster** | 130.27 [74.13–150.71] | 220.29 [139.39–326.57] | **1.29× less** | 23.67 MB | 30.55 MB |
-| medium-10MiB-64files (10.00 MB) | **1.84× faster** | 208.03 [146.96–257.20] | 383.76 [203.81–424.59] | **1.30× less** | 23.79 MB | 30.83 MB |
-| large-64MiB-128files (64.00 MB) | **1.88× faster** | 298.05 [220.69–329.23] | 561.69 [431.45–734.55] | **1.31× less** | 23.79 MB | 31.25 MB |
+| small-1MiB-8files (1.00 MB) | **1.10× faster** | 133.49 [82.76–166.57] | 146.83 [100.80–184.29] | **1.20× less** | 22.70 MB | 27.29 MB |
+| medium-10MiB-64files (10.00 MB) | **1.07× faster** | 146.43 [96.60–178.03] | 156.09 [123.48–199.30] | **1.12× less** | 24.66 MB | 27.61 MB |
+| large-64MiB-128files (64.00 MB) | **1.46× faster** | 206.52 [133.59–260.02] | 301.48 [228.22–368.36] | **1.18× less** | 23.80 MB | 28.10 MB |
 
 ## Validate (no MakeAppx equivalent)
 
@@ -35,24 +36,24 @@ MakeAppx has no standalone block-map verification verb, so these msixmgr results
 
 | Corpus | msixmgr time median [min–max] ms | Peak working set |
 | --- | ---: | ---: |
-| small-1MiB-8files (1.00 MB) | 203.84 [118.16–223.87] | 28.63 MB |
-| medium-10MiB-64files (10.00 MB) | 284.12 [184.27–347.40] | 32.38 MB |
-| large-64MiB-128files (64.00 MB) | 321.72 [185.71–495.24] | 33.73 MB |
+| small-1MiB-8files (1.00 MB) | 135.69 [88.96–162.86] | 27.20 MB |
+| medium-10MiB-64files (10.00 MB) | 173.17 [97.31–181.56] | 31.53 MB |
+| large-64MiB-128files (64.00 MB) | 183.73 [134.38–193.26] | 33.71 MB |
 
 ## Sampled peak private bytes
 
 Private bytes are sampled every 5 ms, so short-lived peaks can be missed; peak working set above uses the OS-reported process peak sampled while the process is alive.
 
-**Summary:** msixmgr uses 1.90–5.12× less sampled private memory for pack and about 2.39× less for unpack.
+**Summary:** msixmgr uses 1.31–4.84× less sampled private memory for pack and 1.78–1.92× less for unpack.
 
 | Operation | Corpus | Memory reduction (MakeAppx / msixmgr) | msixmgr | MakeAppx |
 | --- | --- | ---: | ---: | ---: |
-| Pack | small-1MiB-8files | **1.90× less** | 8.01 MB | 15.21 MB |
-| Pack | medium-10MiB-64files | **1.97× less** | 11.19 MB | 22.00 MB |
-| Pack | large-64MiB-128files | **5.12× less** | 15.50 MB | 79.36 MB |
-| Unpack | small-1MiB-8files | **2.38× less** | 6.20 MB | 14.78 MB |
-| Unpack | medium-10MiB-64files | **2.39× less** | 6.40 MB | 15.27 MB |
-| Unpack | large-64MiB-128files | **2.39× less** | 6.54 MB | 15.61 MB |
+| Pack | small-1MiB-8files | **1.50× less** | 7.99 MB | 12.00 MB |
+| Pack | medium-10MiB-64files | **1.31× less** | 11.09 MB | 14.50 MB |
+| Pack | large-64MiB-128files | **4.84× less** | 14.64 MB | 70.79 MB |
+| Unpack | small-1MiB-8files | **1.78× less** | 5.77 MB | 10.27 MB |
+| Unpack | medium-10MiB-64files | **1.92× less** | 6.30 MB | 12.09 MB |
+| Unpack | large-64MiB-128files | **1.92× less** | 6.55 MB | 12.57 MB |
 
 ## Observed MakeAppx SDK-local footprint
 

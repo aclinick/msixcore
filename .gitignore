@@ -12,7 +12,6 @@ BenchmarkDotNet.Artifacts/
 bench/publish/
 bench/publish-probe/
 bench/results/
-bench/comparison-results.json
 
 # Rider / VS
 .idea/

@@ -48,8 +48,13 @@ pwsh bench\Compare-Tools.ps1 -Iterations 7 `
 `Compare-Tools.ps1` builds `src\msixmgr` in Release and deterministically generates
 three valid loose package layouts: 1 MiB/8 payload files, 10 MiB/64 files, and
 64 MiB/128 files. The same layouts and canonical packages are used by both tools.
-Compression is disabled because this port currently writes stored entries; otherwise
-MakeAppx compression would change both the work performed and unpack input size.
+Compression is disabled because this port currently writes stored entries
+([issue #41](https://github.com/aclinick/msixcore/issues/41)); otherwise MakeAppx
+compression would change both the work performed and unpack input size.
+Timed MakeAppx pack and unpack runs also use `/nv` to disable its additional semantic
+validation, equalizing the workload to author-vs-author and extract-vs-extract.
+MakeAppx validation remains enabled for untimed canonical-package creation and
+cross-tool interoperability checks, so correctness is not traded for speed.
 
 Every sample starts a fresh external process. Wall time uses
 `System.Diagnostics.Stopwatch` from process start through exit. Peak working set uses
@@ -72,55 +77,56 @@ visible on this workstation; medians are the comparison statistic.
 
 ## Pack results
 
-**Summary:** msixmgr packs 1.43–2.40× faster and uses 1.01–2.41× less peak
-working set.
+**Summary:** the speedup multiplier spans 0.81–2.55×: msixmgr wins the 1 MiB
+and 64 MiB rows, while MakeAppx wins the 10 MiB row; memory winners also vary.
 
 | Corpus | Speedup (MakeAppx / msixmgr) | msixmgr median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 MiB / 8 files | **1.43× faster** | 177.68 [122.65–220.24] ms | 253.41 [174.87–405.58] ms | **1.01× less** | 30.34 MB | 30.76 MB |
-| 10 MiB / 64 files | **2.40× faster** | 307.59 [185.93–656.97] ms | 738.49 [518.32–787.27] ms | **1.12× less** | 33.59 MB | 37.52 MB |
-| 64 MiB / 128 files | **1.87× faster** | 765.14 [635.45–887.02] ms | 1,427.76 [861.62–1,490.26] ms | **2.41× less** | 39.14 MB | 94.45 MB |
+| 1 MiB / 8 files | **1.32× faster** | 106.06 [95.95–150.49] ms | 140.34 [86.43–159.34] ms | **0.90× (MakeAppx uses less)** | 30.30 MB | 27.40 MB |
+| 10 MiB / 64 files | **0.81× (MakeAppx faster)** | 244.45 [207.86–253.35] ms | 197.43 [135.51–215.29] ms | **0.89× (MakeAppx uses less)** | 33.59 MB | 30.02 MB |
+| 64 MiB / 128 files | **2.55× faster** | 680.58 [571.43–765.28] ms | 1,735.00 [350.38–3,407.32] ms | **2.24× less** | 37.24 MB | 83.25 MB |
 
 ## Unpack results
 
 Both tools unpack the same uncompressed package authored by MakeAppx.
 
-**Summary:** msixmgr unpacks 1.69–1.88× faster, with the lead growing with
-package size, and uses 1.29–1.31× less peak working set.
+**Summary:** msixmgr unpacks 1.07–1.46× faster and uses 1.12–1.20× less peak
+working set.
 
 | Corpus | Speedup (MakeAppx / msixmgr) | msixmgr median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 MiB / 8 files | **1.69× faster** | 130.27 [74.13–150.71] ms | 220.29 [139.39–326.57] ms | **1.29× less** | 23.67 MB | 30.55 MB |
-| 10 MiB / 64 files | **1.84× faster** | 208.03 [146.96–257.20] ms | 383.76 [203.81–424.59] ms | **1.30× less** | 23.79 MB | 30.83 MB |
-| 64 MiB / 128 files | **1.88× faster** | 298.05 [220.69–329.23] ms | 561.69 [431.45–734.55] ms | **1.31× less** | 23.79 MB | 31.25 MB |
+| 1 MiB / 8 files | **1.10× faster** | 133.49 [82.76–166.57] ms | 146.83 [100.80–184.29] ms | **1.20× less** | 22.70 MB | 27.29 MB |
+| 10 MiB / 64 files | **1.07× faster** | 146.43 [96.60–178.03] ms | 156.09 [123.48–199.30] ms | **1.12× less** | 24.66 MB | 27.61 MB |
+| 64 MiB / 128 files | **1.46× faster** | 206.52 [133.59–260.02] ms | 301.48 [228.22–368.36] ms | **1.18× less** | 23.80 MB | 28.10 MB |
 
 ## Sampled peak private memory
 
 Private bytes are sampled every 5 ms and can miss short-lived peaks; peak working
 set above remains the primary memory metric.
 
-**Summary:** msixmgr uses 1.90–5.12× less sampled private memory for pack and
-about 2.39× less for unpack.
+**Summary:** msixmgr uses 1.31–4.84× less sampled private memory for pack and
+1.78–1.92× less for unpack.
 
 | Operation | Corpus | Memory reduction (MakeAppx / msixmgr) | msixmgr | MakeAppx |
 | --- | --- | ---: | ---: | ---: |
-| Pack | 1 MiB / 8 files | **1.90× less** | 8.01 MB | 15.21 MB |
-| Pack | 10 MiB / 64 files | **1.97× less** | 11.19 MB | 22.00 MB |
-| Pack | 64 MiB / 128 files | **5.12× less** | 15.50 MB | 79.36 MB |
-| Unpack | 1 MiB / 8 files | **2.38× less** | 6.20 MB | 14.78 MB |
-| Unpack | 10 MiB / 64 files | **2.39× less** | 6.40 MB | 15.27 MB |
-| Unpack | 64 MiB / 128 files | **2.39× less** | 6.54 MB | 15.61 MB |
+| Pack | 1 MiB / 8 files | **1.50× less** | 7.99 MB | 12.00 MB |
+| Pack | 10 MiB / 64 files | **1.31× less** | 11.09 MB | 14.50 MB |
+| Pack | 64 MiB / 128 files | **4.84× less** | 14.64 MB | 70.79 MB |
+| Unpack | 1 MiB / 8 files | **1.78× less** | 5.77 MB | 10.27 MB |
+| Unpack | 10 MiB / 64 files | **1.92× less** | 6.30 MB | 12.09 MB |
+| Unpack | 64 MiB / 128 files | **1.92× less** | 6.55 MB | 12.57 MB |
 
 ## Validate: asymmetric capability
 
-MakeAppx validates while packing/unpacking but has no standalone verb equivalent to
-`msixmgr validate`. A synthetic MakeAppx ratio would therefore be misleading.
+MakeAppx can perform semantic validation as part of its default pack/unpack path, but
+the timed runs above disable it with `/nv`. It has no standalone verb equivalent to
+`msixmgr validate`, so a synthetic validation ratio would be misleading.
 
 | Corpus | msixmgr median [min–max] | Peak working set |
 | --- | ---: | ---: |
-| 1 MiB / 8 files | 203.84 [118.16–223.87] ms | 28.63 MB |
-| 10 MiB / 64 files | 284.12 [184.27–347.40] ms | 32.38 MB |
-| 64 MiB / 128 files | 321.72 [185.71–495.24] ms | 33.73 MB |
+| 1 MiB / 8 files | 135.69 [88.96–162.86] ms | 27.20 MB |
+| 10 MiB / 64 files | 173.17 [97.31–181.56] ms | 31.53 MB |
+| 64 MiB / 128 files | 183.73 [134.38–193.26] ms | 33.71 MB |
 
 This is end-to-end CLI time, including managed startup/JIT and manifest/block-map
 parsing, not just SHA-256 throughput. The smaller cases are consequently
@@ -152,16 +158,19 @@ than MakeAppx's SDK-local files, but that comparison excludes the shared .NET ru
 
 ## Interpretation
 
-- On this run, msixmgr won every measured runtime row: pack was 1.43–2.40× faster
-  and unpack was 1.69–1.88× faster. This is a real result for these uncompressed corpora,
-  but not evidence that managed code is universally faster.
+- With validation removed from timed MakeAppx work, the pack result is mixed:
+  msixmgr is 1.32× faster at 1 MiB and 2.55× faster at 64 MiB, while MakeAppx
+  is about 1.24× faster at 10 MiB (the displayed msixmgr speedup is 0.81×).
+  msixmgr wins all unpack rows, but only by 1.07–1.46×.
 - The primary result is a fair native-Arm64 fight and is **not explained by
-  emulation**. The optional x64 MakeAppx run is secondary only.
-  MakeAppx performs richer Windows package semantic work and its parallel pack path
-  reached 94 MB peak working set on the 64 MiB corpus. msixmgr's narrower,
-  stored-entry authoring path peaked at 39 MB.
+  emulation**. The optional x64 MakeAppx run is secondary only. Timed MakeAppx
+  operations use `/nv`, so its additional semantic-validation cost is excluded
+  rather than being hidden inside pack/unpack.
 - Managed startup/JIT is a fixed tax. It is most visible on the 1 MiB operations,
   where time and working set are close. Throughput dominates as payload size grows.
+- Large-pack variance remains substantial: native MakeAppx ranged from 350 ms to
+  3.41 s for the 64 MiB corpus. The median is reported, but this row should be
+  rerun on a quieter release machine before treating 2.55× as a stable guarantee.
 - MakeAppx can compress supported content; msixmgr cannot yet. Compression-enabled
   MakeAppx is a different workload that may produce much smaller packages and should
   be measured separately once both tools expose equivalent compression behavior.

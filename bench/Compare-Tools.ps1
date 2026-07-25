@@ -356,7 +356,7 @@ foreach ($corpus in $corpora) {
         -Arguments { param($run) @('pack', $corpus.Root, '-o', $ourPack, '--overwrite') }
     $rawResults += Invoke-OperationRuns -Operation 'Pack' -Corpus $corpus -Tool 'MakeAppx' `
         -Prepare { param($run) Remove-Output $sdkPack } -FilePath $selectedMakeAppxPath `
-        -Arguments { param($run) @('pack', '/d', $corpus.Root, '/p', $sdkPack, '/o', '/nc') }
+        -Arguments { param($run) @('pack', '/d', $corpus.Root, '/p', $sdkPack, '/o', '/nc', '/nv') }
 
     # Produce stable packages after the timed runs and verify cross-tool consumption.
     Remove-Output $ourPack
@@ -382,7 +382,7 @@ foreach ($corpus in $corpora) {
         -Arguments { param($run) @('unpack', $canonical, '-Destination', $ourUnpack) }
     $rawResults += Invoke-OperationRuns -Operation 'Unpack' -Corpus $corpus -Tool 'MakeAppx' `
         -Prepare { param($run) Remove-Output $sdkUnpack } -FilePath $selectedMakeAppxPath `
-        -Arguments { param($run) @('unpack', '/p', $canonical, '/d', $sdkUnpack, '/o') }
+        -Arguments { param($run) @('unpack', '/p', $canonical, '/d', $sdkUnpack, '/o', '/nv') }
 
     Assert-SourceFilesMatch -Source $corpus.Root -Extracted $ourUnpack
     Assert-SourceFilesMatch -Source $corpus.Root -Extracted $sdkUnpack
@@ -431,6 +431,7 @@ $metadata = [ordered]@{
     MeasuredMakeAppxPath = $selectedMakeAppxPath
     MakeAppxVersion = (Get-Item $selectedMakeAppxPath).VersionInfo.FileVersion
     MakeAppxArchitecture = (Split-Path -Leaf (Split-Path -Parent $selectedMakeAppxPath))
+    MakeAppxTimedNoValidation = $true
     MakeAppxSdkLocalFootprintBytes = $sdkFootprint
     MakeAppxSdkLocalFiles = @($sdkModules | ForEach-Object {
         [ordered]@{ Name = $_.Name; Bytes = $_.Length }
@@ -456,6 +457,7 @@ $sb = [Text.StringBuilder]::new()
 [void]$sb.AppendLine("- MakeAppx: ``$(Quote-Markdown $selectedMakeAppxPath)`` ($($metadata.MakeAppxVersion))")
 [void]$sb.AppendLine("- Repetitions: $Iterations measured after one discarded warmup")
 [void]$sb.AppendLine("- Packages are unsigned and stored/uncompressed (MakeAppx ``/nc``), matching msixmgr's current authoring mode.")
+[void]$sb.AppendLine("- Timed MakeAppx pack/unpack runs use ``/nv`` to exclude its extra semantic validation; untimed correctness checks keep validation enabled.")
 [void]$sb.AppendLine("- Headline multipliers are **MakeAppx / msixmgr**; **greater than 1.00× means msixmgr is faster or uses less memory**.")
 [void]$sb.AppendLine()
 
