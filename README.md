@@ -45,14 +45,16 @@ as a modern, memory-safe, **cross-platform** library and CLI.
 ## Status
 
 Under active, **phased** development. Each phase lands as its own reviewed PR
-with full test coverage (currently 290 passing tests). The reader
+with full test coverage (currently 300 passing tests). The reader
 (OPC → manifest → block map → signature → identity), the deployment **engine**
 (transactional add/remove driving `IMsixResponse`, cross-platform extraction,
 and query), package authoring, and the `unpack`/`pack` CLI verbs are
 implemented; Windows OS-integration handlers (shortcuts, registry,
 associations) are guarded and land in a later phase. Authoring currently
 produces unsigned `.msix` packages; signing and bundle authoring remain
-separate/future capabilities.
+separate/future capabilities. Authored entries are currently Stored
+(uncompressed) for strict block-map conformance; block-level deflate is tracked
+in [issue #41](https://github.com/aclinick/msixcore/issues/41).
 
 ## Requirements
 

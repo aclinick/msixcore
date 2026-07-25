@@ -19,8 +19,12 @@ source for full details. Types are immutable `record`s unless noted.
 | `MsixPackageBuilder AddFile(string packagePath, string sourcePath)` | Add a payload file that is opened when building. |
 | `PackResult Build(string outputPath, PackOptions? = null)` | Build the programmatically configured package. |
 
-`PackOptions.Overwrite` controls replacement of an existing output, and
-`PackOptions.CompressionLevel` defaults to `CompressionLevel.Optimal`.
+`PackOptions.Overwrite` controls replacement of an existing output.
+`PackOptions.CompressionLevel` defaults to `CompressionLevel.NoCompression`;
+all entries are Stored/uncompressed so their block map and ZIP local headers
+are exactly representable and MSIX-conformant. Other compression levels are
+currently rejected. Spec-conformant 64 KiB block-level deflate is tracked by
+[issue #41](https://github.com/aclinick/msixcore/issues/41).
 `PackResult` reports the absolute output path, manifest `Identity`, block-mapped
 file count, and total uncompressed payload size. The completed package is read
 back and block-map verified before it replaces the requested output.

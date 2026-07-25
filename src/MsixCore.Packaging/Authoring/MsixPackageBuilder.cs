@@ -146,6 +146,14 @@ public sealed class MsixPackageBuilder
         string outputPath,
         PackOptions options)
     {
+        if (options.CompressionLevel != CompressionLevel.NoCompression)
+        {
+            // Whole-entry ZIP deflate is not valid MSIX block compression. Spec-conformant block-level
+            // deflate is tracked by https://github.com/aclinick/msixcore/issues/41.
+            throw new NotSupportedException(
+                "Only stored (uncompressed) package entries are currently supported.");
+        }
+
         string? outputDirectory = Path.GetDirectoryName(outputPath);
         if (string.IsNullOrEmpty(outputDirectory))
         {
@@ -164,7 +172,7 @@ public sealed class MsixPackageBuilder
 
         try
         {
-            List<BlockMapFile> files = WritePackage(temporaryPath, inputs, options.CompressionLevel);
+            List<AuthoredBlockMapFile> files = WritePackage(temporaryPath, inputs);
             PackageIdentity identity;
             using (MsixPackage package = MsixPackage.Open(temporaryPath))
             {
@@ -182,7 +190,7 @@ public sealed class MsixPackageBuilder
                 OutputPath = outputPath,
                 Identity = identity,
                 FileCount = files.Count,
-                TotalSize = files.Sum(static file => file.Size),
+                TotalSize = files.Sum(static file => file.File.Size),
             };
         }
         finally
@@ -191,62 +199,62 @@ public sealed class MsixPackageBuilder
         }
     }
 
-    private static List<BlockMapFile> WritePackage(
+    private static List<AuthoredBlockMapFile> WritePackage(
         string path,
-        IReadOnlyCollection<PackageInput> inputs,
-        CompressionLevel compressionLevel)
+        IReadOnlyCollection<PackageInput> inputs)
     {
         PackageInput[] orderedInputs = inputs
             .OrderBy(static input => input.SortKey, StringComparer.Ordinal)
             .ToArray();
-        var blockMapFiles = new List<BlockMapFile>(orderedInputs.Length);
+        var blockMapFiles = new List<AuthoredBlockMapFile>(orderedInputs.Length);
 
         using (FileStream output = new(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-        using (var archive = new ZipArchive(output, ZipArchiveMode.Create))
+        using (var archive = new StoredZipWriter(output))
         {
             foreach (PackageInput input in orderedInputs)
             {
-                ZipArchiveEntry entry = archive.CreateEntry(
-                    OpcPartNameEncoder.Encode(input.PartName),
-                    compressionLevel);
                 using Stream source = input.Open();
-                using Stream destination = entry.Open();
-                BlockMapFile file = BlockMapWriter.CopyAndHash(input.PartName, source, destination);
+                BlockMapFile? file = null;
+                StoredZipEntryInfo entry = archive.AddEntry(
+                    OpcPartNameEncoder.Encode(input.PartName),
+                    destination => file = BlockMapWriter.CopyAndHash(input.PartName, source, destination));
                 if (!BlockMapFootprints.Contains(input.PartName))
                 {
-                    blockMapFiles.Add(file);
+                    blockMapFiles.Add(new AuthoredBlockMapFile(file!, entry.LocalHeaderSize));
                 }
             }
 
             WriteGeneratedEntry(
                 archive,
                 OpcPartNames.ContentTypes,
-                ContentTypesWriter.Write(orderedInputs.Select(static input => input.PartName)),
-                compressionLevel);
+                ContentTypesWriter.Write(orderedInputs.Select(static input => input.PartName)));
             WriteGeneratedEntry(
                 archive,
                 OpcPartNames.AppxBlockMap,
-                BlockMapWriter.Write(blockMapFiles),
-                compressionLevel);
+                BlockMapWriter.Write(blockMapFiles));
         }
 
         return blockMapFiles;
     }
 
     private static void WriteGeneratedEntry(
-        ZipArchive archive,
+        StoredZipWriter archive,
         string name,
-        ReadOnlySpan<byte> content,
-        CompressionLevel compressionLevel)
+        byte[] content)
     {
-        ZipArchiveEntry entry = archive.CreateEntry(name, compressionLevel);
-        using Stream destination = entry.Open();
-        destination.Write(content);
+        archive.AddEntry(name, destination => destination.Write(content));
     }
 
     private static string ValidatePayloadPath(string packagePath)
     {
         ArgumentException.ThrowIfNullOrEmpty(packagePath);
+        if (packagePath.StartsWith('/') || packagePath.StartsWith('\\') || HasDriveDesignator(packagePath))
+        {
+            throw new ArgumentException(
+                $"'{packagePath}' must be a package-relative path, not a rooted or drive-qualified path.",
+                nameof(packagePath));
+        }
+
         string normalized = packagePath.Replace('\\', '/');
         if (!OpcPackage.IsValidPartName(normalized))
         {
@@ -269,6 +277,11 @@ public sealed class MsixPackageBuilder
 
         return normalized;
     }
+
+    private static bool HasDriveDesignator(string path) =>
+        path.Length >= 2
+        && ((path[0] is >= 'A' and <= 'Z') || (path[0] is >= 'a' and <= 'z'))
+        && path[1] == ':';
 
     private void AddInput(PackageInput input)
     {

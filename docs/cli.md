@@ -288,7 +288,9 @@ Identity: Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 `makemsix` is an alias for `pack`. Existing output is rejected unless
 `--overwrite` is supplied. Input `AppxBlockMap.xml`, `AppxSignature.p7x`, and
 `[Content_Types].xml` files are ignored; the builder generates fresh block-map
-and content-types parts and does not sign the package.
+and content-types parts and does not sign the package. Package entries are
+Stored/uncompressed by default; block-level deflate compression is not yet
+available ([issue #41](https://github.com/aclinick/msixcore/issues/41)).
 
 ```console
 $ dotnet $DLL pack ./layout --output ./Contoso.MyApp.msix --json

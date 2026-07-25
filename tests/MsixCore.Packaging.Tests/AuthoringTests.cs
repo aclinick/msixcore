@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Diagnostics;
 using System.Text;
@@ -72,9 +73,15 @@ public sealed class AuthoringTests : IDisposable
         Assert.Empty(empty.Blocks);
         Assert.Equal(0, empty.Size);
 
-        XDocument document = LoadXml(BlockMapWriter.Write([small, large, empty]));
+        XDocument document = LoadXml(BlockMapWriter.Write(
+        [
+            new AuthoredBlockMapFile(small, 37),
+            new AuthoredBlockMapFile(large, 46),
+            new AuthoredBlockMapFile(empty, 39),
+        ]));
         Assert.Contains(document.Root!.Elements(), element => element.Attribute("Name")!.Value == "A&B.txt");
         XElement emptyElement = document.Root!.Elements().Single(element => element.Attribute("Name")!.Value == "empty.dat");
+        Assert.Equal("39", emptyElement.Attribute("LfhSize")!.Value);
         Assert.Empty(emptyElement.Elements());
     }
 
@@ -152,10 +159,7 @@ public sealed class AuthoringTests : IDisposable
         WritePayload(source, "Data/space !+#%.txt", reserved);
         string output = Path.Combine(_root, "roundtrip.msix");
 
-        PackResult result = MsixPackageBuilder.Build(
-            source,
-            output,
-            new PackOptions { CompressionLevel = CompressionLevel.Optimal });
+        PackResult result = MsixPackageBuilder.Build(source, output);
 
         using MsixPackage package = MsixPackage.Open(output);
         Assert.True(package.VerifyBlockMap().IsValid);
@@ -207,6 +211,63 @@ public sealed class AuthoringTests : IDisposable
         Assert.Throws<ArgumentException>(() => builder.AddFile(OpcPartNames.ContentTypes, Stream.Null));
     }
 
+    [Theory]
+    [InlineData(@"C:\outside.txt")]
+    [InlineData("C:/outside.txt")]
+    [InlineData("folder/C:/outside.txt")]
+    [InlineData(@"\\server\share\outside.txt")]
+    [InlineData("/outside.txt")]
+    [InlineData("../outside.txt")]
+    [InlineData("folder/../outside.txt")]
+    public void ProgrammaticBuilder_RejectsRootedDriveAndTraversalPaths(string packagePath)
+    {
+        var builder = new MsixPackageBuilder();
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(
+            () => builder.AddFile(packagePath, Stream.Null));
+
+        Assert.Contains("package-relative", exception.Message);
+    }
+
+    [Fact]
+    public void Build_EmitsStoredEntriesWithExactSchemaValidLocalHeaderSizes()
+    {
+        string source = CreateSource("local-headers");
+        WritePayload(source, "Data/space name.bin", Enumerable.Range(0, 1000).Select(static value => (byte)value).ToArray());
+        string output = Path.Combine(_root, "local-headers.msix");
+
+        MsixPackageBuilder.Build(source, output);
+
+        Dictionary<string, LocalHeader> headers = ReadLocalHeaders(output);
+        Assert.All(headers.Values, static header => Assert.Equal(0, header.CompressionMethod));
+
+        using MsixPackage package = MsixPackage.Open(output);
+        using Stream blockMapStream = package.Opc.OpenPart(OpcPartNames.AppxBlockMap);
+        XDocument blockMap = XDocument.Load(blockMapStream);
+        foreach (XElement file in blockMap.Root!.Elements().Where(static element => element.Name.LocalName == "File"))
+        {
+            string name = file.Attribute("Name")!.Value.Replace('\\', '/');
+            int declared = int.Parse(file.Attribute("LfhSize")!.Value, System.Globalization.CultureInfo.InvariantCulture);
+            Assert.InRange(declared, 30, 65536);
+            Assert.Equal(headers[name].Size, declared);
+            Assert.All(file.Elements(), static block => Assert.Null(block.Attribute("Size")));
+        }
+    }
+
+    [Fact]
+    public void Build_RejectsWholeEntryCompression()
+    {
+        string source = CreateSource("invalid-compression");
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(
+            () => MsixPackageBuilder.Build(
+                source,
+                Path.Combine(_root, "invalid-compression.msix"),
+                new PackOptions { CompressionLevel = CompressionLevel.Optimal }));
+
+        Assert.Contains("stored", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Build_MissingRootManifest_ThrowsClearError()
     {
@@ -236,7 +297,7 @@ public sealed class AuthoringTests : IDisposable
     }
 
     [Fact]
-    public void Build_WhenMakeAppxIsAvailable_MatchesItsBlockHashes()
+    public void Build_WhenMakeAppxIsAvailable_MatchesHashesAndUnpacks()
     {
         string? makeAppx = FindMakeAppx();
         if (makeAppx is null)
@@ -290,26 +351,13 @@ public sealed class AuthoringTests : IDisposable
             Enumerable.Range(0, BlockMap.BlockSize + 41).Select(static value => (byte)(value % 239)).ToArray());
         string authoredOutput = Path.Combine(_root, "authored.msix");
         string makeAppxOutput = Path.Combine(_root, "makeappx.msix");
+        string unpackedOutput = Path.Combine(_root, "makeappx-unpacked");
         MsixPackageBuilder.Build(source, authoredOutput);
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = makeAppx,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
-        startInfo.ArgumentList.Add("pack");
-        startInfo.ArgumentList.Add("/nv");
-        startInfo.ArgumentList.Add("/o");
-        startInfo.ArgumentList.Add("/d");
-        startInfo.ArgumentList.Add(source);
-        startInfo.ArgumentList.Add("/p");
-        startInfo.ArgumentList.Add(makeAppxOutput);
-        using Process process = Process.Start(startInfo)!;
-        process.WaitForExit();
-        string diagnostics = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
-        Assert.True(process.ExitCode == 0, diagnostics);
+        (int packExitCode, string packDiagnostics) = RunProcess(
+            makeAppx,
+            "pack", "/nv", "/o", "/d", source, "/p", makeAppxOutput);
+        Assert.True(packExitCode == 0, packDiagnostics);
 
         using MsixPackage authored = MsixPackage.Open(authoredOutput);
         using MsixPackage reference = MsixPackage.Open(makeAppxOutput);
@@ -327,6 +375,17 @@ public sealed class AuthoringTests : IDisposable
         {
             Assert.Equal(hashes, authoredHashes[name]);
         }
+
+        (int unpackExitCode, string unpackDiagnostics) = RunProcess(
+            makeAppx,
+            "unpack", "/o", "/p", authoredOutput, "/d", unpackedOutput);
+        Assert.True(unpackExitCode == 0, unpackDiagnostics);
+        Assert.Equal(
+            File.ReadAllBytes(Path.Combine(source, "Data", "sample.bin")),
+            File.ReadAllBytes(Path.Combine(unpackedOutput, "Data", "sample.bin")));
+        Assert.Equal(
+            File.ReadAllBytes(Path.Combine(source, OpcPartNames.AppxManifest)),
+            File.ReadAllBytes(Path.Combine(unpackedOutput, OpcPartNames.AppxManifest)));
     }
 
     private string CreateSource(string name)
@@ -370,4 +429,51 @@ public sealed class AuthoringTests : IDisposable
             .Order(StringComparer.OrdinalIgnoreCase)
             .LastOrDefault();
     }
+
+    private static (int ExitCode, string Diagnostics) RunProcess(string fileName, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        foreach (string argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using Process process = Process.Start(startInfo)!;
+        Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
+        Task<string> standardError = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        return (
+            process.ExitCode,
+            standardOutput.GetAwaiter().GetResult() + standardError.GetAwaiter().GetResult());
+    }
+
+    private static Dictionary<string, LocalHeader> ReadLocalHeaders(string packagePath)
+    {
+        byte[] package = File.ReadAllBytes(packagePath);
+        var headers = new Dictionary<string, LocalHeader>(StringComparer.OrdinalIgnoreCase);
+        int offset = 0;
+        while (offset + 4 <= package.Length
+            && BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(offset, 4)) == 0x04034B50)
+        {
+            ushort compressionMethod = BinaryPrimitives.ReadUInt16LittleEndian(package.AsSpan(offset + 8, 2));
+            uint compressedSize = BinaryPrimitives.ReadUInt32LittleEndian(package.AsSpan(offset + 18, 4));
+            ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(package.AsSpan(offset + 26, 2));
+            ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(package.AsSpan(offset + 28, 2));
+            int localHeaderSize = 30 + nameLength + extraLength;
+            string rawName = Encoding.UTF8.GetString(package, offset + 30, nameLength);
+            Assert.True(OpcPackage.TryCanonicalizePartName(rawName, out string name));
+            headers.Add(name, new LocalHeader(localHeaderSize, compressionMethod));
+            offset = checked(offset + localHeaderSize + (int)compressedSize);
+        }
+
+        return headers;
+    }
+
+    private sealed record LocalHeader(int Size, ushort CompressionMethod);
 }

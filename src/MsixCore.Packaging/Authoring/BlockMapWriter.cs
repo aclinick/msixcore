@@ -38,7 +38,7 @@ internal static class BlockMapWriter
         return new BlockMapFile { Name = name, Size = size, Blocks = blocks };
     }
 
-    public static byte[] Write(IReadOnlyList<BlockMapFile> files)
+    public static byte[] Write(IReadOnlyList<AuthoredBlockMapFile> files)
     {
         ArgumentNullException.ThrowIfNull(files);
 
@@ -49,12 +49,15 @@ internal static class BlockMapWriter
             writer.WriteStartElement("BlockMap", BlockMapNamespace);
             writer.WriteAttributeString("HashMethod", Sha256Uri);
 
-            foreach (BlockMapFile file in files)
+            foreach (AuthoredBlockMapFile authoredFile in files)
             {
+                BlockMapFile file = authoredFile.File;
                 writer.WriteStartElement("File", BlockMapNamespace);
                 writer.WriteAttributeString("Name", file.Name.Replace('/', '\\'));
                 writer.WriteAttributeString("Size", file.Size.ToString(CultureInfo.InvariantCulture));
-                writer.WriteAttributeString("LfhSize", "0");
+                writer.WriteAttributeString(
+                    "LfhSize",
+                    authoredFile.LocalFileHeaderSize.ToString(CultureInfo.InvariantCulture));
 
                 foreach (BlockMapBlock block in file.Blocks)
                 {
@@ -97,3 +100,5 @@ internal static class BlockMapWriter
         CloseOutput = false,
     };
 }
+
+internal sealed record AuthoredBlockMapFile(BlockMapFile File, int LocalFileHeaderSize);

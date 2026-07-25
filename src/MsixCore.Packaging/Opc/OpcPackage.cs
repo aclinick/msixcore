@@ -185,9 +185,9 @@ public sealed class OpcPackage : IOpcPackage
     }
 
     /// <summary>
-    /// Validates a raw ZIP entry name against the OPC part-name rules that matter for MSIX: it must
-    /// be non-empty, use forward slashes, not be rooted, and contain no empty, <c>.</c>, or <c>..</c>
-    /// segments (which also defends against zip-slip style traversal).
+    /// Validates a raw ZIP entry name against OPC and Windows package-path rules: it must be
+    /// package-relative, use forward slashes, and contain only segments that Windows can safely
+    /// materialize without traversal or drive/alternate-stream interpretation.
     /// </summary>
     internal static bool IsValidPartName(string rawName)
     {
@@ -198,9 +198,21 @@ public sealed class OpcPackage : IOpcPackage
 
         foreach (string segment in rawName.Split('/'))
         {
-            if (segment.Length == 0 || segment == "." || segment == "..")
+            if (segment.Length == 0
+                || segment == "."
+                || segment == ".."
+                || segment.EndsWith(' ')
+                || segment.EndsWith('.'))
             {
                 return false;
+            }
+
+            foreach (char character in segment)
+            {
+                if (char.IsControl(character) || "<>:\"|?*".Contains(character, StringComparison.Ordinal))
+                {
+                    return false;
+                }
             }
         }
 

@@ -172,6 +172,10 @@ public class OpcPackageTests
     {
         Assert.False(OpcPackage.IsValidPartName("/AppxManifest.xml"));
         Assert.False(OpcPackage.IsValidPartName("dir\\file.xml"));
+        Assert.False(OpcPackage.IsValidPartName("C:/outside.xml"));
+        Assert.False(OpcPackage.IsValidPartName("dir/C:/outside.xml"));
+        Assert.False(OpcPackage.IsValidPartName("dir/file?.xml"));
+        Assert.False(OpcPackage.IsValidPartName("dir/trailing."));
         Assert.False(OpcPackage.IsValidPartName(string.Empty));
         Assert.True(OpcPackage.IsValidPartName("AppxManifest.xml"));
         Assert.True(OpcPackage.IsValidPartName("AppxMetadata/AppxBundleManifest.xml"));
@@ -214,6 +218,7 @@ public class OpcPackageTests
     [InlineData("dir%5cfile.xml")]       // backslash via encoding
     [InlineData("dir%2ffile.xml")]       // encoded path separator within a segment
     [InlineData("a%2Fb/c.xml")]          // encoded separator (uppercase hex)
+    [InlineData("C%3A/outside.xml")]     // Windows drive designator via encoding
     public void Open_TraversalViaPercentEncoding_ThrowsInvalidData(string encodedName)
     {
         using MemoryStream zip = CreateZip((encodedName, "<x/>"));
