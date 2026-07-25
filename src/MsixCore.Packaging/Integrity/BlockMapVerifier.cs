@@ -104,6 +104,8 @@ public static class BlockMapVerifier
         HashAlgorithmName algorithm = ToAlgorithmName(hashMethod);
         long totalRead = 0;
         int blockIndex = 0;
+        Span<byte> actual = stackalloc byte[64];
+        Span<byte> expected = stackalloc byte[64];
 
         while (true)
         {
@@ -119,9 +121,14 @@ public static class BlockMapVerifier
                 return Invalid(file.Name, "the file contains more data than the block map declares.");
             }
 
-            byte[] hash = CryptographicOperations.HashData(algorithm, buffer.AsSpan(0, filled));
-            string actual = Convert.ToBase64String(hash);
-            if (!string.Equals(actual, file.Blocks[blockIndex].Hash, StringComparison.Ordinal))
+            // Hash into a stack buffer (max digest is SHA-512 = 64 bytes) and compare the raw digest
+            // bytes against the Base64-decoded expected hash. This avoids allocating a digest array and
+            // a Base64 string per block. Malformed expected Base64 is treated as a mismatch, never an
+            // exception, preserving the previous ordinal-string-compare semantics.
+            int actualLength = CryptographicOperations.HashData(algorithm, buffer.AsSpan(0, filled), actual);
+
+            if (!Convert.TryFromBase64String(file.Blocks[blockIndex].Hash, expected, out int expectedLength)
+                || !actual[..actualLength].SequenceEqual(expected[..expectedLength]))
             {
                 return Invalid(file.Name, $"block {blockIndex} hash mismatch.");
             }
