@@ -25,7 +25,7 @@
 param(
     [switch]$RunOracle,
     [switch]$Sign,
-    [string]$Publisher = 'CN=aclinick',
+    [string]$Publisher = 'CN=MsixCoreCorpus',
     [string]$SignThumbprint = '1999384EEF0362515797C62766388F94B46EA7A7'
 )
 
@@ -36,7 +36,6 @@ Add-Type -AssemblyName System.IO.Compression | Out-Null
 $CorpusRoot   = $PSScriptRoot
 $FixturesRoot = Join-Path $CorpusRoot 'fixtures'
 $PackedRoot   = Join-Path $CorpusRoot 'packed'
-$Publisher    = 'CN=MsixCoreCorpus'
 
 # ---- Tooling discovery ------------------------------------------------------
 function Resolve-Kit([string]$exe) {
@@ -58,6 +57,9 @@ $WinApp = (Get-Command winapp -ErrorAction SilentlyContinue).Source
 $SignPfx = $null
 $SignPfxPassword = 'corpus'
 if ($Sign) {
+    if (-not $WinApp) {
+        throw '-Sign was requested but the winapp CLI (used for signing) was not found on PATH.'
+    }
     $signCert = Get-Item "Cert:\CurrentUser\My\$SignThumbprint" -ErrorAction SilentlyContinue
     if (-not $signCert -or -not $signCert.HasPrivateKey) {
         throw "Signing cert $SignThumbprint with a private key was not found in Cert:\CurrentUser\My."
@@ -70,9 +72,12 @@ if ($Sign) {
 }
 
 function Invoke-SignPackage([string]$path) {
-    if (-not $Sign -or -not $SignPfx -or -not $WinApp) { return $false }
+    if (-not $Sign -or -not $SignPfx) { return $false }
     & $WinApp sign $path $SignPfx --password $SignPfxPassword --quiet 2>&1 | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    if ($LASTEXITCODE -ne 0) {
+        throw "winapp sign failed (exit $LASTEXITCODE) for '$path'."
+    }
+    return $true
 }
 
 # ---- Independent MSIX helpers (do NOT use the library under test) -----------

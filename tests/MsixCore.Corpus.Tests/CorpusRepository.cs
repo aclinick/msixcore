@@ -57,7 +57,64 @@ public static class CorpusRepository
         }
 
         using FileStream stream = File.OpenRead(path);
-        return JsonSerializer.Deserialize<CorpusDocument>(stream, JsonOptions)
+        CorpusDocument document = JsonSerializer.Deserialize<CorpusDocument>(stream, JsonOptions)
             ?? throw new InvalidDataException("corpus.json deserialized to null.");
+
+        Validate(document);
+        return document;
+    }
+
+    /// <summary>
+    /// Enforces the structural invariants the theories rely on, so that a field omitted from
+    /// <c>corpus.json</c> fails loudly at load time instead of silently defaulting to a value that
+    /// makes an assertion pass vacuously (e.g. a missing block-map expectation or missing
+    /// <c>expected</c> block).
+    /// </summary>
+    private static void Validate(CorpusDocument document)
+    {
+        if (document.Fixtures.Count != document.Meta.FixtureCount)
+        {
+            throw new InvalidDataException(
+                $"corpus.json meta.fixtureCount ({document.Meta.FixtureCount}) does not match the number " +
+                $"of fixtures ({document.Fixtures.Count}).");
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CorpusFixture fx in document.Fixtures)
+        {
+            if (string.IsNullOrWhiteSpace(fx.Id))
+            {
+                throw new InvalidDataException("A corpus fixture has a missing or empty 'id'.");
+            }
+
+            if (!seen.Add(fx.Id))
+            {
+                throw new InvalidDataException($"Duplicate corpus fixture id '{fx.Id}'.");
+            }
+
+            if (fx.LooseDir is null && fx.PackedFile is null)
+            {
+                throw new InvalidDataException($"Fixture '{fx.Id}' declares neither a loose nor a packed layout.");
+            }
+
+            bool isBundle = string.Equals(fx.Kind, "bundle", StringComparison.Ordinal);
+
+            if (!isBundle && fx.Expected is null)
+            {
+                throw new InvalidDataException($"Non-bundle fixture '{fx.Id}' is missing its 'expected' values.");
+            }
+
+            if (fx.LooseDir is not null && fx.BlockMapValidLoose is null)
+            {
+                throw new InvalidDataException(
+                    $"Fixture '{fx.Id}' has a loose layout but no 'blockMapValidLoose' expectation.");
+            }
+
+            if (fx.PackedFile is not null && !isBundle && fx.BlockMapValidPacked is null)
+            {
+                throw new InvalidDataException(
+                    $"Fixture '{fx.Id}' has a packed package layout but no 'blockMapValidPacked' expectation.");
+            }
+        }
     }
 }

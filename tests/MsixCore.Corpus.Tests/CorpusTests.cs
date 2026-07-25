@@ -1,4 +1,5 @@
 using MsixCore.Packaging;
+using MsixCore.Packaging.Integrity;
 using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Corpus.Tests;
@@ -30,7 +31,7 @@ public sealed class CorpusTests
         using MsixPackage package = MsixPackage.OpenDirectory(dir);
 
         AssertIdentityAndMetadata(package, fx);
-        Assert.Equal(fx.IsSignedLoose, package.IsSigned);
+        AssertSignature(package, fx.IsSignedLoose);
         Assert.Equal(fx.BlockMapValidLoose!.Value, package.VerifyBlockMap().IsValid);
     }
 
@@ -45,7 +46,7 @@ public sealed class CorpusTests
         using MsixPackage package = MsixPackage.Open(file);
 
         AssertIdentityAndMetadata(package, fx);
-        Assert.Equal(fx.IsSignedPacked, package.IsSigned);
+        AssertSignature(package, fx.IsSignedPacked);
 
         if (fx.BlockMapFileCount is int expectedCount)
         {
@@ -97,5 +98,30 @@ public sealed class CorpusTests
         Assert.Equal(expected.Capabilities, package.Capabilities);
         Assert.Equal(expected.IsFramework, package.Manifest.IsFramework);
         Assert.Equal(expected.ApplicationCount, package.Manifest.Applications.Count);
+    }
+
+    /// <summary>
+    /// Asserts the package's signing state. For signed fixtures this goes beyond the presence of the
+    /// <c>AppxSignature.p7x</c> part: the signature must actually parse, its CMS envelope must be
+    /// internally consistent, and the signer subject DN must match the manifest publisher — otherwise
+    /// a malformed or mismatched signature would satisfy a presence-only check.
+    /// </summary>
+    private static void AssertSignature(MsixPackage package, bool expectedSigned)
+    {
+        Assert.Equal(expectedSigned, package.IsSigned);
+
+        PackageSignature? signature = package.ReadSignature();
+
+        if (!expectedSigned)
+        {
+            Assert.Null(signature);
+            return;
+        }
+
+        Assert.NotNull(signature);
+        Assert.True(signature!.IsCmsIntegrityValid, "Signed fixture has an invalid CMS signature envelope.");
+        Assert.True(
+            signature.MatchesPublisher(package.Identity.Publisher),
+            $"Signer subject '{signature.SubjectName}' does not match manifest publisher '{package.Identity.Publisher}'.");
     }
 }
