@@ -575,6 +575,7 @@ $fixtures = $fixtures | ForEach-Object {
 # =============================================================================
 #  Generation
 # =============================================================================
+try {
 New-Item -ItemType Directory -Force -Path $FixturesRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $PackedRoot | Out-Null
 
@@ -757,8 +758,8 @@ if ($RunOracle) {
     Get-AppxPackage -Name 'MsixCoreCorpus*' | Remove-AppxPackage -ErrorAction SilentlyContinue
 }
 
-# Remove the throwaway signing PFX (the certificate store is left untouched).
-if ($SignPfx -and (Test-Path $SignPfx)) { Remove-Item $SignPfx -Force -ErrorAction SilentlyContinue }
+# Remove the throwaway signing PFX (the certificate store is left untouched). Done in a finally
+# below so an interrupted or failed run never leaves the exported private key on disk.
 
 # =============================================================================
 #  Emit corpus.json (strip internal helper fields)
@@ -785,4 +786,8 @@ Write-Host "Corpus generated: $($clean.Count) fixtures -> $(Join-Path $CorpusRoo
 if ($RunOracle) {
     Write-Host "Oracle verdicts:" -ForegroundColor Green
     $records | ForEach-Object { '  {0,-22} {1}' -f $_.id, $_.windowsOracle.verdict } | Write-Host
+}
+}
+finally {
+    if ($SignPfx -and (Test-Path $SignPfx)) { Remove-Item $SignPfx -Force -ErrorAction SilentlyContinue }
 }

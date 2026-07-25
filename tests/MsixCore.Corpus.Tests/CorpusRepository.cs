@@ -99,9 +99,28 @@ public static class CorpusRepository
 
             bool isBundle = string.Equals(fx.Kind, "bundle", StringComparison.Ordinal);
 
-            if (!isBundle && fx.Expected is null)
+            if (isBundle)
             {
-                throw new InvalidDataException($"Non-bundle fixture '{fx.Id}' is missing its 'expected' values.");
+                if (fx.PackedFile is null)
+                {
+                    throw new InvalidDataException($"Bundle fixture '{fx.Id}' is missing its packed layout.");
+                }
+            }
+            else
+            {
+                // Every non-bundle fixture ships both layouts so the loose and packed readers are
+                // differentially tested against the same expected values; a missing path would
+                // silently drop the fixture from one of the theories.
+                if (fx.LooseDir is null || fx.PackedFile is null)
+                {
+                    throw new InvalidDataException(
+                        $"Non-bundle fixture '{fx.Id}' must declare both a loose and a packed layout.");
+                }
+
+                if (fx.Expected is null)
+                {
+                    throw new InvalidDataException($"Non-bundle fixture '{fx.Id}' is missing its 'expected' values.");
+                }
             }
 
             if (fx.LooseDir is not null && fx.BlockMapValidLoose is null)

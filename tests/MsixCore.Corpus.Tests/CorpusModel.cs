@@ -26,12 +26,12 @@ public sealed record CorpusMeta
 /// verdict, and the parsed values our library is expected to produce.</summary>
 public sealed record CorpusFixture
 {
-    public string Id { get; init; } = string.Empty;
+    public required string Id { get; init; }
 
-    public IReadOnlyList<string> Features { get; init; } = [];
+    public required IReadOnlyList<string> Features { get; init; }
 
     /// <summary><c>package</c> or <c>bundle</c>.</summary>
-    public string Kind { get; init; } = "package";
+    public required string Kind { get; init; }
 
     /// <summary>Corpus-relative path to the loose (unpacked) layout, or <see langword="null"/>.</summary>
     public string? LooseDir { get; init; }
@@ -40,16 +40,16 @@ public sealed record CorpusFixture
     public string? PackedFile { get; init; }
 
     /// <summary>Whether our library currently fully supports this fixture (bundles are not yet).</summary>
-    public bool ExpectedSupported { get; init; } = true;
+    public required bool ExpectedSupported { get; init; }
 
     public CorpusOracle WindowsOracle { get; init; } = new();
 
     /// <summary>The expected parsed identity/metadata; <see langword="null"/> for bundles.</summary>
     public ExpectedValues? Expected { get; init; }
 
-    public bool IsSignedLoose { get; init; }
+    public required bool IsSignedLoose { get; init; }
 
-    public bool IsSignedPacked { get; init; }
+    public required bool IsSignedPacked { get; init; }
 
     public int? BlockMapFileCount { get; init; }
 
@@ -75,27 +75,27 @@ public sealed record CorpusOracle
 /// <summary>The values our library's reader is expected to produce for a fixture.</summary>
 public sealed record ExpectedValues
 {
-    public string Name { get; init; } = string.Empty;
+    public required string Name { get; init; }
 
-    public string Publisher { get; init; } = string.Empty;
+    public required string Publisher { get; init; }
 
-    public string Version { get; init; } = string.Empty;
+    public required string Version { get; init; }
 
-    public string Architecture { get; init; } = string.Empty;
+    public required string Architecture { get; init; }
 
-    public string ResourceId { get; init; } = string.Empty;
+    public required string ResourceId { get; init; }
 
-    public string PackageFamilyName { get; init; } = string.Empty;
+    public required string PackageFamilyName { get; init; }
 
-    public string PackageFullName { get; init; } = string.Empty;
+    public required string PackageFullName { get; init; }
 
-    public string DisplayName { get; init; } = string.Empty;
+    public required string DisplayName { get; init; }
 
-    public string PublisherDisplayName { get; init; } = string.Empty;
+    public required string PublisherDisplayName { get; init; }
 
-    public IReadOnlyList<string> Capabilities { get; init; } = [];
+    public required IReadOnlyList<string> Capabilities { get; init; }
 
-    public bool IsFramework { get; init; }
+    public required bool IsFramework { get; init; }
 
-    public int ApplicationCount { get; init; }
+    public required int ApplicationCount { get; init; }
 }
