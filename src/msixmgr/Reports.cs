@@ -98,6 +98,46 @@ internal sealed record PackReport
     public required string Compression { get; init; }
 }
 
+/// <summary>Machine-readable result of the <c>bundle</c> verb.</summary>
+internal sealed record BundleReport
+{
+    public required string OutputPath { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string PackageFullName { get; init; }
+
+    public required string PackageFamilyName { get; init; }
+
+    public required string Version { get; init; }
+
+    public required int PackageCount { get; init; }
+
+    public required long TotalSize { get; init; }
+
+    public required bool IsSigned { get; init; }
+
+    public required IReadOnlyList<BundlePackageReport> Packages { get; init; }
+}
+
+/// <summary>Machine-readable child-package entry in a bundle report.</summary>
+internal sealed record BundlePackageReport
+{
+    public required string FileName { get; init; }
+
+    public required string Type { get; init; }
+
+    public required string Version { get; init; }
+
+    public string? Architecture { get; init; }
+
+    public string? ResourceId { get; init; }
+
+    public required long Offset { get; init; }
+
+    public required long Size { get; init; }
+}
+
 /// <summary>Source-generated JSON metadata for CLI reports.</summary>
 [JsonSourceGenerationOptions(
     WriteIndented = true,
@@ -106,6 +146,7 @@ internal sealed record PackReport
 [JsonSerializable(typeof(ValidationReport))]
 [JsonSerializable(typeof(UnpackReport))]
 [JsonSerializable(typeof(PackReport))]
+[JsonSerializable(typeof(BundleReport))]
 internal sealed partial class ReportJsonContext : JsonSerializerContext
 {
 }

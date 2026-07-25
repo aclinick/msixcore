@@ -8,8 +8,9 @@ source for full details. Types are immutable `record`s unless noted.
 
 ### Authoring — `MsixCore.Packaging.Authoring`
 
-`MsixPackageBuilder` creates unsigned `.msix` OPC/ZIP packages and generates
-`AppxBlockMap.xml` plus `[Content_Types].xml`.
+`MsixPackageBuilder` creates unsigned `.msix` OPC/ZIP packages.
+`MsixBundleBuilder` combines already-built packages into unsigned bundles. Both
+generate `AppxBlockMap.xml` plus `[Content_Types].xml`.
 
 | Member | Description |
 |--------|-------------|
@@ -18,6 +19,9 @@ source for full details. Types are immutable `record`s unless noted.
 | `MsixPackageBuilder AddFile(string packagePath, Stream)` | Copy payload bytes immediately; the caller retains ownership. |
 | `MsixPackageBuilder AddFile(string packagePath, string sourcePath)` | Add a payload file that is opened when building. |
 | `PackResult Build(string outputPath, PackOptions? = null)` | Build the programmatically configured package. |
+| `static BundleResult MsixBundleBuilder.Build(IEnumerable<string> packagePaths, string outputPath, BundleOptions? = null)` | Build a bundle from child package paths. |
+| `MsixBundleBuilder AddPackage(string packagePath)` | Add an existing `.msix`/`.appx` child. |
+| `BundleResult Build(string outputPath, BundleOptions? = null)` | Build the configured bundle. |
 
 `PackOptions.Overwrite` controls replacement of an existing output.
 `PackOptions.CompressionLevel` defaults to `CompressionLevel.NoCompression`;
@@ -31,8 +35,10 @@ file count, total uncompressed payload size, and compression level. The
 completed package is read back and block-map verified before it replaces the
 requested output.
 
-The builder authors packages only: it does not sign them and does not create
-`.msixbundle` files.
+`BundleOptions.Version` sets the bundle identity version; when omitted, the
+highest child version is used deterministically. `BundleResult` reports the
+bundle identity and child entries, including type, architecture/resource ID,
+payload offset, and size. Builders author only; they do not sign output.
 
 ### `MsixPackage` (sealed class, `IPackage`)
 

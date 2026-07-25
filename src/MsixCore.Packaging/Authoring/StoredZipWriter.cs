@@ -82,7 +82,7 @@ internal sealed class StoredZipWriter : IDisposable
             size,
             size,
             localHeaderOffset));
-        return new StoredZipEntryInfo(localHeaderSize);
+        return new StoredZipEntryInfo(localHeaderSize, localHeaderOffset + localHeaderSize, size);
     }
 
     public StoredZipEntryInfo AddDeflatedEntry(
@@ -144,7 +144,10 @@ internal sealed class StoredZipWriter : IDisposable
             content.CompressedSize,
             content.UncompressedSize,
             localHeaderOffset));
-        return new StoredZipEntryInfo(localHeaderSize);
+        return new StoredZipEntryInfo(
+            localHeaderSize,
+            localHeaderOffset + localHeaderSize,
+            content.UncompressedSize);
     }
 
     public void Dispose()
@@ -311,6 +314,6 @@ internal sealed class Crc32Calculator
     }
 }
 
-internal sealed record StoredZipEntryInfo(int LocalHeaderSize);
+internal sealed record StoredZipEntryInfo(int LocalHeaderSize, long ContentOffset, long UncompressedSize);
 
 internal sealed record DeflatedZipEntryContent(uint Crc32, uint CompressedSize, uint UncompressedSize);

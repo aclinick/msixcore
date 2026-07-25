@@ -6,8 +6,8 @@ namespace MsixCore.Packaging.Authoring;
 
 /// <summary>Builds unsigned MSIX packages from directory layouts or programmatically supplied files.</summary>
 /// <remarks>
-/// Bundle authoring is tracked by https://github.com/aclinick/msixcore/issues/36; optional integrated
-/// signing is tracked by https://github.com/aclinick/msixcore/issues/37.
+/// Use <see cref="MsixBundleBuilder"/> to combine completed packages into a bundle. Integrated
+/// signing is intentionally separate from authoring.
 /// </remarks>
 public sealed class MsixPackageBuilder
 {

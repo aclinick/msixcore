@@ -126,12 +126,65 @@ public static class BundleManifestParser
                 Architecture = AppxManifestParser.ParseArchitecture(package.AttributeValue("Architecture")),
                 ResourceId = package.AttributeValue("ResourceId") ?? string.Empty,
                 Resources = resources,
+                Offset = ParseNonNegativeInt64(package.AttributeValue("Offset"), fileName, "Offset"),
+                Size = ParseNonNegativeInt64(package.AttributeValue("Size"), fileName, "Size"),
+                TargetDeviceFamilies = ParseTargetDeviceFamilies(package, fileName),
             });
         }
 
         if (result.Count == 0)
         {
             throw new InvalidDataException("The bundle manifest declares no packages.");
+        }
+
+        return result;
+    }
+
+    private static long ParseNonNegativeInt64(string? value, string fileName, string attributeName)
+    {
+        if (value is null)
+        {
+            return 0;
+        }
+
+        if (!long.TryParse(
+            value,
+            System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out long result)
+            || result < 0)
+        {
+            throw new InvalidDataException(
+                $"Bundle package '{fileName}' has an invalid {attributeName} '{value}'.");
+        }
+
+        return result;
+    }
+
+    private static List<TargetDeviceFamily> ParseTargetDeviceFamilies(XElement package, string fileName)
+    {
+        XElement? dependencies = package.ElementByLocalName("Dependencies");
+        if (dependencies is null)
+        {
+            return [];
+        }
+
+        var result = new List<TargetDeviceFamily>();
+        foreach (XElement family in dependencies.ElementsByLocalName("TargetDeviceFamily"))
+        {
+            string name = family.AttributeValue("Name")
+                ?? throw new InvalidDataException(
+                    $"Bundle package '{fileName}' has a TargetDeviceFamily without a Name.");
+            result.Add(new TargetDeviceFamily
+            {
+                Name = name,
+                MinVersion = ManifestVersion.Parse(
+                    family.AttributeValue("MinVersion"),
+                    $"Bundle package '{fileName}' TargetDeviceFamily '{name}' MinVersion"),
+                MaxVersionTested = ManifestVersion.Parse(
+                    family.AttributeValue("MaxVersionTested"),
+                    $"Bundle package '{fileName}' TargetDeviceFamily '{name}' MaxVersionTested"),
+            });
         }
 
         return result;

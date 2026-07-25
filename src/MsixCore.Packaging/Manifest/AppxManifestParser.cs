@@ -72,6 +72,8 @@ public static class AppxManifestParser
             Description = properties?.ElementByLocalName("Description")?.Value.Trim(),
             Logo = NullIfEmpty(properties?.ElementByLocalName("Logo")?.Value.Trim()),
             IsFramework = ParseFrameworkFlag(properties?.ElementByLocalName("Framework")?.Value),
+            IsResourcePackage = ParseFrameworkFlag(properties?.ElementByLocalName("ResourcePackage")?.Value),
+            Resources = ParseResources(root),
             Capabilities = ParseCapabilities(root),
             Applications = ParseApplications(root),
             TargetDeviceFamilies = ParseTargetDeviceFamilies(root),
@@ -141,6 +143,21 @@ public static class AppxManifestParser
 
         return names;
     }
+
+    private static List<BundleResource> ParseResources(XElement root) =>
+        root.ElementByLocalName("Resources")?
+            .ElementsByLocalName("Resource")
+            .Select(static resource => new BundleResource
+            {
+                Language = resource.AttributeValue("Language"),
+                Scale = resource.AttributeValue("Scale"),
+                DXFeatureLevel = resource.AttributeValue("DXFeatureLevel"),
+            })
+            .Where(static resource =>
+                resource.Language is not null
+                || resource.Scale is not null
+                || resource.DXFeatureLevel is not null)
+            .ToList() ?? [];
 
     private static List<ManifestApplication> ParseApplications(XElement root)
     {

@@ -48,6 +48,14 @@ public class CliCommandTests : IDisposable
         return (code, o.ToString(), e.ToString());
     }
 
+    private static (int Code, string Out, string Err) RunBundle(params string[] args)
+    {
+        var o = new StringWriter();
+        var e = new StringWriter();
+        int code = BundleCommand.Run(args, o, e);
+        return (code, o.ToString(), e.ToString());
+    }
+
     [Fact]
     public void Inspect_LoosePackage_PrintsIdentity()
     {
@@ -321,6 +329,64 @@ public class CliCommandTests : IDisposable
     }
 
     [Fact]
+    public void Bundle_PackagePaths_CreatesReadableBundle()
+    {
+        (string x64, string arm64) = CreateBundlePackages();
+        string outputPath = Path.Combine(_root, "cli.msixbundle");
+
+        (int code, string output, string error) = RunBundle(
+            x64,
+            arm64,
+            "-o",
+            outputPath,
+            "--version",
+            "5.4.3.2");
+
+        Assert.Equal(0, code);
+        Assert.Empty(error);
+        Assert.Contains("Bundled 2 packages", output);
+        using MsixBundle bundle = MsixBundle.Open(outputPath);
+        Assert.Equal(new Version(5, 4, 3, 2), bundle.Identity.Version);
+        Assert.Equal(2, bundle.Packages.Count);
+    }
+
+    [Fact]
+    public void Bundle_Json_EmitsTrimSafeStructuredReport()
+    {
+        (string x64, string arm64) = CreateBundlePackages();
+        string outputPath = Path.Combine(_root, "cli-json.msixbundle");
+
+        (int code, string output, string error) = RunBundle(
+            x64,
+            arm64,
+            "--output",
+            outputPath,
+            "--json");
+
+        Assert.Equal(0, code);
+        Assert.Empty(error);
+        using JsonDocument document = JsonDocument.Parse(output);
+        Assert.Equal(2, document.RootElement.GetProperty("PackageCount").GetInt32());
+        Assert.Equal(2, document.RootElement.GetProperty("Packages").GetArrayLength());
+        Assert.Equal("application", document.RootElement.GetProperty("Packages")[0].GetProperty("Type").GetString());
+    }
+
+    [Theory]
+    [InlineData()]
+    [InlineData("input.msix")]
+    [InlineData("-o", "output.msixbundle")]
+    [InlineData("input.msix", "-o")]
+    [InlineData("input.msix", "-o", "output.msixbundle", "--version", "1.2.3")]
+    [InlineData("input.msix", "-o", "output.msixbundle", "--bogus")]
+    public void Bundle_BadArguments_ReturnUsageError(params string[] args)
+    {
+        (int code, _, string error) = RunBundle(args);
+
+        Assert.Equal(2, code);
+        Assert.Contains("Usage: msixmgr bundle", error);
+    }
+
+    [Fact]
     public void Program_HelpAndDispatchUseTheSameVerbRegistry()
     {
         var output = new StringWriter();
@@ -356,6 +422,7 @@ public class CliCommandTests : IDisposable
             Assert.Contains($"msixmgr {verb}:", error.ToString());
             Assert.DoesNotContain("unknown verb", error.ToString());
         }
+
     }
 
     [Fact]
@@ -370,5 +437,25 @@ public class CliCommandTests : IDisposable
     {
         int code = Program.Main(["--version"]);
         Assert.Equal(0, code);
+    }
+
+    private (string X64, string Arm64) CreateBundlePackages()
+    {
+        string x64Source = LooseCliPackage.Create(_root, "bundle-x64");
+        string arm64Source = LooseCliPackage.Create(_root, "bundle-arm64");
+        string arm64Manifest = Path.Combine(arm64Source, "AppxManifest.xml");
+        File.WriteAllText(
+            arm64Manifest,
+            File.ReadAllText(arm64Manifest).Replace(
+                "ProcessorArchitecture=\"x64\"",
+                "ProcessorArchitecture=\"arm64\"",
+                StringComparison.Ordinal),
+            new UTF8Encoding(false));
+
+        string x64 = Path.Combine(_root, "cli-x64.msix");
+        string arm64 = Path.Combine(_root, "cli-arm64.msix");
+        Assert.Equal(0, RunPack(x64Source, "-o", x64).Code);
+        Assert.Equal(0, RunPack(arm64Source, "-o", arm64).Code);
+        return (x64, arm64);
     }
 }

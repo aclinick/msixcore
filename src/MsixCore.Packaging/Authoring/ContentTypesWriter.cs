@@ -8,7 +8,9 @@ internal static class ContentTypesWriter
 {
     private const string ContentTypesNamespace = "http://schemas.openxmlformats.org/package/2006/content-types";
     private const string ManifestContentType = "application/vnd.ms-appx.manifest+xml";
+    private const string BundleManifestContentType = "application/vnd.ms-appx.bundlemanifest+xml";
     private const string BlockMapContentType = "application/vnd.ms-appx.blockmap+xml";
+    private const string PackageContentType = "application/vnd.ms-appx";
     private const string GenericContentType = "application/octet-stream";
 
     private static readonly Dictionary<string, string> KnownContentTypes =
@@ -63,6 +65,41 @@ internal static class ContentTypesWriter
             }
 
             WriteOverride(writer, OpcPartNames.AppxManifest, ManifestContentType);
+            WriteOverride(writer, OpcPartNames.AppxBlockMap, BlockMapContentType);
+            writer.WriteEndElement();
+            writer.WriteEndDocument();
+        }
+
+        return output.ToArray();
+    }
+
+    public static byte[] WriteBundle(IEnumerable<string> childPackageNames)
+    {
+        ArgumentNullException.ThrowIfNull(childPackageNames);
+
+        string[] extensions = childPackageNames
+            .Select(GetExtension)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        using var output = new MemoryStream();
+        using (XmlWriter writer = XmlWriter.Create(output, CreateSettings()))
+        {
+            writer.WriteStartDocument();
+            writer.WriteStartElement("Types", ContentTypesNamespace);
+            foreach (string extension in extensions)
+            {
+                writer.WriteStartElement("Default", ContentTypesNamespace);
+                writer.WriteAttributeString("Extension", extension);
+                writer.WriteAttributeString("ContentType", PackageContentType);
+                writer.WriteEndElement();
+            }
+
+            writer.WriteStartElement("Default", ContentTypesNamespace);
+            writer.WriteAttributeString("Extension", "xml");
+            writer.WriteAttributeString("ContentType", BundleManifestContentType);
+            writer.WriteEndElement();
             WriteOverride(writer, OpcPartNames.AppxBlockMap, BlockMapContentType);
             writer.WriteEndElement();
             writer.WriteEndDocument();
