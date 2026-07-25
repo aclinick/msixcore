@@ -9,6 +9,8 @@ namespace MsixMgr;
 /// <summary><c>pack</c> verb: builds an unsigned MSIX package from a source directory.</summary>
 internal static class PackCommand
 {
+    internal static Func<string, string, PackOptions?, PackResult> BuildPackage { get; set; } = MsixPackageBuilder.Build;
+
     public static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter error)
     {
         if (!TryParse(
@@ -32,7 +34,7 @@ internal static class PackCommand
 
         try
         {
-            PackResult result = MsixPackageBuilder.Build(
+            PackResult result = BuildPackage(
                 sourceDirectory!,
                 outputPath!,
                 new PackOptions

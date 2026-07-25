@@ -9,6 +9,8 @@ namespace MsixMgr;
 /// <summary><c>bundle</c> verb: builds an unsigned bundle from MSIX/APPX packages.</summary>
 internal static class BundleCommand
 {
+    internal static Func<IEnumerable<string>, string, BundleOptions?, BundleResult> BuildBundle { get; set; } = MsixBundleBuilder.Build;
+
     public static int Run(IReadOnlyList<string> args, TextWriter output, TextWriter error)
     {
         if (!TryParse(
@@ -33,7 +35,7 @@ internal static class BundleCommand
 
         try
         {
-            BundleResult result = MsixBundleBuilder.Build(
+            BundleResult result = BuildBundle(
                 packagePaths,
                 outputPath!,
                 new BundleOptions { Overwrite = overwrite, Version = version });

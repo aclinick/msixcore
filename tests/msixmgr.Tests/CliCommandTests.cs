@@ -464,23 +464,31 @@ public class CliCommandTests : IDisposable
     [InlineData("bundle")]
     public void PackAndBundle_NotSupportedException_IsOperationalJsonError(string verb)
     {
-        var output = new StringWriter();
-        var error = new StringWriter();
-        var exception = new NotSupportedException("zip64 is not supported");
+        Func<string, string, MsixCore.Packaging.Authoring.PackOptions?, MsixCore.Packaging.Authoring.PackResult> originalPack
+            = PackCommand.BuildPackage;
+        Func<IEnumerable<string>, string, MsixCore.Packaging.Authoring.BundleOptions?, MsixCore.Packaging.Authoring.BundleResult> originalBundle
+            = BundleCommand.BuildBundle;
+        try
+        {
+            PackCommand.BuildPackage = (_, _, _) => throw new NotSupportedException("zip64 is not supported");
+            BundleCommand.BuildBundle = (_, _, _) => throw new NotSupportedException("zip64 is not supported");
 
-        CliContract.WriteError(
-            output,
-            error,
-            json: true,
-            $"msixmgr {verb}",
-            exception.Message,
-            usage: null,
-            CliContract.ErrorCode(exception));
+            (int code, string output, string error) = verb switch
+            {
+                "pack" => RunPack("source", "-o", "out.msix", "--json"),
+                "bundle" => RunBundle("input.msix", "-o", "out.msixbundle", "--json"),
+                _ => throw new ArgumentOutOfRangeException(nameof(verb), verb, null),
+            };
 
-        Assert.True(CliContract.IsOperationalException(exception));
-        Assert.Empty(error.ToString());
-        AssertJsonError(output.ToString(), "not_supported");
-        Assert.Equal(3, CliContract.ExitCodes.OperationalError);
+            Assert.Equal(3, code);
+            Assert.Empty(error);
+            AssertJsonError(output, "not_supported");
+        }
+        finally
+        {
+            PackCommand.BuildPackage = originalPack;
+            BundleCommand.BuildBundle = originalBundle;
+        }
     }
 
     [Theory]
