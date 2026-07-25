@@ -196,38 +196,55 @@ public sealed class MsixPackage : IPackage
         // AppxBlockMap.xml is already cached from ReadBlockMap(); for the other parts we
         // read once now and cache for the same single-read guarantee.
         var snapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-        CacheAndSnapshot(OpcPartNames.ContentTypes, snapshots);
-        CacheAndSnapshot(OpcPartNames.AppxBlockMap, snapshots);
-        CacheAndSnapshot(OpcPartNames.CodeIntegrityCatalog, snapshots);
+        SnapshotFootprint(OpcPartNames.ContentTypes, snapshots);
+        SnapshotFootprint(OpcPartNames.AppxBlockMap, snapshots);
+        SnapshotFootprint(OpcPartNames.CodeIntegrityCatalog, snapshots);
 
         return AppxDigestTableVerifier.VerifyFromSnapshots(signature.DigestTable, snapshots);
     }
 
     /// <summary>
     /// Ensures the named part's bytes are in <see cref="_footprintCache"/>, reading from
-    /// <see cref="_opc"/> only if not already cached. Then copies into <paramref name="snapshots"/>
-    /// for binding verification. Returns a defensive copy so callers cannot mutate the cache.
+    /// <see cref="_opc"/> only if not already cached. Returns the cached bytes. This is the
+    /// single choke-point for all footprint-part reads — every method that needs raw footprint
+    /// bytes must go through here so there is exactly one read per part per package lifetime.
     /// </summary>
-    private void CacheAndSnapshot(string partName, Dictionary<string, byte[]> snapshots)
+    /// <returns>The cached bytes, or <see langword="null"/> if the part does not exist.</returns>
+    private byte[]? GetFootprintBytes(string partName)
     {
-        if (!_footprintCache.TryGetValue(partName, out byte[]? cached))
+        if (_footprintCache.TryGetValue(partName, out byte[]? cached))
         {
-            if (!_opc.ContainsPart(partName))
-            {
-                return; // Part does not exist — binding verifier handles absence.
-            }
-
-            cached = ReadPartBytes(partName);
-            _footprintCache[partName] = cached;
+            return cached;
         }
 
-        // Hand the verifier a copy so it cannot mutate the cached bytes.
+        if (!_opc.ContainsPart(partName))
+        {
+            return null;
+        }
+
+        cached = ReadPartBytesUncached(partName);
+        _footprintCache[partName] = cached;
+        return cached;
+    }
+
+    /// <summary>
+    /// Copies the cached bytes for <paramref name="partName"/> into <paramref name="snapshots"/>.
+    /// Uses a defensive copy so the verifier cannot mutate the cache.
+    /// </summary>
+    private void SnapshotFootprint(string partName, Dictionary<string, byte[]> snapshots)
+    {
+        byte[]? cached = GetFootprintBytes(partName);
+        if (cached is null)
+        {
+            return; // Part does not exist — binding verifier handles absence.
+        }
+
         byte[] copy = new byte[cached.Length];
         cached.AsSpan().CopyTo(copy);
         snapshots[partName] = copy;
     }
 
-    private byte[] ReadPartBytes(string partName)
+    private byte[] ReadPartBytesUncached(string partName)
     {
         using Stream stream = _opc.OpenPart(partName);
         using var ms = new MemoryStream();
@@ -275,16 +292,15 @@ public sealed class MsixPackage : IPackage
 
     private BlockMap ReadBlockMap()
     {
-        if (!_opc.ContainsPart(OpcPartNames.AppxBlockMap))
+        // Go through the single choke-point so the raw bytes are cached and shared with
+        // binding verification — guaranteeing single-read-single-hash across the pipeline.
+        byte[]? raw = GetFootprintBytes(OpcPartNames.AppxBlockMap);
+        if (raw is null)
         {
             throw new InvalidDataException(
                 $"The package does not contain '{OpcPartNames.AppxBlockMap}'.");
         }
 
-        // Read once, cache the raw bytes, parse from the cache. Binding verification will
-        // hash these same bytes, guaranteeing single-read-single-hash across the pipeline.
-        byte[] raw = ReadPartBytes(OpcPartNames.AppxBlockMap);
-        _footprintCache[OpcPartNames.AppxBlockMap] = raw;
         return BlockMapParser.Parse(new MemoryStream(raw, writable: false));
     }
 

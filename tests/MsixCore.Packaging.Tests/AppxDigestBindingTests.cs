@@ -980,6 +980,93 @@ public class AppxDigestBindingTests
         }
     }
 
+    /// <summary>
+    /// Reverse-order TOCTOU: <see cref="MsixPackage.VerifySignatureBinding"/> runs first
+    /// (caching block map A from disk), then the attacker swaps to block map B before
+    /// <see cref="MsixPackage.VerifyBlockMap"/>. Without the single choke-point,
+    /// <c>ReadBlockMap</c> would re-read B from disk (overwriting the cache), and payload
+    /// verification would pass against B — while binding already verified A.
+    ///
+    /// With the fix, <c>ReadBlockMap</c> goes through <c>GetFootprintBytes</c> which returns
+    /// the already-cached A, so payload verification runs against A and fails (payload is B).
+    /// </summary>
+    [Fact]
+    public void Toctou_BindingFirst_ThenSwapBeforePayloadVerify_PayloadFails()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-toctou3-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+
+            byte[] payloadA = "Hello from legitimate app A"u8.ToArray();
+            byte[] payloadB = "EVIL PAYLOAD"u8.ToArray();
+
+            var filesA = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payloadA,
+            };
+            var filesB = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payloadB,
+            };
+
+            byte[] blockMapBytesA = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(filesA));
+            byte[] blockMapBytesB = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(filesB));
+
+            // Write legitimate layout A to disk (block map A, payload A).
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytesA);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payloadA);
+
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // Phase 1: binding first (before .BlockMap is ever accessed).
+            // This caches block map A's bytes via GetFootprintBytes.
+            var entries = MakeCorrectEntries(contentTypes, blockMapBytesA);
+            AppxDigestTable table = ParseTableDirect(entries);
+            var fakeSig = new PackageSignature
+            {
+                SubjectName = "CN=Test",
+                SubjectNameRawData = ReadOnlyMemory<byte>.Empty,
+                IssuerName = "CN=Test",
+                Thumbprint = "AAAA",
+                NotBefore = DateTimeOffset.UtcNow,
+                NotAfter = DateTimeOffset.UtcNow,
+                IsCmsIntegrityValid = true,
+                DigestTable = table,
+            };
+
+            IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
+            Assert.True(binding.IsBindingValid, "Binding should pass — block map A matches AXBM digest over A.");
+
+            // --- ATTACKER SWAPS ---
+            // Replace block map with B and payload with B's payload on disk.
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytesB);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payloadB);
+
+            // Phase 2: payload verification. ReadBlockMap goes through GetFootprintBytes,
+            // which returns cached A (not the swapped B on disk). The parsed block map is A,
+            // but the payload on disk is B → hash mismatch → verification fails.
+            BlockMapVerificationResult bmResult = package.VerifyBlockMap();
+            Assert.False(bmResult.IsValid,
+                "Payload verification must FAIL: ReadBlockMap used cached A, but payload on disk is B.");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+    }
+
     #endregion
 
     #region Helper methods
