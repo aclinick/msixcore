@@ -141,6 +141,14 @@ public sealed class MsixBundleBuilder
                     "All child packages in a bundle must have the same Name and Publisher.");
             }
 
+            if (!input.Identity.Version.Equals(first.Identity.Version))
+            {
+                throw new InvalidDataException(
+                    "All child packages in a bundle must have the same Version. "
+                    + $"'{input.FileName}' declares version '{input.Identity.Version}' but "
+                    + $"'{first.FileName}' declares '{first.Identity.Version}'.");
+            }
+
             if (!identities.Add(input.Identity.PackageFullName))
             {
                 throw new InvalidDataException(

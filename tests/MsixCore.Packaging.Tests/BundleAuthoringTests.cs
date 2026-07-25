@@ -134,7 +134,26 @@ public sealed class BundleAuthoringTests : IDisposable
     }
 
     [Fact]
-    public void Build_DefaultVersionUsesHighestChildVersion()
+    public void Build_DefaultVersionUsesCommonChildVersion()
+    {
+        string x64 = CreatePackage(
+            "app-x64.msix",
+            ProcessorArchitecture.X64,
+            version: new Version(2, 3, 4, 5));
+        string arm64 = CreatePackage(
+            "app-arm64.msix",
+            ProcessorArchitecture.Arm64,
+            version: new Version(2, 3, 4, 5));
+
+        BundleResult result = MsixBundleBuilder.Build(
+            [x64, arm64],
+            Path.Combine(_root, "version.msixbundle"));
+
+        Assert.Equal(new Version(2, 3, 4, 5), result.Identity.Version);
+    }
+
+    [Fact]
+    public void Build_MismatchedChildVersions_Throws()
     {
         string older = CreatePackage(
             "older-x64.msix",
@@ -145,11 +164,12 @@ public sealed class BundleAuthoringTests : IDisposable
             ProcessorArchitecture.Arm64,
             version: new Version(2, 3, 4, 5));
 
-        BundleResult result = MsixBundleBuilder.Build(
-            [older, newer],
-            Path.Combine(_root, "version.msixbundle"));
+        InvalidDataException ex = Assert.Throws<InvalidDataException>(() =>
+            MsixBundleBuilder.Build(
+                [older, newer],
+                Path.Combine(_root, "mismatch.msixbundle")));
 
-        Assert.Equal(new Version(2, 3, 4, 5), result.Identity.Version);
+        Assert.Contains("same Version", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -200,8 +220,7 @@ public sealed class BundleAuthoringTests : IDisposable
 
         string secondX64 = CreatePackage(
             "second-x64.msix",
-            ProcessorArchitecture.X64,
-            version: new Version(2, 0, 0, 0));
+            ProcessorArchitecture.X64);
         Assert.Throws<InvalidDataException>(
             () => MsixBundleBuilder.Build(
                 [first, secondX64],
