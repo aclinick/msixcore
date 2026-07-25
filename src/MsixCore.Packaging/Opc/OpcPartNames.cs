@@ -12,6 +12,9 @@ public static class OpcPartNames
     /// <summary>The block map describing per-file block hashes.</summary>
     public const string AppxBlockMap = "AppxBlockMap.xml";
 
+    /// <summary>The AppxMetadata code-integrity catalog (a footprint part, never in the block map).</summary>
+    public const string CodeIntegrityCatalog = "AppxMetadata/CodeIntegrity.cat";
+
     /// <summary>The digital signature part.</summary>
     public const string AppxSignature = "AppxSignature.p7x";
 

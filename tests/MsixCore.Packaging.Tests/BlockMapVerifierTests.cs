@@ -122,10 +122,11 @@ public class BlockMapVerifierTests
         Dictionary<string, byte[]> parts = SampleParts();
         BlockMap map = PackageBuilder.BlockMapFor(parts);
 
-        // The three special OPC parts must never count against coverage.
+        // The special OPC/footprint parts must never count against coverage.
         parts[OpcPartNames.AppxBlockMap] = Encoding.UTF8.GetBytes("<BlockMap/>");
         parts[OpcPartNames.AppxSignature] = new byte[] { 1, 2, 3 };
         parts[OpcPartNames.ContentTypes] = Encoding.UTF8.GetBytes("<Types/>");
+        parts[OpcPartNames.CodeIntegrityCatalog] = new byte[] { 4, 5, 6 };
         using OpcPackage opc = PackageBuilder.OpcFrom(parts);
 
         BlockMapVerificationResult result = BlockMapVerifier.Verify(opc, map);

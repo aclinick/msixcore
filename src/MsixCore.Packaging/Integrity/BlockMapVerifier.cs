@@ -21,6 +21,7 @@ public static class BlockMapVerifier
         OpcPartNames.AppxBlockMap,
         OpcPartNames.AppxSignature,
         OpcPartNames.ContentTypes,
+        OpcPartNames.CodeIntegrityCatalog,
     };
 
     /// <summary>Verifies a package's payload against a parsed block map.</summary>
