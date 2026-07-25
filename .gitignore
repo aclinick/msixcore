@@ -7,6 +7,10 @@ artifacts/
 *.user
 *.suo
 
+# Benchmark / size-measurement outputs (results are captured into committed .md files)
+BenchmarkDotNet.Artifacts/
+bench/publish/
+
 # Rider / VS
 .idea/
 .vs/
