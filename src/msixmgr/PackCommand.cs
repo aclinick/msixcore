@@ -31,7 +31,9 @@ internal static class PackCommand
                 new PackOptions { Overwrite = overwrite });
             if (json)
             {
-                output.WriteLine(JsonSerializer.Serialize(CreateReport(result), ReportJson.Options));
+                output.WriteLine(JsonSerializer.Serialize(
+                    CreateReport(result),
+                    ReportJsonContext.Default.PackReport));
             }
             else
             {

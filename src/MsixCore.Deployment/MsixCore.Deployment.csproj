@@ -8,6 +8,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>MsixCore.Deployment</PackageId>
+    <Description>Cross-platform .NET APIs for extracting, installing, removing, and querying MSIX/APPX packages.</Description>
+    <PackageTags>msix;appx;deployment;installation;extraction;cross-platform</PackageTags>
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>

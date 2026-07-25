@@ -33,17 +33,11 @@ msixmgr <verb> [options]
 | `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
 | `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
 | `pack <sourceDir> -o <file.msix> [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package (`makemsix` alias). |
-| `-AddPackage <path>`                   | Not yet       | Install an MSIX/APPX package. |
-| `-RemovePackage <fullName>`            | Not yet       | Uninstall a package by full name. |
-| `-FindPackage <pattern>`               | Not yet       | Query installed packages (`*` and `?`). |
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
-> `inspect`, `validate`, `unpack`, and `pack` are implemented. The remaining deployment
-> verbs (`-AddPackage`, `-RemovePackage`, `-FindPackage`) are advertised in
-> `--help` but currently return exit code `2` (`verb ... is not implemented
-> yet`); they are exposed programmatically today via `PackageManager` (see
-> [api.md](api.md)) and reach the CLI in a later phase.
+> Deployment operations are exposed programmatically through `PackageManager`
+> (see [api.md](api.md)); they are not advertised as CLI verbs until implemented.
 
 ## Exit codes
 
@@ -51,7 +45,7 @@ msixmgr <verb> [options]
 |------|---------|
 | `0`  | Success. For `validate`, the package passed the integrity checks. |
 | `1`  | Runtime error (file not found, unreadable, malformed), **or** for `validate` the package failed integrity. |
-| `2`  | Usage error (unknown verb, unknown option, missing/extra argument) or an unimplemented verb. |
+| `2`  | Usage error (unknown verb, unknown option, or missing/extra argument). |
 
 `validate` is designed for CI gating: `0` = integrity OK, `1` = integrity failed.
 
@@ -66,18 +60,14 @@ msixmgr - MSIX Core (.NET) command-line tool
 Usage:
   msixmgr <verb> [options]
 
-Verbs (implemented incrementally):
-  inspect <path> [--json]     Show package identity and metadata.
-  validate <path> [--json]    Verify integrity (block map + signature); CI exit code.
-  unpack <path> -Destination <dir> [--json]
-                              Extract a package to a loose layout without installing.
-  pack <sourceDir> -o <file.msix> [--overwrite] [--json]
-                              Build an unsigned MSIX package (alias: makemsix).
-  -AddPackage <path>          Install an MSIX/APPX package.
-  -RemovePackage <fullName>   Uninstall a package by full name.
-  -FindPackage <pattern>      Query installed packages (supports * and ?).
+Verbs:
+  inspect <path> [--json]                                                Show package identity and metadata.
+  validate <path> [--json]                                               Verify integrity (block map + signature); CI exit code.
+  unpack <path> -Destination <dir> [--json]                              Extract a package to a loose layout without installing.
+  pack <sourceDir> -o|--output <file.msix> [--overwrite] [--json]        Build an unsigned MSIX package (alias: makemsix).
 
-<path> may be a package file (.msix/.appx) or an unpacked directory.
+For inspect, validate, and unpack, <path> may be a package file
+(.msix/.appx) or an unpacked directory. pack requires a source directory.
 
 Options:
   -h, --help                  Show this help.
@@ -90,7 +80,7 @@ Running with no arguments prints the same help and exits `0`.
 
 ```console
 $ dotnet $DLL --version
-1.0.0.0
+0.1.0.0
 ```
 
 ## `inspect`
@@ -327,11 +317,11 @@ $ dotnet $DLL inspect ./NoSuch
 msixmgr inspect: No package file or directory found at './NoSuch'.
 ```
 
-Unimplemented verb (exit `2`):
+Unknown verb (exit `2`):
 
 ```console
 $ dotnet $DLL -AddPackage ./Contoso.MyApp.msix
-msixmgr: verb '-AddPackage' is not implemented yet.
+msixmgr: unknown verb '-AddPackage'.
 Run 'msixmgr --help' for usage.
 ```
 

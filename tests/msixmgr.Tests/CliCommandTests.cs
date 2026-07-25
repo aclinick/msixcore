@@ -279,18 +279,52 @@ public class CliCommandTests : IDisposable
     {
         string source = LooseCliPackage.Create(_root, "makemsix-alias");
         string outputPath = Path.Combine(_root, "alias.msix");
+        var output = new StringWriter();
+        var error = new StringWriter();
 
-        int code = Program.Main(["makemsix", source, "-o", outputPath]);
+        int code = Program.Run(["makemsix", source, "-o", outputPath], output, error);
 
         Assert.Equal(0, code);
+        Assert.Empty(error.ToString());
         Assert.True(File.Exists(outputPath));
     }
 
     [Fact]
-    public void Program_Help_ReturnsZeroAndListsVerbs()
+    public void Program_HelpAndDispatchUseTheSameVerbRegistry()
     {
-        int code = Program.Main(["--help"]);
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        int code = Program.Run(["--help"], output, error);
+
         Assert.Equal(0, code);
+        Assert.Empty(error.ToString());
+
+        string help = output.ToString();
+        string verbSection = help.Split("Verbs:", StringSplitOptions.None)[1]
+            .Split("For inspect,", StringSplitOptions.None)[0];
+        string[] helpVerbs = verbSection
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.TrimStart().Split(' ', 2)[0])
+            .ToArray();
+        string[] registeredVerbs = Program.Verbs.Select(static verb => verb.Name).ToArray();
+
+        Assert.Equal(registeredVerbs, helpVerbs);
+        CliVerb pack = Assert.Single(Program.Verbs, static verb => verb.Name == "pack");
+        Assert.Contains("makemsix", pack.Aliases!);
+        Assert.Contains("alias: makemsix", help);
+
+        foreach (string verb in helpVerbs)
+        {
+            output.GetStringBuilder().Clear();
+            error.GetStringBuilder().Clear();
+
+            int dispatchCode = Program.Run([verb], output, error);
+
+            Assert.Equal(2, dispatchCode);
+            Assert.Contains($"msixmgr {verb}:", error.ToString());
+            Assert.DoesNotContain("unknown verb", error.ToString());
+        }
     }
 
     [Fact]

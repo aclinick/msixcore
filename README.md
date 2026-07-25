@@ -39,13 +39,13 @@ as a modern, memory-safe, **cross-platform** library and CLI.
   with rollback); OS integration (shortcuts, registry, file-type associations) is a
   later phase.
 - **`msixmgr`** — command-line tool. `inspect`, `validate`, `unpack`, and `pack` are
-  implemented; the remaining deployment verbs (`-AddPackage`, `-RemovePackage`,
-  `-FindPackage`) are advertised in help and reach the CLI in a later phase.
+  implemented. Deployment operations remain available through the
+  `MsixCore.Deployment` library until dedicated CLI verbs are implemented.
 
 ## Status
 
 Under active, **phased** development. Each phase lands as its own reviewed PR
-with full test coverage (currently 300 passing tests). The reader
+with full test coverage (currently 314 passing tests). The reader
 (OPC → manifest → block map → signature → identity), the deployment **engine**
 (transactional add/remove driving `IMsixResponse`, cross-platform extraction,
 and query), package authoring, and the `unpack`/`pack` CLI verbs are

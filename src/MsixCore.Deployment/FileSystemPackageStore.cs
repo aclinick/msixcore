@@ -66,7 +66,7 @@ public sealed class FileSystemPackageStore : IPackageStore
                     continue;
                 }
 
-                if (!File.Exists(Path.Combine(directory, OpcPartNames.AppxManifest)))
+                if (!ContainsManifest(directory))
                 {
                     continue;
                 }
@@ -94,7 +94,7 @@ public sealed class FileSystemPackageStore : IPackageStore
 
     /// <inheritdoc/>
     public bool Contains(string packageFullName) =>
-        File.Exists(Path.Combine(GetInstallLocation(packageFullName), OpcPartNames.AppxManifest));
+        ContainsManifest(GetInstallLocation(packageFullName));
 
     /// <inheritdoc/>
     public void Delete(string packageFullName)
@@ -184,14 +184,36 @@ public sealed class FileSystemPackageStore : IPackageStore
         ArgumentException.ThrowIfNullOrEmpty(packageFullName);
 
         // A package full name must be a single path segment; reject anything that could traverse.
-        if (packageFullName.Contains(Path.DirectorySeparatorChar)
-            || packageFullName.Contains(Path.AltDirectorySeparatorChar)
+        if (packageFullName.Any(static c =>
+                char.IsControl(c) || c is '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*')
             || packageFullName is "." or ".."
-            || packageFullName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            || packageFullName.EndsWith(' ')
+            || packageFullName.EndsWith('.'))
         {
             throw new ArgumentException($"Invalid package full name: '{packageFullName}'.", nameof(packageFullName));
         }
 
         return packageFullName;
+    }
+
+    private static bool ContainsManifest(string directory)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(directory)
+                .Any(file => string.Equals(
+                    Path.GetFileName(file),
+                    OpcPartNames.AppxManifest,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }

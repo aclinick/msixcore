@@ -213,5 +213,4 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 - `unpack` (`UnpackCommand.cs`): extracts a package to a loose layout via `PackageExtractor`
   (`unpack <path> -Destination <dir> [--json]`), cross-platform, no install/OS integration.
 - `PackageManager.AddPackage` / `RemovePackage` are now **implemented** (see §8) but not yet wired to
-  dedicated `msixmgr` verbs; the `-AddPackage`/`-RemovePackage`/`-FindPackage` flags remain the
-  documented (parity) surface.
+  dedicated `msixmgr` verbs, so they are not advertised by CLI help.
