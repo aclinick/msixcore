@@ -55,9 +55,11 @@ internal sealed record ValidationReport
     public bool? CmsIntegrityValid { get; init; }
 
     /// <summary>
-    /// Always <see langword="false"/> today: this tool does not yet verify that the signature's APPX
-    /// indirect-data digests bind it to this package's block map/manifest. Until it does, a valid
-    /// signature does not prove the payload is the one that was signed.
+    /// Whether the signature's APPX indirect-data digests bind to the package contents.
+    /// <see langword="true"/> when AXCT, AXBM, and (if present) AXCI digests match.
+    /// AXPC and AXCD are present but not verified (exact ZIP byte ranges are not recoverable from public spec).
+    /// <see langword="false"/> when binding verification failed.
+    /// <see langword="null"/> for unsigned packages or when the digest table is unavailable.
     /// </summary>
     public bool? SignatureBindingVerified { get; init; }
 
@@ -70,6 +72,22 @@ internal sealed record ValidationReport
     public IReadOnlyList<string> Errors { get; init; } = [];
 
     public IReadOnlyList<string> Warnings { get; init; } = [];
+
+    /// <summary>Per-tag binding digest verification details (when the signature has a digest table).</summary>
+    public IReadOnlyList<BindingDigestReport>? BindingDigests { get; init; }
+}
+
+/// <summary>Machine-readable status of a single APPX digest tag from the signature binding.</summary>
+internal sealed record BindingDigestReport
+{
+    /// <summary>The tag name (e.g. "Axbm", "Axct").</summary>
+    public required string Tag { get; init; }
+
+    /// <summary>The verification status (e.g. "Valid", "Mismatch", "NotVerified").</summary>
+    public required string Status { get; init; }
+
+    /// <summary>Optional detail about the verification outcome.</summary>
+    public string? Detail { get; init; }
 }
 
 /// <summary>Machine-readable result of the <c>unpack</c> verb.</summary>
@@ -176,6 +194,7 @@ internal sealed record ErrorReport
 [JsonSerializable(typeof(PackReport))]
 [JsonSerializable(typeof(BundleReport))]
 [JsonSerializable(typeof(ErrorReport))]
+[JsonSerializable(typeof(BindingDigestReport))]
 internal sealed partial class ReportJsonContext : JsonSerializerContext
 {
 }

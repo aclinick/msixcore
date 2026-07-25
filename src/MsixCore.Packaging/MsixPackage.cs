@@ -140,6 +140,40 @@ public sealed class MsixPackage : IPackage
         return PackageSignatureReader.Read(signature);
     }
 
+    /// <summary>
+    /// Verifies that the signature's APPX indirect-data digest table binds this package's
+    /// footprint parts (<c>[Content_Types].xml</c>, <c>AppxBlockMap.xml</c>, and optionally
+    /// <c>AppxMetadata/CodeIntegrity.cat</c>) to the CMS signer.
+    /// </summary>
+    /// <param name="signature">
+    /// The signature previously obtained from <see cref="ReadSignature"/>. Must have a valid CMS
+    /// envelope and a parsed <see cref="PackageSignature.DigestTable"/>.
+    /// </param>
+    /// <returns>A structured result describing which digests were verified and their status.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="signature"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The CMS envelope is invalid or the digest table could not be parsed.
+    /// </exception>
+    public IndirectDataBindingResult VerifySignatureBinding(PackageSignature signature)
+    {
+        ArgumentNullException.ThrowIfNull(signature);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (!signature.IsCmsIntegrityValid)
+        {
+            throw new InvalidOperationException(
+                "Cannot verify signature binding: the CMS envelope integrity check failed.");
+        }
+
+        if (signature.DigestTable is null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot verify signature binding: {signature.DigestTableError ?? "the digest table is not available."}");
+        }
+
+        return AppxDigestTableVerifier.Verify(signature.DigestTable, _opc);
+    }
+
     /// <inheritdoc/>
     public Stream? OpenLogo()
     {

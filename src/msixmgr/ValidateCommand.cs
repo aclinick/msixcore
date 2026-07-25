@@ -104,6 +104,8 @@ internal static class ValidateCommand
 
         bool signed = package.IsSigned;
         bool? cmsValid = null;
+        bool? bindingValid = null;
+        IReadOnlyList<DigestEntryResult>? bindingResults = null;
         if (signed)
         {
             PackageSignature? signature = package.ReadSignature();
@@ -124,14 +126,60 @@ internal static class ValidateCommand
                     errors.Add("signature: signer subject does not match manifest Publisher.");
                 }
 
-                // Be explicit that a passing signature check here does NOT prove authenticity: we do
-                // not yet verify the APPX indirect-data digest binding or the certificate trust chain.
-                warnings.Add("signature binding (APPX indirect-data digests) and certificate trust are NOT verified; this is not an authenticity guarantee.");
+                // Verify APPX indirect-data digest binding (AXCT, AXBM, AXCI).
+                if (signature.IsCmsIntegrityValid && signature.DigestTable is not null)
+                {
+                    IndirectDataBindingResult binding = package.VerifySignatureBinding(signature);
+                    bindingValid = binding.IsBindingValid;
+                    bindingResults = binding.Results;
+
+                    if (!binding.IsBindingValid)
+                    {
+                        errors.Add("signature: APPX indirect-data digest binding FAILED.");
+                    }
+
+                    foreach (DigestEntryResult dr in binding.Results)
+                    {
+                        if (dr.Status == DigestVerificationStatus.Mismatch)
+                        {
+                            errors.Add($"signature binding: {dr.Tag} digest mismatch{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
+                        }
+                        else if (dr.Status == DigestVerificationStatus.PartMissing)
+                        {
+                            errors.Add($"signature binding: {dr.Tag} part missing{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
+                        }
+                    }
+                }
+                else if (signature.IsCmsIntegrityValid && signature.DigestTable is null)
+                {
+                    // CMS is valid but digest table couldn't be parsed.
+                    errors.Add($"signature: APPX digest table could not be parsed — {signature.DigestTableError ?? "unknown error"}.");
+                    bindingValid = false;
+                }
+
+                // Certificate trust chain is still not verified.
+                warnings.Add("certificate trust chain is NOT verified; this is not a full authenticity guarantee.");
             }
         }
         else
         {
             warnings.Add("package is unsigned; integrity is self-asserted by its own block map only.");
+        }
+
+        // Build the binding detail entries for the report.
+        List<BindingDigestReport>? bindingDigests = null;
+        if (bindingResults is not null)
+        {
+            bindingDigests = new List<BindingDigestReport>(bindingResults.Count);
+            foreach (DigestEntryResult dr in bindingResults)
+            {
+                bindingDigests.Add(new BindingDigestReport
+                {
+                    Tag = dr.Tag.ToString(),
+                    Status = dr.Status.ToString(),
+                    Detail = dr.Detail,
+                });
+            }
         }
 
         return new ValidationReport
@@ -142,8 +190,9 @@ internal static class ValidateCommand
             VerifiedFileCount = blockMap.Files.Count,
             IsSigned = signed,
             CmsIntegrityValid = cmsValid,
-            SignatureBindingVerified = signed ? false : null,
+            SignatureBindingVerified = bindingValid,
             SignatureTrustVerified = signed ? false : null,
+            BindingDigests = bindingDigests,
             Errors = errors,
             Warnings = warnings,
         };
@@ -155,12 +204,40 @@ internal static class ValidateCommand
         o.WriteLine(r.IsValid ? $"INTEGRITY OK      {r.PackageFullName}" : $"INTEGRITY FAILED  {r.PackageFullName}");
         string fileCount = r.VerifiedFileCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
         o.WriteLine($"  Block map : {(r.BlockMapValid ? "ok" : "FAILED")} ({fileCount} files)");
-        string signature = !r.IsSigned
-            ? "unsigned"
-            : r.CmsIntegrityValid == true
-                ? "CMS envelope ok (binding + trust NOT verified)"
-                : "CMS envelope FAILED";
+        string signature;
+        if (!r.IsSigned)
+        {
+            signature = "unsigned";
+        }
+        else if (r.CmsIntegrityValid != true)
+        {
+            signature = "CMS envelope FAILED";
+        }
+        else if (r.SignatureBindingVerified == true)
+        {
+            signature = "CMS envelope ok, binding verified (AXCT/AXBM/AXCI; AXPC/AXCD not verified; trust NOT verified)";
+        }
+        else if (r.SignatureBindingVerified == false)
+        {
+            signature = "CMS envelope ok, binding FAILED (trust NOT verified)";
+        }
+        else
+        {
+            signature = "CMS envelope ok (binding + trust NOT verified)";
+        }
+
         o.WriteLine($"  Signature : {signature}");
+
+        if (r.BindingDigests is not null)
+        {
+            foreach (BindingDigestReport d in r.BindingDigests)
+            {
+                string status = d.Status;
+                string detail = d.Detail is not null ? $" — {d.Detail}" : "";
+                o.WriteLine($"    {d.Tag,-4} : {status}{detail}");
+            }
+        }
+
         foreach (string err in r.Errors)
         {
             o.WriteLine($"  error: {err}");
