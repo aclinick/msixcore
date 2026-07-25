@@ -17,7 +17,7 @@ namespace MsixCore.Benchmarks;
 /// </remarks>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
-public class PackageBenchmarks
+public class PackageBenchmarks : IDisposable
 {
     private const long LargePayloadBytes = 10L * 1024 * 1024;
     private const int LargeFileCount = 64;
@@ -30,6 +30,10 @@ public class PackageBenchmarks
     private string _smallPackagePath = string.Empty;
     private string _largePackagePath = string.Empty;
     private string _looseDir = string.Empty;
+
+    private MsixPackage? _extractPackageSmall;
+    private MemoryStream? _extractStreamSmall;
+    private MsixPackage? _extractPackageLarge;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -73,12 +77,37 @@ public class PackageBenchmarks
         }
     }
 
-    [IterationCleanup(Targets = [nameof(ExtractPackageSmall), nameof(ExtractPackageLarge)])]
-    public void CleanupExtractDirs()
+    [IterationSetup(Target = nameof(ExtractPackageSmall))]
+    public void SetupExtractSmall()
     {
-        // Runs once per iteration, OUTSIDE the measured region, so deleting the extracted output is
-        // never timed. Within an iteration the benchmark simply overwrites the same files.
+        // Open the package OUTSIDE the measured region so the benchmark times only
+        // PackageExtractor.Extract, not MsixPackage.Open / Zip parsing.
+        _extractStreamSmall = new MemoryStream(_smallPackageBytes, writable: false);
+        _extractPackageSmall = MsixPackage.Open(_extractStreamSmall, leaveOpen: true);
+    }
+
+    [IterationSetup(Target = nameof(ExtractPackageLarge))]
+    public void SetupExtractLarge()
+    {
+        _extractPackageLarge = MsixPackage.Open(_largePackagePath);
+    }
+
+    [IterationCleanup(Target = nameof(ExtractPackageSmall))]
+    public void CleanupExtractSmall()
+    {
+        // Dispose the package and delete the extracted output OUTSIDE the measured region.
+        _extractPackageSmall?.Dispose();
+        _extractStreamSmall?.Dispose();
+        _extractPackageSmall = null;
+        _extractStreamSmall = null;
         DeleteBestEffort(_extractRootSmall);
+    }
+
+    [IterationCleanup(Target = nameof(ExtractPackageLarge))]
+    public void CleanupExtractLarge()
+    {
+        _extractPackageLarge?.Dispose();
+        _extractPackageLarge = null;
         DeleteBestEffort(_extractRootLarge);
     }
 
@@ -121,19 +150,16 @@ public class PackageBenchmarks
         return signature?.IsCmsIntegrityValid ?? false;
     }
 
-    [Benchmark(Description = "Extract package to a temp directory (small package)")]
+    [Benchmark(Description = "Extract package payload to a temp directory (small package)")]
     public void ExtractPackageSmall()
     {
-        using var stream = new MemoryStream(_smallPackageBytes, writable: false);
-        using MsixPackage package = MsixPackage.Open(stream, leaveOpen: true);
-        PackageExtractor.Extract(package.Opc, _extractRootSmall);
+        PackageExtractor.Extract(_extractPackageSmall!.Opc, _extractRootSmall);
     }
 
-    [Benchmark(Description = "Extract package to a temp directory (large package)")]
+    [Benchmark(Description = "Extract package payload to a temp directory (large package)")]
     public void ExtractPackageLarge()
     {
-        using MsixPackage package = MsixPackage.Open(_largePackagePath);
-        PackageExtractor.Extract(package.Opc, _extractRootLarge);
+        PackageExtractor.Extract(_extractPackageLarge!.Opc, _extractRootLarge);
     }
 
     [Benchmark(Description = "Open loose directory + verify block map (large package)")]
@@ -160,6 +186,15 @@ public class PackageBenchmarks
         {
             // Same as above.
         }
+    }
+
+    /// <summary>Disposes any extraction package/stream still held between iterations.</summary>
+    public void Dispose()
+    {
+        _extractPackageSmall?.Dispose();
+        _extractStreamSmall?.Dispose();
+        _extractPackageLarge?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
 

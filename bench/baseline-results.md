@@ -21,8 +21,9 @@ across 64 files so block-map hashing and extraction throughput are meaningful.
 - **Verify block map** — `MsixPackage.VerifyBlockMap()` (SHA-256 over every 64 KiB block).
 - **Read signature** — `MsixPackage.ReadSignature()` (CMS envelope decode + integrity check).
 - **Extract package** — `MsixCore.Deployment.PackageExtractor.Extract(package.Opc, dir)` (small and
-  large). The extracted output is deleted in an `[IterationCleanup]` that runs outside the measured
-  region, so deletion is never timed; BenchmarkDotNet therefore runs these two with
+  large). To isolate extraction, the package is opened in an `[IterationSetup]` and disposed (plus the
+  extracted output deleted) in an `[IterationCleanup]`, both outside the measured region, so neither
+  `MsixPackage.Open` nor cleanup is timed; BenchmarkDotNet therefore runs these two with
   `InvocationCount=1` (a separate job row below).
 - **Open loose directory + verify** — `MsixPackage.OpenDirectory` over an unpacked layout + verify.
 
@@ -46,14 +47,14 @@ IterationCount=5  WarmupCount=3
 ```
 | Method                                                        | Job        | InvocationCount | Mean         | Error         | StdDev       | Gen0      | Gen1    | Allocated  |
 |-------------------------------------------------------------- |----------- |---------------- |-------------:|--------------:|-------------:|----------:|--------:|-----------:|
-| 'Extract package to a temp directory (small package)'         | Job-MJLQTR | 1               |  5,415.08 us |  1,234.654 us |   320.636 us |         - |       - |  219.51 KB |
-| 'Extract package to a temp directory (large package)'         | Job-MJLQTR | 1               | 54,933.34 us | 12,175.067 us | 3,161.826 us |         - |       - |  611.97 KB |
-| 'Open + parse manifest/identity (small package, from stream)' | Job-NTRUNJ | Default         |     20.01 us |      1.180 us |     0.306 us |   10.1318 |       - |   41.57 KB |
-| 'Open + parse manifest/identity (large package, from file)'   | Job-NTRUNJ | Default         |    324.23 us |     40.716 us |    10.574 us |   29.2969 |  0.9766 |  120.27 KB |
-| 'Verify block map (small package)'                            | Job-NTRUNJ | Default         |    140.14 us |     20.212 us |     3.128 us |  103.2715 |  0.2441 |  427.09 KB |
-| 'Verify block map (large multi-file/multi-block package)'     | Job-NTRUNJ | Default         | 12,624.29 us |    204.400 us |    53.082 us | 1093.7500 | 15.6250 | 4537.42 KB |
-| 'Read signature (CMS envelope) from signed package'           | Job-NTRUNJ | Default         |    156.47 us |     14.525 us |     3.772 us |    6.5918 |  0.2441 |   27.91 KB |
-| 'Open loose directory + verify block map (large package)'     | Job-NTRUNJ | Default         | 13,464.11 us |  1,116.535 us |   172.785 us | 1093.7500 | 31.2500 | 4484.53 KB |
+| 'Extract package payload to a temp directory (small package)' | Job-MJLQTR | 1               |  5,445.82 us |  2,372.591 us |   616.154 us |         - |       - |  200.66 KB |
+| 'Extract package payload to a temp directory (large package)' | Job-MJLQTR | 1               | 67,628.36 us | 26,349.618 us | 6,842.912 us |         - |       - |  514.53 KB |
+| 'Open + parse manifest/identity (small package, from stream)' | Job-NTRUNJ | Default         |     23.34 us |      1.651 us |     0.429 us |   10.1318 |       - |   41.57 KB |
+| 'Open + parse manifest/identity (large package, from file)'   | Job-NTRUNJ | Default         |    370.08 us |     16.339 us |     2.528 us |   29.2969 |       - |  120.26 KB |
+| 'Verify block map (small package)'                            | Job-NTRUNJ | Default         |    177.18 us |     12.182 us |     3.164 us |  103.2715 |  0.2441 |  427.09 KB |
+| 'Verify block map (large multi-file/multi-block package)'     | Job-NTRUNJ | Default         | 13,499.15 us |    777.242 us |   201.847 us | 1093.7500 | 15.6250 | 4537.42 KB |
+| 'Read signature (CMS envelope) from signed package'           | Job-NTRUNJ | Default         |    155.46 us |      1.169 us |     0.181 us |    6.8359 |  0.2441 |   28.16 KB |
+| 'Open loose directory + verify block map (large package)'     | Job-NTRUNJ | Default         | 15,919.84 us |  1,091.801 us |   283.537 us | 1093.7500 | 31.2500 | 4484.53 KB |
 
 ## Reading the numbers
 
@@ -64,10 +65,11 @@ IterationCount=5  WarmupCount=3
   order of ~0.8 GB/s hashing throughput on this Arm64 host. This is the number most worth watching
   when comparing against the C++ implementation.
 - **Signature read** cost is the CMS decode + `CheckSignature`, independent of payload size.
-- **Extract** (real `PackageExtractor.Extract`) is disk-bound: ~55 ms for the ~10 MB / 67-part
-  package (~180 MB/s write throughput here) and ~5.4 ms for the small package. It streams parts with
-  a pooled 80 KB buffer, so managed allocation stays low (~0.6 MB) regardless of payload size — a
-  good sign for the "size/efficiency" goal. Treat the absolute times as order-of-magnitude figures.
+- **Extract** (real `PackageExtractor.Extract`, now timed in isolation — `Open` is excluded) is
+  disk-bound and high-variance: ~55–68 ms for the ~10 MB / 67-part package and ~5.4 ms for the small
+  package. It streams parts with a pooled 80 KB buffer, so managed allocation stays low
+  (~0.2–0.5 MB) regardless of payload size — a good sign for the "size/efficiency" goal. Treat the
+  absolute times as order-of-magnitude figures.
 - `Allocated` (managed bytes/op) is the other axis to track — e.g. verification allocates ~4.5 MB
   for the large package, a candidate for future buffer pooling.
 
