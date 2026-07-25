@@ -304,9 +304,26 @@ public sealed class OpcPackage : IOpcPackage
                 return false;
             }
 
-            foreach (char character in segment)
+            for (int i = 0; i < segment.Length; i++)
             {
+                char character = segment[i];
                 if (char.IsControl(character) || "<>:\"|?*".Contains(character, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                // Reject unpaired surrogates: part names are encoded as strict UTF-8, which would
+                // otherwise throw only once the package is being written.
+                if (char.IsHighSurrogate(character))
+                {
+                    if (i + 1 >= segment.Length || !char.IsLowSurrogate(segment[i + 1]))
+                    {
+                        return false;
+                    }
+
+                    i++;
+                }
+                else if (char.IsLowSurrogate(character))
                 {
                     return false;
                 }
