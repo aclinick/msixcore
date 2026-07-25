@@ -10,6 +10,8 @@ artifacts/
 # Benchmark / size-measurement outputs (results are captured into committed .md files)
 BenchmarkDotNet.Artifacts/
 bench/publish/
+bench/publish-probe/
+bench/results/
 
 # Rider / VS
 .idea/
