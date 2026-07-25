@@ -16,6 +16,14 @@ public sealed class MsixPackage : IPackage
     private readonly IOpcPackage _opc;
     private readonly Lazy<AppxManifest> _manifest;
     private readonly Lazy<BlockMap> _blockMap;
+
+    /// <summary>
+    /// Cached raw bytes of footprint parts that are read during parsing and must be hashed
+    /// at binding time over the <em>same</em> bytes. Eliminates TOCTOU exposure on
+    /// directory-backed packages where <see cref="IOpcPackage.OpenPart"/> re-opens the live
+    /// file on each call.
+    /// </summary>
+    private readonly Dictionary<string, byte[]> _footprintCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     private MsixPackage(IOpcPackage opc)
@@ -145,6 +153,19 @@ public sealed class MsixPackage : IPackage
     /// footprint parts (<c>[Content_Types].xml</c>, <c>AppxBlockMap.xml</c>, and optionally
     /// <c>AppxMetadata/CodeIntegrity.cat</c>) to the CMS signer.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For <c>AppxBlockMap.xml</c>, binding hashes the exact bytes that were read and parsed
+    /// by <see cref="ReadBlockMap"/>. This single-read-single-hash guarantee eliminates TOCTOU
+    /// exposure on directory-backed packages where each <see cref="IOpcPackage.OpenPart"/> opens
+    /// the live file.
+    /// </para>
+    /// <para>
+    /// <c>[Content_Types].xml</c> and <c>AppxMetadata/CodeIntegrity.cat</c> are not read by any
+    /// earlier verification phase, so they are read here for the first (and only) time and cached
+    /// for consistency.
+    /// </para>
+    /// </remarks>
     /// <param name="signature">
     /// The signature previously obtained from <see cref="ReadSignature"/>. Must have a valid CMS
     /// envelope and a parsed <see cref="PackageSignature.DigestTable"/>.
@@ -171,7 +192,47 @@ public sealed class MsixPackage : IPackage
                 $"Cannot verify signature binding: {signature.DigestTableError ?? "the digest table is not available."}");
         }
 
-        return AppxDigestTableVerifier.Verify(signature.DigestTable, _opc);
+        // Build a snapshot dictionary from cached footprint bytes.
+        // AppxBlockMap.xml is already cached from ReadBlockMap(); for the other parts we
+        // read once now and cache for the same single-read guarantee.
+        var snapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        CacheAndSnapshot(OpcPartNames.ContentTypes, snapshots);
+        CacheAndSnapshot(OpcPartNames.AppxBlockMap, snapshots);
+        CacheAndSnapshot(OpcPartNames.CodeIntegrityCatalog, snapshots);
+
+        return AppxDigestTableVerifier.VerifyFromSnapshots(signature.DigestTable, snapshots);
+    }
+
+    /// <summary>
+    /// Ensures the named part's bytes are in <see cref="_footprintCache"/>, reading from
+    /// <see cref="_opc"/> only if not already cached. Then copies into <paramref name="snapshots"/>
+    /// for binding verification. Returns a defensive copy so callers cannot mutate the cache.
+    /// </summary>
+    private void CacheAndSnapshot(string partName, Dictionary<string, byte[]> snapshots)
+    {
+        if (!_footprintCache.TryGetValue(partName, out byte[]? cached))
+        {
+            if (!_opc.ContainsPart(partName))
+            {
+                return; // Part does not exist — binding verifier handles absence.
+            }
+
+            cached = ReadPartBytes(partName);
+            _footprintCache[partName] = cached;
+        }
+
+        // Hand the verifier a copy so it cannot mutate the cached bytes.
+        byte[] copy = new byte[cached.Length];
+        cached.AsSpan().CopyTo(copy);
+        snapshots[partName] = copy;
+    }
+
+    private byte[] ReadPartBytes(string partName)
+    {
+        using Stream stream = _opc.OpenPart(partName);
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
     }
 
     /// <inheritdoc/>
@@ -220,8 +281,11 @@ public sealed class MsixPackage : IPackage
                 $"The package does not contain '{OpcPartNames.AppxBlockMap}'.");
         }
 
-        using Stream blockMapStream = _opc.OpenPart(OpcPartNames.AppxBlockMap);
-        return BlockMapParser.Parse(blockMapStream);
+        // Read once, cache the raw bytes, parse from the cache. Binding verification will
+        // hash these same bytes, guaranteeing single-read-single-hash across the pipeline.
+        byte[] raw = ReadPartBytes(OpcPartNames.AppxBlockMap);
+        _footprintCache[OpcPartNames.AppxBlockMap] = raw;
+        return BlockMapParser.Parse(new MemoryStream(raw, writable: false));
     }
 
     private static MsixPackage Create(OpcPackage opc)

@@ -818,98 +818,166 @@ public class AppxDigestBindingTests
 
     #endregion
 
-    #region TOCTOU — single-read-single-hash guarantee
+    #region TOCTOU — single-read-single-hash across pipeline phases
 
     /// <summary>
-    /// Demonstrates that the snapshot-based verification API detects mutation between
-    /// block-map parsing and binding verification. The test simulates the attack by
-    /// presenting block-map B bytes (matching malicious payload) during parsing, then
-    /// verifying binding against the legitimate block-map A bytes in the digest table.
+    /// The definitive TOCTOU test: on a real <see cref="DirectoryOpcPackage"/>, swaps
+    /// <c>AppxBlockMap.xml</c> on disk between payload verification and binding verification.
     ///
-    /// With the old re-read design on a directory-backed package, an attacker could swap
-    /// the file between phases. With <see cref="AppxDigestTableVerifier.VerifyFromSnapshots"/>,
-    /// the caller controls exactly which bytes are hashed.
+    /// Attack scenario:
+    /// 1. Malicious block map B (matching malicious payload) is on disk during parsing + payload verify.
+    /// 2. Attacker swaps to legitimate signed block map A before binding verification.
+    /// 3. Without the fix: payload is verified against B, binding hashes A → both pass over different bytes.
+    /// 4. With the fix: binding hashes the bytes cached from step 1 (B), which don't match the AXBM
+    ///    digest (computed over A) → binding FAILS.
     /// </summary>
     [Fact]
-    public void Toctou_SnapshotMutation_DetectedByVerifyFromSnapshots()
+    public void Toctou_SwapBlockMapAfterPayloadVerify_BindingFails()
     {
-        byte[] contentTypes = "<Types />"u8.ToArray();
-
-        // "Legitimate" block map (what was signed).
-        byte[] blockMapA = "<BlockMap><File Name='good.txt' /></BlockMap>"u8.ToArray();
-
-        // "Malicious" block map (what the attacker wants to substitute).
-        byte[] blockMapB = "<BlockMap><File Name='evil.exe' /></BlockMap>"u8.ToArray();
-        Assert.NotEqual(blockMapA, blockMapB);
-
-        // Digest table binds to blockMapA.
-        var entries = MakeCorrectEntries(contentTypes, blockMapA);
-        AppxDigestTable table = ParseTableDirect(entries);
-
-        // Snapshot contains blockMapB (simulating a swap after parsing).
-        var mutatedSnapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-toctou-{Guid.NewGuid():N}");
+        try
         {
-            ["[Content_Types].xml"] = contentTypes,
-            ["AppxBlockMap.xml"] = blockMapB,
-        };
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
-        IndirectDataBindingResult result = AppxDigestTableVerifier.VerifyFromSnapshots(table, mutatedSnapshots);
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
 
-        Assert.False(result.IsBindingValid, "Snapshot with mutated block map must fail binding.");
-        AssertTagStatus(result, AppxDigestTag.Axbm, DigestVerificationStatus.Mismatch);
+            // --- Payload sets ---
+            byte[] payloadA = "Hello from legitimate app A"u8.ToArray();
+            byte[] payloadB = "EVIL PAYLOAD"u8.ToArray();
+
+            // Build block maps covering both AppxManifest.xml and the payload file.
+            var filesA = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payloadA,
+            };
+            var filesB = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payloadB,
+            };
+
+            byte[] blockMapBytesA = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(filesA));
+            byte[] blockMapBytesB = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(filesB));
+            Assert.NotEqual(blockMapBytesA, blockMapBytesB);
+
+            // Build digest table over A's block map (as if signed over A).
+            var entries = MakeCorrectEntries(contentTypes, blockMapBytesA);
+
+            // Write malicious layout B to disk.
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytesB);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payloadB);
+
+            // Open as a directory package — this reads and caches block map B's bytes.
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // Phase 1: payload verification against block map B — passes (payload matches B).
+            BlockMapVerificationResult bmResult = package.VerifyBlockMap();
+            Assert.True(bmResult.IsValid, "Payload should match block map B.");
+
+            // --- ATTACKER SWAPS THE FILE ON DISK ---
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytesA);
+
+            // Build a fake signature whose digest table binds to A's block map.
+            AppxDigestTable table = ParseTableDirect(entries);
+            var fakeSig = new PackageSignature
+            {
+                SubjectName = "CN=Test",
+                SubjectNameRawData = ReadOnlyMemory<byte>.Empty,
+                IssuerName = "CN=Test",
+                Thumbprint = "AAAA",
+                NotBefore = DateTimeOffset.UtcNow,
+                NotAfter = DateTimeOffset.UtcNow,
+                IsCmsIntegrityValid = true,
+                DigestTable = table,
+            };
+
+            // Phase 2: binding verification. Without fix, re-reads from disk (now A) → passes.
+            // With fix, hashes cached bytes from phase 1 (B) → AXBM mismatch.
+            IndirectDataBindingResult binding = package.VerifySignatureBinding(fakeSig);
+
+            Assert.False(binding.IsBindingValid,
+                "Binding must FAIL: cached block map bytes (B) don't match signed AXBM digest (over A).");
+            AssertTagStatus(binding, AppxDigestTag.Axbm, DigestVerificationStatus.Mismatch);
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
     }
 
     /// <summary>
-    /// Verifies that when the correct snapshot bytes are provided, binding passes.
-    /// This is the counterpart to <see cref="Toctou_SnapshotMutation_DetectedByVerifyFromSnapshots"/>
-    /// confirming the mechanism works in both directions.
+    /// Inverse ordering: the block map parser reads A (legitimate) at package open time,
+    /// then the attacker swaps to B (malicious payload matching B's block map) before
+    /// <see cref="MsixPackage.VerifyBlockMap"/>. Payload verification should fail because
+    /// the cached parsed block map (A) doesn't match the swapped payload (B).
     /// </summary>
     [Fact]
-    public void Toctou_CorrectSnapshot_PassesVerification()
+    public void Toctou_SwapBlockMapBeforePayloadVerify_PayloadFails()
     {
-        byte[] contentTypes = "<Types />"u8.ToArray();
-        byte[] blockMap = "<BlockMap />"u8.ToArray();
-
-        var entries = MakeCorrectEntries(contentTypes, blockMap);
-        AppxDigestTable table = ParseTableDirect(entries);
-
-        var correctSnapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-toctou2-{Guid.NewGuid():N}");
+        try
         {
-            ["[Content_Types].xml"] = contentTypes,
-            ["AppxBlockMap.xml"] = blockMap,
-        };
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
-        IndirectDataBindingResult result = AppxDigestTableVerifier.VerifyFromSnapshots(table, correctSnapshots);
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
 
-        Assert.True(result.IsBindingValid);
-    }
+            byte[] payloadA = "Hello from legitimate app A"u8.ToArray();
+            byte[] payloadB = "EVIL PAYLOAD"u8.ToArray();
 
-    /// <summary>
-    /// Verifies that the <see cref="AppxDigestTableVerifier.Verify(AppxDigestTable, IOpcPackage)"/>
-    /// convenience overload (used for ZIP-backed packages) snapshots internally and cannot be
-    /// tricked by a package that returns different bytes on subsequent reads. For ZIP-backed
-    /// packages this is inherently safe since ZipArchive is opened once, but the snapshot
-    /// guarantees it regardless of the IOpcPackage implementation.
-    /// </summary>
-    [Fact]
-    public void Verify_ZipBacked_ReadOnce_Safe()
-    {
-        byte[] contentTypes = "<Types />"u8.ToArray();
-        byte[] blockMap = "<BlockMap />"u8.ToArray();
+            var filesA = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payloadA,
+            };
+            byte[] blockMapBytesA = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(filesA));
 
-        var entries = MakeCorrectEntries(contentTypes, blockMap);
-        var parts = new Dictionary<string, byte[]>
+            var filesB = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payloadB,
+            };
+            byte[] blockMapBytesB = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(filesB));
+
+            // Write legitimate layout A to disk.
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytesA);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payloadA);
+
+            // Open — this reads and caches block map A.
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // Force block map parsing now (caches A's bytes).
+            _ = package.BlockMap;
+
+            // --- ATTACKER SWAPS ---
+            // Replace block map with B and payload with B's matching payload.
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytesB);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payloadB);
+
+            // Payload verification uses the cached parsed block map (A) against live payload (B).
+            // The hashes won't match → payload verification fails.
+            BlockMapVerificationResult bmResult = package.VerifyBlockMap();
+            Assert.False(bmResult.IsValid,
+                "Payload verification must FAIL: cached block map A vs swapped payload B.");
+        }
+        finally
         {
-            ["[Content_Types].xml"] = contentTypes,
-            ["AppxBlockMap.xml"] = blockMap,
-        };
-
-        using OpcPackage opc = BuildOpc(parts);
-        AppxDigestTable table = ParseTableDirect(entries);
-
-        // The Verify(table, opc) overload reads parts once internally — confirm it works.
-        IndirectDataBindingResult result = AppxDigestTableVerifier.Verify(table, opc);
-        Assert.True(result.IsBindingValid);
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
     }
 
     #endregion
