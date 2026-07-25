@@ -11,78 +11,80 @@ namespace MsixCore.Studio.ViewModels;
 public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : ObservableObject
 {
     [ObservableProperty]
-    private bool _hasPackage;
+    public partial bool HasPackage { get; set; }
 
     [ObservableProperty]
-    private bool _isBusy;
+    public partial bool HasError { get; set; }
 
     [ObservableProperty]
-    private string _statusMessage = "Open an MSIX/APPX file or loose package folder to begin.";
+    public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
-    private string? _errorMessage;
+    public partial string StatusMessage { get; set; } =
+        "Open an MSIX/APPX file or loose package folder to begin.";
 
     [ObservableProperty]
-    private string _sourcePath = string.Empty;
+    public partial string ErrorMessage { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _identityName = string.Empty;
+    public partial string SourcePath { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _publisher = string.Empty;
+    public partial string IdentityName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _version = string.Empty;
+    public partial string Publisher { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _architecture = string.Empty;
+    public partial string Version { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _packageFamilyName = string.Empty;
+    public partial string Architecture { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _packageFullName = string.Empty;
+    public partial string PackageFamilyName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _displayName = string.Empty;
+    public partial string PackageFullName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _publisherDisplayName = string.Empty;
+    public partial string DisplayName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _frameworkStatus = string.Empty;
+    public partial string PublisherDisplayName { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _blockMapStatus = string.Empty;
+    public partial string FrameworkStatus { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signatureStatus = string.Empty;
+    public partial string BlockMapStatus { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signatureSubject = string.Empty;
+    public partial string SignatureStatus { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signatureIssuer = string.Empty;
+    public partial string SignatureSubject { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signatureThumbprint = string.Empty;
+    public partial string SignatureIssuer { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signatureValidity = string.Empty;
+    public partial string SignatureThumbprint { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signatureCmsIntegrity = string.Empty;
+    public partial string SignatureValidity { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private string _signaturePublisherMatch = string.Empty;
+    public partial string SignatureCmsIntegrity { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SignaturePublisherMatch { get; set; } = string.Empty;
 
     public ObservableCollection<string> Capabilities { get; } = [];
 
     public ObservableCollection<ApplicationItem> Applications { get; } = [];
 
     public ObservableCollection<BlockMapFileItem> BlockMapFiles { get; } = [];
-
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     [RelayCommand]
     private async Task OpenPackageAsync()
@@ -133,7 +135,8 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         IsBusy = true;
-        ErrorMessage = null;
+        HasError = false;
+        ErrorMessage = string.Empty;
         StatusMessage = $"Reading {Path.GetFileName(path)}…";
 
         try
@@ -153,8 +156,6 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
             IsBusy = false;
         }
     }
-
-    partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
     private void Apply(PackageSnapshot snapshot)
     {
@@ -195,6 +196,7 @@ public sealed partial class MainWindowViewModel(IStoragePicker storagePicker) : 
     {
         ErrorMessage = $"{context} {exception.Message}";
         StatusMessage = "Unable to load package.";
+        HasError = true;
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> values)

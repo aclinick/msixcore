@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace MsixCore.Studio.ViewModels;
 
 public sealed record ApplicationItem(
@@ -10,4 +12,9 @@ public sealed record BlockMapFileItem(
     string Name,
     long Size,
     int BlockCount,
-    string Verification);
+    string Verification)
+{
+    public string SizeText => $"{Size.ToString("N0", CultureInfo.CurrentCulture)} bytes";
+
+    public string BlockCountText => $"{BlockCount.ToString(CultureInfo.CurrentCulture)} blocks";
+}

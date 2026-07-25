@@ -1,0 +1,189 @@
+<Page
+    x:Class="MsixCore.Studio.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:viewModels="using:MsixCore.Studio.ViewModels"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+  <Grid RowDefinitions="Auto,Auto,*">
+    <Grid Padding="24,16" ColumnDefinitions="*,Auto" ColumnSpacing="16">
+      <StackPanel Spacing="4">
+        <TextBlock
+            x:Uid="Studio.Header.Title"
+            Text="MSIX Core Studio"
+            Style="{StaticResource StudioPageTitleStyle}" />
+        <TextBlock
+            x:Uid="Studio.Header.Description"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="Inspect package identity, manifest, integrity, and signature data." />
+      </StackPanel>
+      <StackPanel
+          Grid.Column="1"
+          VerticalAlignment="Center"
+          Orientation="Horizontal"
+          Spacing="8">
+        <ProgressRing
+            Width="32"
+            Height="32"
+            IsActive="{Binding IsBusy}" />
+        <Button
+            x:Uid="Studio.Action.OpenPackage"
+            AutomationProperties.AutomationId="OpenPackageButton"
+            AutomationProperties.Name="Open an MSIX or APPX package"
+            Command="{Binding OpenPackageCommand}"
+            Content="Open package…" />
+        <Button
+            x:Uid="Studio.Action.OpenFolder"
+            AutomationProperties.AutomationId="OpenFolderButton"
+            AutomationProperties.Name="Open a loose package folder"
+            Command="{Binding OpenFolderCommand}"
+            Content="Open folder…" />
+      </StackPanel>
+    </Grid>
+
+    <StackPanel Grid.Row="1" Padding="24,0,24,16" Spacing="8">
+      <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+      <TextBlock
+          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+          Text="{Binding SourcePath}"
+          TextTrimming="CharacterEllipsis" />
+      <InfoBar
+          x:Uid="Studio.Status.Error"
+          IsOpen="{Binding HasError, Mode=TwoWay}"
+          IsClosable="True"
+          Message="{Binding ErrorMessage}"
+          Severity="Error"
+          Title="Unable to load package" />
+    </StackPanel>
+
+    <TabView
+        Grid.Row="2"
+        Margin="24,0,24,24"
+        IsAddTabButtonVisible="False"
+        IsEnabled="{Binding HasPackage}">
+      <TabViewItem x:Uid="Studio.Tab.Overview" Header="Overview" IsClosable="False">
+        <ScrollViewer>
+          <StackPanel Padding="24" Spacing="24">
+            <Border Style="{StaticResource StudioPanelStyle}">
+              <Grid ColumnDefinitions="184,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="16">
+                <TextBlock Text="Name" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Column="1" Text="{Binding IdentityName}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="1" Text="Publisher" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Publisher}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="2" Text="Version" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Version}" />
+                <TextBlock Grid.Row="3" Text="Architecture" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Architecture}" />
+                <TextBlock Grid.Row="4" Text="Family name" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PackageFamilyName}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="5" Text="Full name" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding PackageFullName}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="6" Text="Display name" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding DisplayName}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="7" Text="Publisher display name" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding PublisherDisplayName}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="8" Text="Package type" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding FrameworkStatus}" />
+              </Grid>
+            </Border>
+            <StackPanel Spacing="12">
+              <TextBlock Text="Capabilities" Style="{StaticResource StudioSectionTitleStyle}" />
+              <ItemsControl
+                  ItemsSource="{Binding Capabilities}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border
+                        Margin="0,0,8,8"
+                        Padding="12,8"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        CornerRadius="{ThemeResource ControlCornerRadius}">
+                      <TextBlock Text="{Binding}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </TabViewItem>
+
+      <TabViewItem x:Uid="Studio.Tab.Applications" Header="Applications" IsClosable="False">
+        <ListView ItemsSource="{Binding Applications}" Padding="24">
+          <ListView.ItemTemplate>
+            <DataTemplate x:DataType="viewModels:ApplicationItem">
+              <Border Margin="0,0,0,8" Style="{StaticResource StudioPanelStyle}">
+                <Grid ColumnDefinitions="152,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="16">
+                  <TextBlock Text="Application ID" Style="{StaticResource StudioMetadataLabelStyle}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Id}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                  <TextBlock Grid.Row="1" Text="Display name" Style="{StaticResource StudioMetadataLabelStyle}" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DisplayName}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="2" Text="Executable" Style="{StaticResource StudioMetadataLabelStyle}" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Executable}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="3" Text="Entry point" Style="{StaticResource StudioMetadataLabelStyle}" />
+                  <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding EntryPoint}" TextWrapping="Wrap" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ListView.ItemTemplate>
+        </ListView>
+      </TabViewItem>
+
+      <TabViewItem x:Uid="Studio.Tab.Files" Header="Files &amp; Block Map" IsClosable="False">
+        <Grid Padding="24" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+          <Border Style="{StaticResource StudioPanelStyle}">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Verification result" Style="{StaticResource StudioMetadataLabelStyle}" />
+              <TextBlock Text="{Binding BlockMapStatus}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Grid Grid.Row="1" Padding="16,0" ColumnDefinitions="*,120,104,280" ColumnSpacing="16">
+            <TextBlock Text="Package path" Style="{StaticResource StudioMetadataLabelStyle}" />
+            <TextBlock Grid.Column="1" HorizontalAlignment="Right" Text="Size" Style="{StaticResource StudioMetadataLabelStyle}" />
+            <TextBlock Grid.Column="2" HorizontalAlignment="Right" Text="Blocks" Style="{StaticResource StudioMetadataLabelStyle}" />
+            <TextBlock Grid.Column="3" Text="Verification" Style="{StaticResource StudioMetadataLabelStyle}" />
+          </Grid>
+          <ListView Grid.Row="2" ItemsSource="{Binding BlockMapFiles}">
+            <ListView.ItemTemplate>
+              <DataTemplate x:DataType="viewModels:BlockMapFileItem">
+                <Grid Padding="16,8" ColumnDefinitions="*,120,104,280" ColumnSpacing="16">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="1" HorizontalAlignment="Right" Text="{Binding SizeText}" />
+                  <TextBlock Grid.Column="2" HorizontalAlignment="Right" Text="{Binding BlockCountText}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Verification}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ListView.ItemTemplate>
+          </ListView>
+        </Grid>
+      </TabViewItem>
+
+      <TabViewItem x:Uid="Studio.Tab.Signature" Header="Signature" IsClosable="False">
+        <ScrollViewer>
+          <StackPanel Padding="24" Spacing="24">
+            <TextBlock Text="{Binding SignatureStatus}" Style="{StaticResource StudioSectionTitleStyle}" TextWrapping="Wrap" />
+            <Border Style="{StaticResource StudioPanelStyle}">
+              <Grid ColumnDefinitions="184,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="16">
+                <TextBlock Text="Signer subject" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Column="1" Text="{Binding SignatureSubject}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="1" Text="Issuer" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SignatureIssuer}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="2" Text="Thumbprint" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SignatureThumbprint}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="3" Text="Certificate validity" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SignatureValidity}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="4" Text="CMS integrity" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SignatureCmsIntegrity}" />
+                <TextBlock Grid.Row="5" Text="Publisher match" Style="{StaticResource StudioMetadataLabelStyle}" />
+                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SignaturePublisherMatch}" />
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabViewItem>
+    </TabView>
+  </Grid>
+</Page>
