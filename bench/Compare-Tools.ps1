@@ -12,17 +12,20 @@
 
 .EXAMPLE
     pwsh bench\Compare-Tools.ps1 -Iterations 7
+
+.EXAMPLE
+    # Optional secondary run: x64 MakeAppx under emulation on an Arm64 host.
+    pwsh bench\Compare-Tools.ps1 -MakeAppxPath 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe'
 #>
 [CmdletBinding()]
 param(
     [ValidateRange(3, 100)]
     [int]$Iterations = 7,
-    [string]$MakeAppxPath = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe',
+    [string]$MakeAppxPath = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\arm64\makeappx.exe',
     [string]$Configuration = 'Release',
     [string]$OutputPath = (Join-Path $PSScriptRoot 'comparison-results.md'),
     [switch]$KeepArtifacts,
-    [switch]$SkipBuild,
-    [switch]$UseSpecifiedMakeAppx
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -300,19 +303,10 @@ if (-not (Test-Path $MakeAppxPath -PathType Leaf)) {
 $requestedMakeAppxPath = (Resolve-Path $MakeAppxPath).Path
 $hostArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 $selectedMakeAppxPath = $requestedMakeAppxPath
-$usedNativeAlternative = $false
-if (-not $UseSpecifiedMakeAppx -and $hostArchitecture -eq 'Arm64') {
-    $nativeCandidate = $requestedMakeAppxPath -replace '\\x64\\makeappx\.exe$', '\arm64\makeappx.exe'
-    if ($nativeCandidate -ne $requestedMakeAppxPath -and (Test-Path $nativeCandidate -PathType Leaf)) {
-        $selectedMakeAppxPath = (Resolve-Path $nativeCandidate).Path
-        $usedNativeAlternative = $true
-    }
-}
 
-Write-Host "MakeAppx requested: $requestedMakeAppxPath"
-Write-Host "MakeAppx measured : $selectedMakeAppxPath"
-if ($usedNativeAlternative) {
-    Write-Host 'Using the native Arm64 SDK binary; pass -UseSpecifiedMakeAppx to benchmark x64 emulation.'
+Write-Host "MakeAppx measured: $selectedMakeAppxPath"
+if ($hostArchitecture -eq 'Arm64' -and $selectedMakeAppxPath -match '\\x64\\makeappx\.exe$') {
+    Write-Warning 'The selected x64 MakeAppx runs under emulation on this Arm64 host; use the default Arm64 path for the primary native comparison.'
 }
 
 if (-not $SkipBuild) {
@@ -426,7 +420,7 @@ $metadata = [ordered]@{
     RequestedMakeAppxPath = $requestedMakeAppxPath
     MeasuredMakeAppxPath = $selectedMakeAppxPath
     MakeAppxVersion = (Get-Item $selectedMakeAppxPath).VersionInfo.FileVersion
-    UsedNativeAlternative = $usedNativeAlternative
+    MakeAppxArchitecture = (Split-Path -Leaf (Split-Path -Parent $selectedMakeAppxPath))
     MakeAppxSdkLocalFootprintBytes = $sdkFootprint
     MakeAppxSdkLocalFiles = @($sdkModules | ForEach-Object {
         [ordered]@{ Name = $_.Name; Bytes = $_.Length }

@@ -5,13 +5,11 @@ port and Windows SDK `makeappx.exe`. Raw run summaries are in
 [`comparison-results.md`](comparison-results.md); per-run data is regenerated as
 `comparison-results.json` by the harness.
 
-> **Architecture caveat:** the benchmark host is Arm64 (Snapdragon X). The SDK
-> contains both x64 and Arm64 MakeAppx 10.0.26100.8249, so runtime results below use
-> the **native Arm64 MakeAppx**, not x64 emulation. The default x64 path is detected
-> and replaced by its Arm64 sibling. Forcing the x64 binary with
-> `-UseSpecifiedMakeAppx` runs it under Windows x64 emulation and is not comparable
-> to these native-vs-native results. This matters when reproducing older runs that
-> only have x64 SDK tools.
+> **Primary comparison: native Arm64 vs. native Arm64.** The .NET runtime,
+> `msixmgr`, and Windows SDK MakeAppx are all native Arm64 binaries on this
+> Snapdragon X host. No emulation is involved in the headline runtime results.
+> The SDK's x64 MakeAppx can be selected explicitly as a secondary emulation
+> curiosity, but those numbers must be kept separate.
 
 ## Environment
 
@@ -31,6 +29,20 @@ Run from the repository root:
 ```powershell
 pwsh bench\Compare-Tools.ps1 -Iterations 7
 pwsh bench\Measure-Size.ps1
+```
+
+The comparison script defaults directly to:
+
+```text
+C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\arm64\makeappx.exe
+```
+
+An optional x64-under-emulation run can be captured separately:
+
+```powershell
+pwsh bench\Compare-Tools.ps1 -Iterations 7 `
+  -MakeAppxPath 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\makeappx.exe' `
+  -OutputPath bench\comparison-results-x64-emulated.md
 ```
 
 `Compare-Tools.ps1` builds `src\msixmgr` in Release and deterministically generates
@@ -100,13 +112,13 @@ shared Windows DLLs are excluded.
 
 | Configuration | Total | SDK-reference ratio |
 | --- | ---: | ---: |
-| msixmgr framework-dependent (host Arm64) | 1.10 MB | 0.17x vs Arm64 MakeAppx |
-| msixmgr self-contained win-x64 | 77.20 MB | 16.98x vs x64 MakeAppx |
-| msixmgr self-contained trimmed win-x64 | 22.62 MB | 4.97x vs x64 MakeAppx |
 | msixmgr self-contained win-arm64 | 86.81 MB | 13.59x vs Arm64 MakeAppx |
 | msixmgr self-contained trimmed win-arm64 | 24.00 MB | 3.76x vs Arm64 MakeAppx |
-| MakeAppx SDK tool, x64-native binary (emulated on this host) | 4.55 MB | 1.00x |
 | MakeAppx SDK tool, native Arm64 | 6.39 MB | 1.00x |
+| msixmgr framework-dependent (host Arm64) | 1.10 MB | 0.17x vs Arm64 MakeAppx |
+| msixmgr self-contained win-x64 (secondary) | 77.20 MB | 16.98x vs x64 MakeAppx |
+| msixmgr self-contained trimmed win-x64 (secondary) | 22.62 MB | 4.97x vs x64 MakeAppx |
+| MakeAppx SDK tool, x64 binary (secondary; emulated here) | 4.55 MB | 1.00x |
 
 Trimmed publishing now **succeeds** for both RIDs. Trimming reduces x64 from
 77.20 MB to 22.62 MB (71% smaller) and Arm64 from 86.81 MB to 24.00 MB (72% smaller).
@@ -119,7 +131,8 @@ than MakeAppx's SDK-local files, but that comparison excludes the shared .NET ru
 - On this run, msixmgr won every measured runtime row: pack used 42–70% of MakeAppx
   time and unpack used 53–59%. This is a real result for these uncompressed corpora,
   but not evidence that managed code is universally faster.
-- The result is **not explained by x64 emulation**: native Arm64 MakeAppx was used.
+- The primary result is a fair native-Arm64 fight and is **not explained by
+  emulation**. The optional x64 MakeAppx run is secondary only.
   MakeAppx performs richer Windows package semantic work and its parallel pack path
   reached 94 MB peak working set on the 64 MiB corpus. msixmgr's narrower,
   stored-entry authoring path peaked at 39 MB.

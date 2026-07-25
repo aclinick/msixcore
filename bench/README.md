@@ -71,8 +71,9 @@ pwsh bench\Compare-Tools.ps1 -Iterations 7
 The script deterministically creates 1 MiB, 10 MiB, and 64 MiB loose layouts, performs
 one discarded warmup and repeated pack/unpack/validate runs, records wall time, peak
 working set, and sampled private bytes, and verifies cross-tool package interoperability.
-It prefers native Arm64 MakeAppx on an Arm64 host; pass `-UseSpecifiedMakeAppx` to force
-the parameterized path (for example, to quantify x64 emulation). See
+It defaults to native Arm64 MakeAppx for the primary native-vs-native comparison.
+Override `-MakeAppxPath` with the SDK's `x64\makeappx.exe` for a separate,
+clearly labeled emulation contrast. See
 [`comparison.md`](comparison.md) for the captured results and interpretation.
 
 ## Interpreting results
