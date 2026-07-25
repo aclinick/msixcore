@@ -119,6 +119,29 @@ public class PackageExtractorTests : IDisposable
         Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, link));
     }
 
+    [Fact]
+    public void Extract_IntermediateSegmentIsDanglingSymlink_ThrowsInvalidData()
+    {
+        // A symlink whose target does not exist is still a redirect risk. FileInfo.Exists /
+        // Directory.Exists report false for such a dangling link, so the guard must detect it via
+        // no-follow link metadata regardless of target existence.
+        string dest = Path.Combine(_root, "out");
+        Directory.CreateDirectory(dest);
+        string link = Path.Combine(dest, "Assets");
+        try
+        {
+            Directory.CreateSymbolicLink(link, Path.Combine(_root, "does-not-exist"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return; // Environment cannot create symlinks (no privilege / Developer Mode); skip.
+        }
+
+        using OpcPackage package = OpcFrom(("AppxManifest.xml", "<manifest/>"), ("Assets/Logo.png", "PNG"));
+
+        Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, dest));
+    }
+
     /// <summary>A hostile <see cref="IOpcPackage"/> that returns a traversing part name.</summary>
     private sealed class EscapingOpcPackage : IOpcPackage
     {

@@ -134,6 +134,20 @@ public class MsixResponseTests
     }
 
     [Fact]
+    public async Task Cancel_AfterCompletion_IsSafeNoOp()
+    {
+        using var response = new MsixResponse(CancellationToken.None);
+        response.Complete();
+        await response.Completion;
+
+        // The linked cancellation source is released on terminal transition; cancelling afterwards
+        // must not throw ObjectDisposedException.
+        response.Cancel();
+
+        Assert.Equal(InstallationStep.Completed, response.Status);
+    }
+
+    [Fact]
     public void ExternalCancellation_SignalsToken()
     {
         using var cts = new CancellationTokenSource();

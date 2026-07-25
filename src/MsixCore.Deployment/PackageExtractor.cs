@@ -33,7 +33,7 @@ public static class PackageExtractor
         // write below it is silently redirected outside the intended tree even though each part path
         // looks contained. The per-part walk below only inspects segments *beneath* the root, so the
         // root has to be validated explicitly here, before any extraction begins.
-        if (new DirectoryInfo(root).Attributes.HasFlag(FileAttributes.ReparsePoint))
+        if (IsReparsePoint(root))
         {
             throw new InvalidDataException(
                 $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
@@ -111,19 +111,32 @@ public static class PackageExtractor
             }
 
             current = Path.Combine(current, segment);
-            var info = new FileInfo(current);
-            if (info.Exists && info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if (IsReparsePoint(current))
             {
                 throw new InvalidDataException(
                     $"Destination path '{current}' contains a symbolic link or junction; refusing to extract.");
             }
+        }
+    }
 
-            if (Directory.Exists(current)
-                && new DirectoryInfo(current).Attributes.HasFlag(FileAttributes.ReparsePoint))
-            {
-                throw new InvalidDataException(
-                    $"Destination path '{current}' contains a symbolic link or junction; refusing to extract.");
-            }
+    /// <summary>
+    /// Reports whether <paramref name="path"/> is a symbolic link or junction, using no-follow link
+    /// metadata so it is detected even when the link's target does not exist. This is deliberately not
+    /// gated on <see cref="FileSystemInfo.Exists"/>, which reports <see langword="false"/> for a
+    /// dangling link and would otherwise let it slip through and redirect the subsequent write.
+    /// </summary>
+    private static bool IsReparsePoint(string path) =>
+        HasLinkTarget(new FileInfo(path)) || HasLinkTarget(new DirectoryInfo(path));
+
+    private static bool HasLinkTarget(FileSystemInfo info)
+    {
+        try
+        {
+            return info.LinkTarget is not null;
+        }
+        catch (IOException)
+        {
+            return false;
         }
     }
 }

@@ -155,6 +155,18 @@ public sealed class OpcPackage : IOpcPackage
                 return false;
             }
 
+            // Reject control characters (e.g. NUL from '%00'), which are invalid in OPC part names and
+            // would otherwise pass validation only to surface later as an ArgumentException from the
+            // filesystem path APIs during extraction.
+            foreach (char c in decoded)
+            {
+                if (char.IsControl(c))
+                {
+                    canonical = string.Empty;
+                    return false;
+                }
+            }
+
             segments[i] = decoded;
         }
 

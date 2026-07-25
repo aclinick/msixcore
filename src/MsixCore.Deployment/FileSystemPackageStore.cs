@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using MsixCore.Packaging;
 using MsixCore.Packaging.Opc;
 
@@ -37,6 +38,14 @@ public sealed class FileSystemPackageStore : IPackageStore
 
     /// <summary>The store subdirectory used for in-progress extraction; excluded from enumeration.</summary>
     private const string StagingFolderName = ".staging";
+
+    // Serializes the move-aside / promote / rollback sequence per install location so two concurrent
+    // commits of the same package cannot interleave — otherwise one commit's rollback could delete the
+    // other commit's already-promoted installation. Keyed by absolute destination path (process-wide)
+    // so it also covers separate store instances over the same root. NOTE: this guards a single process
+    // only; cross-process coordination over a shared store root is tracked separately (see issue #14).
+    private static readonly ConcurrentDictionary<string, object> PromotionGates =
+        new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public IReadOnlyList<IInstalledPackage> EnumeratePackages()
@@ -110,6 +119,17 @@ public sealed class FileSystemPackageStore : IPackageStore
     {
         ArgumentException.ThrowIfNullOrEmpty(stagingLocation);
         string destination = GetInstallLocation(packageFullName);
+
+        // Serialize the whole aside/promote/rollback transaction for this destination so a concurrent
+        // commit of the same package cannot observe or clobber our intermediate state.
+        lock (PromotionGates.GetOrAdd(destination, static _ => new object()))
+        {
+            CommitLocked(stagingLocation, destination, packageFullName);
+        }
+    }
+
+    private void CommitLocked(string stagingLocation, string destination, string packageFullName)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
 
         // Move any existing installation aside (rather than deleting it) so a failed promotion can be

@@ -35,7 +35,18 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
 
     public event EventHandler<IMsixResponse>? ProgressChanged;
 
-    public void Cancel() => _cts.Cancel();
+    public void Cancel()
+    {
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The operation already reached a terminal state and released its cancellation source;
+            // cancelling afterwards is a harmless no-op.
+        }
+    }
 
     /// <summary>Updates the coarse stage, percentage, and status text and raises a progress event.</summary>
     public void Report(InstallationStep step, float percentage, string statusText)
@@ -77,6 +88,11 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
         // Completion permanently pending.
         _completion.TrySetResult();
         RaiseProgress();
+
+        // Release the linked cancellation registration now that the operation is terminal; otherwise a
+        // long-lived external cancellation token would retain one linked source per completed operation
+        // (IMsixResponse is not IDisposable, so callers cannot release it themselves).
+        _cts.Dispose();
     }
 
     /// <summary>Marks the operation as failed (or cancelled) and completes the task accordingly.</summary>
@@ -105,6 +121,9 @@ internal sealed class MsixResponse : IMsixResponse, IDisposable
         }
 
         RaiseProgress();
+
+        // Release the linked cancellation registration now that the operation is terminal (see Complete).
+        _cts.Dispose();
     }
 
     private void RaiseProgress()

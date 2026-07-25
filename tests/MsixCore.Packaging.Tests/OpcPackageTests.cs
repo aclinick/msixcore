@@ -219,4 +219,18 @@ public class OpcPackageTests
         using MemoryStream zip = CreateZip((encodedName, "<x/>"));
         Assert.Throws<InvalidDataException>(() => OpcPackage.Open(zip));
     }
+
+    [Theory]
+    [InlineData("%00.xml")]              // NUL
+    [InlineData("dir/%00.xml")]          // NUL in a later segment
+    [InlineData("%01file.xml")]          // control char
+    [InlineData("%1ffile.xml")]          // control char
+    [InlineData("file%7f.xml")]          // DEL
+    public void Open_ControlCharacterViaPercentEncoding_ThrowsInvalidData(string encodedName)
+    {
+        // Decoded control characters (e.g. NUL from '%00') are invalid OPC part names and must be
+        // rejected at open time rather than surfacing later as an ArgumentException during extraction.
+        using MemoryStream zip = CreateZip(("AppxManifest.xml", "<x/>"), (encodedName, "<x/>"));
+        Assert.Throws<InvalidDataException>(() => OpcPackage.Open(zip));
+    }
 }

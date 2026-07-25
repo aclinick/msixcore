@@ -193,6 +193,25 @@ public class FileSystemPackageStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Commit_ConcurrentCommitsOfSamePackage_LeaveConsistentState()
+    {
+        var store = new FileSystemPackageStore(_root);
+        const string fullName = "Contoso.MyApp_1.0.0.0_x64__abcdefgh12345";
+
+        // Many concurrent commits of the same package must be serialized so no commit's rollback can
+        // delete another's promoted install; the end state must be a single valid installation.
+        Parallel.For(0, 16, _ =>
+        {
+            string staging = store.CreateStagingLocation();
+            File.WriteAllText(Path.Combine(staging, "AppxManifest.xml"), LoosePackageBuilder.ManifestXml());
+            store.Commit(staging, fullName);
+        });
+
+        Assert.True(store.Contains(fullName));
+        Assert.True(File.Exists(Path.Combine(store.GetInstallLocation(fullName), "AppxManifest.xml")));
+    }
+
     [Theory]
     [InlineData("../escape")]
     [InlineData("a/b")]
