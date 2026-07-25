@@ -13,12 +13,12 @@ namespace MsixCore.Packaging;
 /// </remarks>
 public sealed class MsixPackage : IPackage
 {
-    private readonly OpcPackage _opc;
+    private readonly IOpcPackage _opc;
     private readonly Lazy<AppxManifest> _manifest;
     private readonly Lazy<BlockMap> _blockMap;
     private bool _disposed;
 
-    private MsixPackage(OpcPackage opc)
+    private MsixPackage(IOpcPackage opc)
     {
         _opc = opc;
         _manifest = new Lazy<AppxManifest>(ReadManifest);
@@ -90,6 +90,11 @@ public sealed class MsixPackage : IPackage
     /// <returns>An open <see cref="MsixPackage"/>.</returns>
     public static MsixPackage Open(Stream stream, bool leaveOpen = false) =>
         new(OpcPackage.Open(stream, leaveOpen));
+
+    /// <summary>Opens a package from an unpacked ("loose") layout on disk.</summary>
+    /// <param name="directory">A directory containing the unpacked package (with <c>AppxManifest.xml</c>).</param>
+    /// <returns>An open <see cref="MsixPackage"/> over the loose layout.</returns>
+    public static MsixPackage OpenDirectory(string directory) => new(DirectoryOpcPackage.Open(directory));
 
     /// <summary>
     /// Verifies the package payload against its block map: every block-mapped file's content hashes

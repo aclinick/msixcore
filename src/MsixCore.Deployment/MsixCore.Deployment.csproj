@@ -10,4 +10,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="MsixCore.Deployment.Tests" />
+  </ItemGroup>
+
 </Project>
