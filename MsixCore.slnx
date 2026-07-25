@@ -9,9 +9,13 @@
   <Folder Name="/bench/">
     <Project Path="bench/MsixCore.Benchmarks/MsixCore.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/MsixCore.CorpusRoundtrip/MsixCore.CorpusRoundtrip.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MsixCore.Deployment.Tests/MsixCore.Deployment.Tests.csproj" />
     <Project Path="tests/MsixCore.Corpus.Tests/MsixCore.Corpus.Tests.csproj" />
+    <Project Path="tests/MsixCore.CorpusRoundtrip.Tests/MsixCore.CorpusRoundtrip.Tests.csproj" />
     <Project Path="tests/MsixCore.Packaging.Tests/MsixCore.Packaging.Tests.csproj" />
     <Project Path="tests/MsixCore.Studio.Tests/MsixCore.Studio.Tests.csproj" />
     <Project Path="tests/msixmgr.Tests/msixmgr.Tests.csproj" />

@@ -213,7 +213,11 @@ public sealed class ZipStructuralDiffer
         {
             if (BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4)) == EndOfCentralDirectorySignature)
             {
-                return offset;
+                ushort commentLength = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset + 20, 2));
+                if (offset + 22 + commentLength == bytes.Length)
+                {
+                    return offset;
+                }
             }
         }
 

@@ -25,6 +25,12 @@ public sealed class MakeAppxRunner
     /// <summary>Packs <paramref name="sourceDirectory"/> with makeappx.exe.</summary>
     public ToolOutcome Pack(string sourceDirectory, string outputPath, RoundtripMode mode)
     {
+        return PackAsync(sourceDirectory, outputPath, mode).GetAwaiter().GetResult();
+    }
+
+    /// <summary>Packs <paramref name="sourceDirectory"/> with makeappx.exe.</summary>
+    public async Task<ToolOutcome> PackAsync(string sourceDirectory, string outputPath, RoundtripMode mode)
+    {
         ArgumentException.ThrowIfNullOrEmpty(sourceDirectory);
         ArgumentException.ThrowIfNullOrEmpty(outputPath);
 
@@ -59,16 +65,27 @@ public sealed class MakeAppxRunner
         var stopwatch = Stopwatch.StartNew();
         using Process process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start makeappx.exe.");
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+        Task exitTask = process.WaitForExitAsync();
+        await Task.WhenAll(stdoutTask, stderrTask, exitTask).ConfigureAwait(false);
         stopwatch.Stop();
 
+        string stdout = await stdoutTask.ConfigureAwait(false);
+        string stderr = await stderrTask.ConfigureAwait(false);
         string message = string.Join(Environment.NewLine, new[] { stdout.Trim(), stderr.Trim() }.Where(static text => text.Length > 0));
+        bool succeeded = process.ExitCode == 0 && File.Exists(outputPath);
+        if (process.ExitCode == 0 && !File.Exists(outputPath))
+        {
+            message = string.IsNullOrEmpty(message)
+                ? "makeappx exited successfully but did not create the output package."
+                : message + Environment.NewLine + "makeappx exited successfully but did not create the output package.";
+        }
+
         return new ToolOutcome(
             "makeappx",
             outputPath,
-            process.ExitCode == 0,
+            succeeded,
             Skipped: false,
             stopwatch.Elapsed,
             message);
