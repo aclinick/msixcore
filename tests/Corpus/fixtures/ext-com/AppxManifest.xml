@@ -5,7 +5,7 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   IgnorableNamespaces="uap rescap com">
-  <Identity Name="MsixCoreCorpus.ExtCom" Publisher="CN=MsixCoreCorpus" Version="1.0.0.0" ProcessorArchitecture="x64" />
+  <Identity Name="MsixCoreCorpus.ExtCom" Publisher="CN=aclinick" Version="1.0.0.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>Corpus COM Server</DisplayName>
     <PublisherDisplayName>MSIX Core Corpus</PublisherDisplayName>

@@ -24,7 +24,9 @@
 [CmdletBinding()]
 param(
     [switch]$RunOracle,
-    [switch]$Sign
+    [switch]$Sign,
+    [string]$Publisher = 'CN=aclinick',
+    [string]$SignThumbprint = '1999384EEF0362515797C62766388F94B46EA7A7'
 )
 
 Set-StrictMode -Version 1.0
@@ -46,6 +48,32 @@ function Resolve-Kit([string]$exe) {
 $MakeAppx = Resolve-Kit 'makeappx.exe'
 $SignTool = Resolve-Kit 'signtool.exe'
 if (-not $MakeAppx) { throw 'makeappx.exe not found under the Windows SDK.' }
+$WinApp = (Get-Command winapp -ErrorAction SilentlyContinue).Source
+
+# ---- Signing certificate (trusted self-signed cert from the current user) ----
+# The repo owner keeps a self-signed code-signing cert (subject == the user) in the
+# Trusted People store, so packages signed with it install via Add-AppxPackage.
+# We export it to a throwaway PFX for winapp and delete the PFX afterwards; we never
+# modify any certificate store.
+$SignPfx = $null
+$SignPfxPassword = 'corpus'
+if ($Sign) {
+    $signCert = Get-Item "Cert:\CurrentUser\My\$SignThumbprint" -ErrorAction SilentlyContinue
+    if (-not $signCert -or -not $signCert.HasPrivateKey) {
+        throw "Signing cert $SignThumbprint with a private key was not found in Cert:\CurrentUser\My."
+    }
+    # Honour the cert's exact subject DN as the manifest Publisher.
+    $Publisher = $signCert.Subject
+    $SignPfx = Join-Path $CorpusRoot '_corpus_sign.pfx'
+    $sp = ConvertTo-SecureString $SignPfxPassword -AsPlainText -Force
+    Export-PfxCertificate -Cert $signCert -FilePath $SignPfx -Password $sp -ChainOption EndEntityCertOnly | Out-Null
+}
+
+function Invoke-SignPackage([string]$path) {
+    if (-not $Sign -or -not $SignPfx -or -not $WinApp) { return $false }
+    & $WinApp sign $path $SignPfx --password $SignPfxPassword --quiet 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
 
 # ---- Independent MSIX helpers (do NOT use the library under test) -----------
 $Base32 = '0123456789abcdefghjkmnpqrstvwxyz'
@@ -489,6 +517,7 @@ $fixtures = @(
            @{ Path = 'bang!.txt'; Bytes = (Bytes 'bang in name') }
        )
        PackedBlockMapValid = $false
+       SelfBuild = $true
        PackedBug = '#7' }
     @{ Id = 'blockmap-deepnested'; Features = @('blockmap:deepNesting'); Name = 'MsixCoreCorpus.BlockDeep'; Arch = 'x64'; Version = '1.0.0.0'; Display = 'Corpus Deep Nested'
        Payload = @(@{ Path = 'a\b\c\d\e\f\g\deep.txt'; Bytes = (Bytes 'deep') }) }
@@ -555,42 +584,36 @@ foreach ($f in $fixtures) {
     $blockMap = New-BlockMapXml $looseDir
     $blockMapFileCount = (Get-ChildItem $looseDir -Recurse -File | Where-Object { $_.Name -ne 'AppxBlockMap.xml' }).Count
 
-    # Build the packed package as a self-built OPC ZIP (percent-encodes reserved chars like makeappx).
+    # Pack the package. makeappx produces a signtool-recognized APPX (so it can be signed
+    # and installed as a real .msix); fall back to a self-built OPC ZIP when makeappx rejects
+    # the manifest or when the fixture needs percent-encoded part names (reproduces issue #7).
     $packedRel = $null
+    $packedPath = $null
     $blockMapValidPacked = $null
+    $packedSelfBuilt = $false
     $doPack = -not ($f.ContainsKey('Pack') -and -not $f.Pack)
     if ($doPack) {
         $packedPath = Join-Path $PackedRoot "$($f.Id).msix"
-        if ($f.ContainsKey('SignPackage') -and $f.SignPackage -and $MakeAppx) {
-            # Signable packages must be produced by makeappx so signtool recognizes the APPX format.
-            & $MakeAppx pack /o /d $looseDir /p $packedPath | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "makeappx failed for $($f.Id)" }
+        $forceSelfBuild = $f.ContainsKey('SelfBuild') -and $f.SelfBuild
+        $packedOk = $false
+        if (-not $forceSelfBuild -and $MakeAppx) {
+            & $MakeAppx pack /o /nv /d $looseDir /p $packedPath 2>&1 | Out-Null
+            $packedOk = ($LASTEXITCODE -eq 0)
         }
-        else {
+        if (-not $packedOk) {
             New-OpcPackage $looseDir $packedPath $blockMap
+            $packedSelfBuilt = $true
         }
         $packedRel = "packed/$($f.Id).msix"
         if ($f.ContainsKey('PackedBlockMapValid')) { $blockMapValidPacked = [bool]$f.PackedBlockMapValid }
         else { $blockMapValidPacked = $true }
     }
 
-    # Sign if requested.
+    # Sign makeappx-produced packages with the trusted corpus cert (winapp) when -Sign is set.
+    # Self-built OPC ZIPs are not recognized by signtool, so they remain unsigned.
     $isSignedPacked = $false
-    if ($f.ContainsKey('SignPackage') -and $f.SignPackage -and $Sign -and $SignTool -and $packedRel) {
-        $pfx = Join-Path $CorpusRoot '_corpus_sign.pfx'
-        $pwd = ConvertTo-SecureString 'corpus' -AsPlainText -Force
-        $cert = New-SelfSignedCertificate -Type Custom -Subject $Publisher -KeyUsage DigitalSignature `
-            -CertStoreLocation 'Cert:\CurrentUser\My' `
-            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}Subject Type:End Entity')
-        try {
-            Export-PfxCertificate -Cert $cert -FilePath $pfx -Password $pwd | Out-Null
-            & $SignTool sign /fd SHA256 /a /f $pfx /p 'corpus' (Join-Path $PackedRoot "$($f.Id).msix") | Out-Null
-            if ($LASTEXITCODE -eq 0) { $isSignedPacked = $true }
-        }
-        finally {
-            Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
-            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
-        }
+    if ($doPack -and $packedRel -and -not $packedSelfBuilt) {
+        $isSignedPacked = Invoke-SignPackage $packedPath
     }
 
     # Write the loose block map into the loose dir.
@@ -661,6 +684,10 @@ try {
 }
 finally { $bzip.Dispose(); $bfs.Dispose() }
 
+# Sign the bundle with the trusted corpus cert (winapp) when -Sign is set.
+$bundleSigned = $false
+if ($Sign) { $bundleSigned = Invoke-SignPackage $bundlePath }
+
 $records.Add([ordered]@{
     id                  = 'bundle-multiarch'
     features            = @('bundle:multiArch')
@@ -668,10 +695,10 @@ $records.Add([ordered]@{
     looseDir            = $null
     packedFile          = 'packed/bundle-multiarch.msixbundle'
     expectedSupported   = $false
-    windowsOracle       = [ordered]@{ verdict = 'not-attempted'; reason = 'Bundle install requires signing; library bundle applicability not yet implemented.' }
+    windowsOracle       = [ordered]@{ verdict = 'not-attempted'; reason = 'Bundle applicability is not implemented in the reader; a fixture is provided for future phases.' }
     expected            = $null
     isSignedLoose       = $false
-    isSignedPacked      = $false
+    isSignedPacked      = $bundleSigned
     blockMapFileCount   = $null
     blockMapValidLoose  = $null
     blockMapValidPacked = $null
@@ -687,23 +714,23 @@ $records.Add([ordered]@{
 # =============================================================================
 if ($RunOracle) {
     foreach ($rec in $records) {
-        if (-not $rec._oracleRegister) {
-            if ($rec._oracleExpect -eq 'expected-not-installable') {
-                # Still attempt to observe the real failure reason.
-            } else {
-                continue
-            }
-        }
-        $looseManifest = if ($rec.looseDir) { Join-Path $CorpusRoot ($rec.looseDir.Replace('/', '\') + '\AppxManifest.xml') } else { $null }
-        if (-not $looseManifest -or -not (Test-Path $looseManifest)) { continue }
+        if ($rec.kind -eq 'bundle') { continue }
+        if (-not $rec._oracleRegister -and $rec._oracleExpect -ne 'expected-not-installable') { continue }
         $pkgName = $rec.expected.name
-        Write-Host "--> Oracle register $($rec.id)" -ForegroundColor DarkYellow
+        $packedFull = if ($rec.packedFile) { Join-Path $CorpusRoot ($rec.packedFile.Replace('/', '\')) } else { $null }
+        $looseManifest = if ($rec.looseDir) { Join-Path $CorpusRoot ($rec.looseDir.Replace('/', '\') + '\AppxManifest.xml') } else { $null }
+        # Prefer installing the trusted-signed packed .msix; fall back to loose registration.
+        $useSignedPacked = $rec.isSignedPacked -and $packedFull -and (Test-Path $packedFull)
+        $mode = if ($useSignedPacked) { 'signed package' } else { 'loose manifest' }
+        Write-Host "--> Oracle $($rec.id) ($mode)" -ForegroundColor DarkYellow
         try {
-            Add-AppxPackage -Register $looseManifest -ErrorAction Stop
+            if ($useSignedPacked) { Add-AppxPackage -Path $packedFull -ErrorAction Stop }
+            elseif ($looseManifest -and (Test-Path $looseManifest)) { Add-AppxPackage -Register $looseManifest -ErrorAction Stop }
+            else { continue }
             $installed = Get-AppxPackage -Name $pkgName
             if ($installed) {
                 $rec.windowsOracle.verdict = 'installed'
-                $rec.windowsOracle.reason = "Windows accepted the manifest; PackageFullName=$($installed.PackageFullName)"
+                $rec.windowsOracle.reason = "Windows accepted the $mode; PackageFullName=$($installed.PackageFullName)"
             }
         }
         catch {
@@ -725,6 +752,9 @@ if ($RunOracle) {
     # Safety net: remove anything left behind.
     Get-AppxPackage -Name 'MsixCoreCorpus*' | Remove-AppxPackage -ErrorAction SilentlyContinue
 }
+
+# Remove the throwaway signing PFX (the certificate store is left untouched).
+if ($SignPfx -and (Test-Path $SignPfx)) { Remove-Item $SignPfx -Force -ErrorAction SilentlyContinue }
 
 # =============================================================================
 #  Emit corpus.json (strip internal helper fields)

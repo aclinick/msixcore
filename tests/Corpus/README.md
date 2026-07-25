@@ -11,8 +11,13 @@ Every fixture ships in two layouts:
 
 The expected parsed values in `corpus.json` are derived **independently of the library under test**
 (via `System.Xml` and an independent implementation of the MSIX publisher hash) and were
-cross-checked against the **real Windows deployment oracle** (`Add-AppxPackage -Register`) at
-generation time. This makes the corpus a genuine differential oracle for `MsixCore.Packaging`.
+cross-checked against the **real Windows deployment oracle** (`Add-AppxPackage`) at generation
+time. This makes the corpus a genuine differential oracle for `MsixCore.Packaging`.
+
+The manifest `Publisher` is set to the exact subject DN (`CN=aclinick`) of a **trusted
+self-signed code-signing certificate** kept in the current user's *Trusted People* store. Packed
+packages are signed with that certificate (via `winapp sign`), so they install as real signed
+`.msix` files during oracle validation.
 
 ## Regenerating
 
@@ -20,16 +25,26 @@ generation time. This makes the corpus a genuine differential oracle for `MsixCo
 # loose + packed + corpus.json (no Windows changes)
 pwsh tests/Corpus/Build-Corpus.ps1
 
-# also sign the signable fixture with a throwaway self-signed cert (removed afterwards)
+# also sign every makeappx-produced package with the trusted corpus cert (winapp sign).
+# The cert's private key is exported to a throwaway PFX that is deleted afterwards; the
+# certificate stores themselves are never modified.
 pwsh tests/Corpus/Build-Corpus.ps1 -Sign
 
-# also validate every loose fixture against Windows and record the verdict (Developer Mode).
-# Each package is registered, queried, then ALWAYS removed. Nothing is left installed.
+# also validate each fixture against Windows and record the verdict (Developer Mode).
+# Signed .msix packages are installed via Add-AppxPackage; unsigned ones fall back to
+# loose registration. Every package is queried, then ALWAYS removed. Nothing is left installed.
 pwsh tests/Corpus/Build-Corpus.ps1 -Sign -RunOracle
 ```
 
-Prerequisites (all present on the authoring machine): `makeappx.exe`/`signtool.exe` (Windows SDK),
-Developer Mode enabled, and the `Appx` PowerShell module for `-RunOracle`.
+`-SignThumbprint` selects the signing cert (default `1999384EEF0362515797C62766388F94B46EA7A7`,
+subject `CN=aclinick`); its subject DN becomes the manifest `Publisher`. Prerequisites (all present
+on the authoring machine): `makeappx.exe`/`signtool.exe` (Windows SDK), the `winapp` CLI, Developer
+Mode enabled, and the `Appx` PowerShell module for `-RunOracle`.
+
+Packages are packed with **makeappx** (a signtool-recognized APPX) so they can be signed and
+installed. Two fixtures fall back to a **self-built OPC ZIP** and therefore stay unsigned:
+`blockmap-percentname` (needs percent-encoded part names to reproduce issue #7) and `ext-bgtask`
+(its intentionally-invalid manifest is rejected by makeappx).
 
 ## Feature dimensions covered
 
@@ -42,8 +57,17 @@ Developer Mode enabled, and the `Appx` PowerShell module for `-RunOracle`.
 | Package kinds | `kind-framework`, `kind-optional`, `kind-modification`, `kind-sparse`, `kind-resource` |
 | Block-map edge cases | `blockmap-empty` (0-byte file), `blockmap-multiblock` (>64 KiB), `blockmap-percentname` (`!`, space, `+`), `blockmap-deepnested` |
 | Display metadata | `meta-multiapp` (2 applications), `meta-logos` (logos + description) |
-| Signing | `signed-basic` (self-signed) |
+| Signing | `signed-basic` (trusted self-signed cert); 27 of 30 packages are signed |
 | Bundles | `bundle-multiarch` (`.msixbundle` with x64 + x86) |
+
+## Windows-oracle verdicts
+
+At last generation (`-Sign -RunOracle`): **25 installed**, **3 expected-not-installable**
+(`kind-optional`/`kind-modification` need their host package, `kind-sparse` needs an external
+location), **1 failed** (`ext-bgtask` — an intentionally-invalid manifest, `0x80080204`), and
+**1 not-attempted** (`bundle-multiarch`). `kind-framework` now installs because it is delivered as
+a signed `.msix` (rather than dev-mode loose registration, which forbids framework packages). The
+per-fixture verdict and the exact Windows error string are recorded in `corpus.json`.
 
 ## Known differential result — issue #7
 

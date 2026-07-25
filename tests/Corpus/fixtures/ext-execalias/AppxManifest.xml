@@ -6,7 +6,7 @@
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   IgnorableNamespaces="uap rescap uap3 desktop">
-  <Identity Name="MsixCoreCorpus.ExtExecAlias" Publisher="CN=MsixCoreCorpus" Version="1.0.0.0" ProcessorArchitecture="x64" />
+  <Identity Name="MsixCoreCorpus.ExtExecAlias" Publisher="CN=aclinick" Version="1.0.0.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>Corpus Exec Alias</DisplayName>
     <PublisherDisplayName>MSIX Core Corpus</PublisherDisplayName>
