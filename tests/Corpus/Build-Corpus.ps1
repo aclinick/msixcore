@@ -516,9 +516,8 @@ $fixtures = @(
            @{ Path = 'a+b.txt'; Bytes = (Bytes 'plus in name') }
            @{ Path = 'bang!.txt'; Bytes = (Bytes 'bang in name') }
        )
-       PackedBlockMapValid = $false
-       SelfBuild = $true
-       PackedBug = '#7' }
+       PackedBlockMapValid = $true
+       SelfBuild = $true }
     @{ Id = 'blockmap-deepnested'; Features = @('blockmap:deepNesting'); Name = 'MsixCoreCorpus.BlockDeep'; Arch = 'x64'; Version = '1.0.0.0'; Display = 'Corpus Deep Nested'
        Payload = @(@{ Path = 'a\b\c\d\e\f\g\deep.txt'; Bytes = (Bytes 'deep') }) }
 

@@ -69,15 +69,13 @@ location), **1 failed** (`ext-bgtask` — an intentionally-invalid manifest, `0x
 a signed `.msix` (rather than dev-mode loose registration, which forbids framework packages). The
 per-fixture verdict and the exact Windows error string are recorded in `corpus.json`.
 
-## Known differential result — issue #7
+## Regression guard — issue #7 (fixed)
 
-`blockmap-percentname` **packed** reproduces
-[issue #7](https://github.com/aclinick/msixcore/issues/7): the OPC ZIP stores part names
-percent-encoded (`bang%21.txt`) while the block map uses the decoded logical name (`bang!.txt`).
-On `main` the reader does not percent-decode part names, so `VerifyBlockMap()` false-fails. The
-matrix records this with `blockMapValidPacked: false` and `packedKnownBug: "#7"`, and the test
-asserts the current (buggy) behavior so the suite stays green while the gap remains visible. The
-**loose** variant passes, because the file names on disk are already decoded.
+`blockmap-percentname` exercises [issue #7](https://github.com/aclinick/msixcore/issues/7): the OPC
+ZIP stores part names percent-encoded (`bang%21.txt`) while the block map uses the decoded logical
+name (`bang!.txt`). The reader now percent-decodes part names, so both the **loose** and **packed**
+variants validate (`blockMapValidPacked: true`). This fixture remains in the matrix as a regression
+guard — a reader that stopped decoding would flip the packed result and fail `CorpusTests`.
 
 ## Bundles
 

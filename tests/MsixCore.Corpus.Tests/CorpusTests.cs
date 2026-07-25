@@ -52,10 +52,9 @@ public sealed class CorpusTests
             Assert.Equal(expectedCount, package.BlockMap.Files.Count);
         }
 
-        // blockMapValidPacked encodes the *current* documented behavior: it is false for the
-        // percent-encoded-name fixture, which reproduces the known bug tracked in issue #7 (the
-        // reader does not yet percent-decode OPC part names). When #7 is fixed this expectation
-        // flips to true and this test will flag the change.
+        // Regression guard for issue #7: the percent-encoded-name fixture's packed block map must
+        // validate now that the reader percent-decodes OPC part names. blockMapValidPacked is true
+        // for every fixture; a regression in part-name decoding would flip it and fail here.
         Assert.Equal(fx.BlockMapValidPacked!.Value, package.VerifyBlockMap().IsValid);
     }
 

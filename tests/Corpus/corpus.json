@@ -938,9 +938,8 @@
       "isSignedPacked": false,
       "blockMapFileCount": 9,
       "blockMapValidLoose": true,
-      "blockMapValidPacked": false,
-      "packedKnownBug": "#7",
-      "notes": ""
+      "blockMapValidPacked": true,
+      "notes": "Percent-encoded OPC part names; regression guard for issue #7 (reader percent-decodes part names)."
     },
     {
       "id": "blockmap-deepnested",
