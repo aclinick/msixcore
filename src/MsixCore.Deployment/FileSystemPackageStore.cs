@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using MsixCore.Packaging;
@@ -192,8 +193,10 @@ public sealed class FileSystemPackageStore : IPackageStore
                 + "Use AllowDowngrade to replace it with an older version.");
         }
 
+        MakeStagingDurable(stagingLocation);
         var transaction = new CommitTransaction
         {
+            RecoveryMode = CommitRecoveryMode.RollForward,
             StagingRelativePath = Path.GetRelativePath(_root, stagingLocation),
             DestinationName = Path.GetFileName(destination),
             Backups = familyPackages.Select(installed => new CommitBackup
@@ -213,10 +216,21 @@ public sealed class FileSystemPackageStore : IPackageStore
         {
             throw;
         }
-        catch
+        catch (Exception commitFailure)
         {
-            RollBackCommitTransaction(transaction);
-            DeleteCommitJournal();
+            try
+            {
+                RecoverIncompleteCommitLocked();
+            }
+            catch (Exception recoveryFailure)
+            {
+                throw new AggregateException(
+                    "The package commit failed and recovery was interrupted; the durable journal remains for retry.",
+                    commitFailure,
+                    recoveryFailure);
+            }
+
+            ExceptionDispatchInfo.Capture(commitFailure).Throw();
             throw;
         }
     }
@@ -260,33 +274,76 @@ public sealed class FileSystemPackageStore : IPackageStore
         }
 
         ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
-        // The staging-to-destination rename is atomic: staging present means promotion has not
-        // completed, while staging absent plus destination present means it has.
+        if (transaction.RecoveryMode is not (
+            CommitRecoveryMode.RollForward or CommitRecoveryMode.RollBack))
+        {
+            throw new InvalidOperationException(
+                $"The commit journal has unsupported recovery mode '{transaction.RecoveryMode}'.");
+        }
+
+        ConvergeCommitTransaction(transaction, resolved);
+    }
+
+    private void ConvergeCommitTransaction(
+        CommitTransaction transaction,
+        ResolvedCommitTransaction resolved)
+    {
+        if (transaction.RecoveryMode == CommitRecoveryMode.RollBack)
+        {
+            ConvergeRollback(resolved);
+            return;
+        }
+
+        // Staging present means promotion has not completed. Destination present means promotion
+        // occurred, but its durability barrier may still need to be replayed.
         if (_fileSystem.DirectoryExists(resolved.StagingLocation))
         {
-            MoveOriginalsToBackups(resolved);
-            _fileSystem.FlushDirectory(_root);
             if (_fileSystem.DirectoryExists(resolved.Destination))
             {
+                ChangeRecoveryMode(transaction, CommitRecoveryMode.RollBack);
+                ConvergeRollback(resolved);
+                return;
+            }
+
+            MoveOriginalsToBackups(resolved);
+            _fileSystem.FlushDirectory(_root);
+            if (!_fileSystem.DirectoryExists(resolved.StagingLocation))
+            {
                 throw new InvalidOperationException(
-                    $"Cannot recover package-store commit because destination '{resolved.Destination}' already exists.");
+                    $"Staging disappeared while moving backups: '{resolved.StagingLocation}'. Backups: "
+                    + string.Join(", ", resolved.Backups.Select(static backup => backup.Original)));
             }
 
             _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
-            FlushPromotionDirectories(resolved);
         }
         else if (!_fileSystem.DirectoryExists(resolved.Destination))
         {
-            if (resolved.Backups.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot recover package-store commit because both staging and destination are missing.");
-            }
+            ChangeRecoveryMode(transaction, CommitRecoveryMode.RollBack);
+            ConvergeRollback(resolved);
+            return;
+        }
 
-            RestoreBackups(resolved);
+        FlushPromotionDirectories(resolved);
+        CleanupBackups(resolved);
+        DeleteCommitJournal();
+    }
+
+    private void ConvergeRollback(ResolvedCommitTransaction resolved)
+    {
+        if (_fileSystem.DirectoryExists(resolved.Destination))
+        {
+            _fileSystem.DeleteDirectory(resolved.Destination, recursive: true);
             _fileSystem.FlushDirectory(_root);
         }
 
+        if (_fileSystem.DirectoryExists(resolved.StagingLocation))
+        {
+            _fileSystem.DeleteDirectory(resolved.StagingLocation, recursive: true);
+            _fileSystem.FlushDirectory(Path.GetDirectoryName(resolved.StagingLocation)!);
+        }
+
+        RestoreBackups(resolved);
+        _fileSystem.FlushDirectory(_root);
         CleanupBackups(resolved);
         DeleteCommitJournal();
     }
@@ -303,23 +360,7 @@ public sealed class FileSystemPackageStore : IPackageStore
         string temporary = Path.Combine(_root, ".commit-transaction-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            using (var stream = new FileStream(
-                temporary,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None))
-            {
-                byte[] payload = JsonSerializer.SerializeToUtf8Bytes(transaction);
-                var journal = new CommitJournal
-                {
-                    FormatVersion = 1,
-                    Payload = Convert.ToBase64String(payload),
-                    Sha256 = Convert.ToHexString(SHA256.HashData(payload)),
-                };
-                JsonSerializer.Serialize(stream, journal);
-                stream.Flush(flushToDisk: true);
-            }
-
+            WriteCommitJournalFile(temporary, transaction);
             _fileSystem.MoveFile(temporary, journalPath);
             _fileSystem.CommitPoint(CommitFaultPoint.BeforeJournalDurable);
             _fileSystem.FlushDirectory(_root);
@@ -332,6 +373,89 @@ public sealed class FileSystemPackageStore : IPackageStore
                 _fileSystem.DeleteFile(temporary);
             }
         }
+    }
+
+    private void ChangeRecoveryMode(
+        CommitTransaction transaction,
+        CommitRecoveryMode recoveryMode)
+    {
+        transaction.RecoveryMode = recoveryMode;
+        string temporary = Path.Combine(_root, ".commit-transaction-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            WriteCommitJournalFile(temporary, transaction);
+            _fileSystem.ReplaceFile(temporary, Path.Combine(_root, CommitJournalFileName));
+            _fileSystem.FlushDirectory(_root);
+        }
+        finally
+        {
+            if (_fileSystem.FileExists(temporary))
+            {
+                _fileSystem.DeleteFile(temporary);
+            }
+        }
+    }
+
+    private static void WriteCommitJournalFile(
+        string path,
+        CommitTransaction transaction)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None);
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(transaction);
+        var journal = new CommitJournal
+        {
+            FormatVersion = 1,
+            Payload = Convert.ToBase64String(payload),
+            Sha256 = Convert.ToHexString(SHA256.HashData(payload)),
+        };
+        JsonSerializer.Serialize(stream, journal);
+        stream.Flush(flushToDisk: true);
+    }
+
+    private void MakeStagingDurable(string stagingLocation)
+    {
+        var pending = new Stack<string>();
+        var directories = new List<string>();
+        pending.Push(stagingLocation);
+
+        while (pending.Count > 0)
+        {
+            string directory = pending.Pop();
+            directories.Add(directory);
+            foreach (string entry in _fileSystem.EnumerateFileSystemEntries(directory))
+            {
+                FileAttributes attributes = _fileSystem.GetAttributes(entry);
+                if (attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    throw new InvalidDataException(
+                        $"Staging path '{entry}' is a symbolic link or junction; refusing to commit.");
+                }
+
+                if (attributes.HasFlag(FileAttributes.Directory))
+                {
+                    pending.Push(entry);
+                }
+                else
+                {
+                    _fileSystem.FlushFile(entry);
+                    _fileSystem.CommitPoint(CommitFaultPoint.MidStagedFileFlush);
+                }
+            }
+        }
+
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterStagedFilesBeforeDirectoryFlush);
+        foreach (string directory in directories.AsEnumerable().Reverse())
+        {
+            _fileSystem.FlushDirectory(directory);
+        }
+
+        _fileSystem.FlushDirectory(Path.GetDirectoryName(stagingLocation)!);
+        _fileSystem.FlushDirectory(_root);
+        _fileSystem.CommitPoint(CommitFaultPoint.AfterStagingDurableBeforeJournal);
     }
 
     private static CommitTransaction ReadCommitJournal(CommitJournal journal)
@@ -369,13 +493,6 @@ public sealed class FileSystemPackageStore : IPackageStore
     private void FlushPromotionDirectories(ResolvedCommitTransaction transaction)
     {
         _fileSystem.FlushDirectory(Path.GetDirectoryName(transaction.StagingLocation)!);
-        _fileSystem.FlushDirectory(_root);
-    }
-
-    private void RollBackCommitTransaction(CommitTransaction transaction)
-    {
-        ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
-        RestoreBackups(resolved);
         _fileSystem.FlushDirectory(_root);
     }
 
@@ -695,6 +812,8 @@ public sealed class FileSystemPackageStore : IPackageStore
 
     private sealed class CommitTransaction
     {
+        public CommitRecoveryMode RecoveryMode { get; set; }
+
         public required string StagingRelativePath { get; init; }
 
         public required string DestinationName { get; init; }
@@ -730,12 +849,21 @@ public sealed class FileSystemPackageStore : IPackageStore
 
 internal enum CommitFaultPoint
 {
+    MidStagedFileFlush,
+    AfterStagedFilesBeforeDirectoryFlush,
+    AfterStagingDurableBeforeJournal,
     BeforeJournalDurable,
     AfterJournalDurableBeforeBackups,
     MidBackup,
     AfterBackupsDurableBeforePromotion,
     AfterPromotionBeforeDurable,
     AfterPromotionDurableBeforeJournalClear,
+}
+
+internal enum CommitRecoveryMode
+{
+    RollForward,
+    RollBack,
 }
 
 internal sealed class SimulatedProcessCrashException : Exception

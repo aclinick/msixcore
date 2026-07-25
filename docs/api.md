@@ -153,7 +153,7 @@ implements it over a store root.
 | `bool Contains(string packageFullName)` | Whether a package is currently installed. |
 | `void Delete(string packageFullName)` | Remove an installed package's payload (no-op if absent). |
 | `string CreateStagingLocation()` | Create a fresh empty staging directory to extract into. |
-| `void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options)` | Promote verified staging with fail-closed policy, a cross-process lock, and integrity-checked, durably ordered crash-recovery journal. |
+| `void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options)` | Flush and promote verified staging with fail-closed policy, a cross-process lock, and an integrity-checked, phase-aware crash-recovery journal. |
 | `FileSystemPackageStore(string rootDirectory)` | Store rooted at a directory. |
 | `static FileSystemPackageStore CreateDefault()` | Store under `LocalApplicationData/MsixCore/Packages`. |
 | `string RootDirectory { get; }` | Absolute store root. |

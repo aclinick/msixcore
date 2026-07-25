@@ -139,13 +139,16 @@ part-name rules.
   the presence of `AppxManifest.xml`) under a store root, defaulting to
   `LocalApplicationData/MsixCore/Packages`. It is **writable and transactional**:
   `CreateStagingLocation()` yields a fresh `.staging/<guid>` directory the engine
-  extracts into. `Commit` records a durable intent journal before moving existing
-  installs aside and atomically promoting staging with `Directory.Move`. Every
-  query or mutation recovers an incomplete journal while holding the cross-process
-  store lock, so a crash between backup and promotion rolls forward or restores a
-  valid package. The journal carries a SHA-256 integrity check. POSIX systems
-  `fsync` affected directories at each phase barrier; Windows uses
-  `MoveFileEx(MOVEFILE_WRITE_THROUGH)` durable renames behind `IDurableFileSystem`.
+  extracts into. `Commit` flushes every staged file and then its directories
+  bottom-up before recording a durable intent journal, moving existing installs
+  aside, and promoting staging with `Directory.Move`. Every query or mutation
+  recovers an incomplete journal while holding the cross-process store lock.
+  Recovery rolls forward a completed promotion or atomically changes the journal
+  to rollback mode before restoring backups; either direction is idempotent if
+  interrupted. The journal carries a SHA-256 integrity check. POSIX systems
+  `fsync` files and affected directories at each phase barrier; Windows uses
+  `FlushFileBuffers`, write-through journal renames, and directory-handle flushing
+  behind `IDurableFileSystem`.
   Commit-time metadata reads fail closed before version policy is evaluated.
   `.`-prefixed internal directories are excluded from enumeration.
 - **`InstalledPackageInfo`** reads only `AppxManifest.xml`; **`InstalledPackage`**
