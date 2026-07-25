@@ -139,15 +139,12 @@ part-name rules.
   the presence of `AppxManifest.xml`) under a store root, defaulting to
   `LocalApplicationData/MsixCore/Packages`. It is **writable and transactional**:
   `CreateStagingLocation()` yields a fresh `.staging/<guid>` directory the engine
-  extracts into, and `Commit(staging, fullName)` promotes it with
-  `Directory.Move`. Commit moves any existing install *aside* to a `.`-prefixed
-  backup first, so a failed promotion **rolls back** to the previous install
-  rather than destroying it; the whole aside/promote/rollback sequence is
-  serialized **per destination** by a process-wide gate so concurrent commits of
-  the same package cannot interleave. `.`-prefixed directories (staging, backups)
-  are excluded from enumeration. `Contains`, `GetInstallLocation`, and `Delete`
-  round out the surface; `GetInstallLocation` validates the full name is a single,
-  non-traversing path segment.
+  extracts into. `Commit` records a durable intent journal before moving existing
+  installs aside and atomically promoting staging with `Directory.Move`. Every
+  query or mutation recovers an incomplete journal while holding the cross-process
+  store lock, so a crash between backup and promotion rolls forward or restores a
+  valid package. Commit-time metadata reads fail closed before version policy is
+  evaluated. `.`-prefixed internal directories are excluded from enumeration.
 - **`InstalledPackageInfo`** reads only `AppxManifest.xml`; **`InstalledPackage`**
   wraps that metadata and opens a loose `MsixPackage` only when payload content
   such as the logo is requested.

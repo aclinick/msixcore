@@ -57,33 +57,54 @@ public sealed record InstalledPackageInfo
 
     internal static string? FindManifest(string directory)
     {
-        if (!Directory.Exists(directory))
-        {
-            return null;
-        }
-
         try
         {
-            string canonical = Path.Combine(directory, OpcPartNames.AppxManifest);
-            if (IsRegularFile(canonical))
-            {
-                return canonical;
-            }
-
-            return Directory.EnumerateFiles(directory)
-                .FirstOrDefault(file =>
-                    string.Equals(
-                        Path.GetFileName(file),
-                        OpcPartNames.AppxManifest,
-                        StringComparison.OrdinalIgnoreCase)
-                    && IsRegularFile(file));
+            return FindManifestStrict(directory);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             return null;
         }
     }
 
-    private static bool IsRegularFile(string path) =>
-        File.Exists(path) && !File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+    internal static string? FindManifestStrict(string directory)
+    {
+        FileAttributes directoryAttributes = File.GetAttributes(directory);
+        if (!directoryAttributes.HasFlag(FileAttributes.Directory))
+        {
+            return null;
+        }
+
+        string canonical = Path.Combine(directory, OpcPartNames.AppxManifest);
+        try
+        {
+            return ValidateManifestAttributes(canonical, File.GetAttributes(canonical));
+        }
+        catch (FileNotFoundException)
+        {
+        }
+        catch (DirectoryNotFoundException)
+        {
+            throw;
+        }
+
+        string? manifest = Directory.EnumerateFiles(directory)
+            .FirstOrDefault(file => string.Equals(
+                Path.GetFileName(file),
+                OpcPartNames.AppxManifest,
+                StringComparison.OrdinalIgnoreCase));
+        return manifest is null
+            ? null
+            : ValidateManifestAttributes(manifest, File.GetAttributes(manifest));
+    }
+
+    private static string ValidateManifestAttributes(string path, FileAttributes attributes)
+    {
+        if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
+        {
+            throw new InvalidDataException($"The installed package manifest '{path}' is not a regular file.");
+        }
+
+        return path;
+    }
 }

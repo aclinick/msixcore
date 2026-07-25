@@ -43,7 +43,10 @@ public class FileSystemPackageStoreTests : IDisposable
     [Fact]
     public void ManifestLookup_IsCaseInsensitiveOnCaseSensitiveFileSystems()
     {
-        string directory = LoosePackageBuilder.Create(_root, "pkgA");
+        string temporaryDirectory = LoosePackageBuilder.Create(_root, "temporary");
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(temporaryDirectory);
+        string directory = Path.Combine(_root, info.Identity.PackageFullName);
+        Directory.Move(temporaryDirectory, directory);
         string manifest = Path.Combine(directory, "AppxManifest.xml");
         string temporary = Path.Combine(directory, "manifest.tmp");
         string lowerCaseManifest = Path.Combine(directory, "appxmanifest.xml");
@@ -51,7 +54,7 @@ public class FileSystemPackageStoreTests : IDisposable
         File.Move(temporary, lowerCaseManifest);
 
         var store = new FileSystemPackageStore(_root);
-        Assert.True(store.Contains("pkgA"));
+        Assert.True(store.Contains(info.Identity.PackageFullName));
 
         IReadOnlyList<InstalledPackageInfo> packages = store.EnumeratePackages();
         Assert.Single(packages);
@@ -282,6 +285,76 @@ public class FileSystemPackageStoreTests : IDisposable
     }
 
     [Fact]
+    public void Query_AfterCrashBetweenBackupAndPromotion_RecoversPackage()
+    {
+        var initialStore = new FileSystemPackageStore(_root);
+        string version1 = initialStore.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version1, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "1.0.0.0"));
+        InstalledPackageInfo version1Info = InstalledPackageInfo.ReadFromDirectory(version1);
+        initialStore.Commit(version1, version1Info, DeploymentOptions.None);
+
+        string version2 = initialStore.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version2, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
+        var crashingStore = new FileSystemPackageStore(
+            _root,
+            Directory.EnumerateDirectories,
+            static point => point == CommitFaultPoint.AfterBackupsMovedBeforePromotion);
+
+        Assert.Throws<SimulatedProcessCrashException>(
+            () => crashingStore.Commit(version2, version2Info, DeploymentOptions.None));
+        Assert.True(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+
+        var recoveredStore = new FileSystemPackageStore(_root);
+        InstalledPackageInfo? recovered =
+            recoveredStore.FindByFamilyName(version1Info.Identity.PackageFamilyName);
+
+        Assert.NotNull(recovered);
+        Assert.Equal(new Version(2, 0, 0, 0), recovered!.Identity.Version);
+        Assert.Single(recoveredStore.EnumeratePackages());
+        Assert.False(File.Exists(Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName)));
+    }
+
+    [Fact]
+    public void Commit_UnreadableInstalledManifest_FailsClosed()
+    {
+        var store = new FileSystemPackageStore(_root);
+        string version2 = store.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version2, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "2.0.0.0"));
+        InstalledPackageInfo version2Info = InstalledPackageInfo.ReadFromDirectory(version2);
+        store.Commit(version2, version2Info, DeploymentOptions.None);
+
+        string version1 = store.CreateStagingLocation();
+        File.WriteAllText(
+            Path.Combine(version1, "AppxManifest.xml"),
+            LoosePackageBuilder.ManifestXml(version: "1.0.0.0"));
+        InstalledPackageInfo version1Info = InstalledPackageInfo.ReadFromDirectory(version1);
+        string installedManifest = Path.Combine(
+            store.GetInstallLocation(version2Info.Identity.PackageFullName),
+            "AppxManifest.xml");
+
+        using (var lockedManifest = new FileStream(
+            installedManifest,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.None))
+        {
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => store.Commit(version1, version1Info, DeploymentOptions.AllowDowngrade));
+            Assert.Contains("metadata", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.True(store.Contains(version2Info.Identity.PackageFullName));
+        Assert.False(store.Contains(version1Info.Identity.PackageFullName));
+    }
+
+    [Fact]
     public void FindByFullName_DoesNotEnumerateStoreOrPayload()
     {
         string temporary = LoosePackageBuilder.Create(_root, "temporary");
@@ -297,6 +370,23 @@ public class FileSystemPackageStoreTests : IDisposable
 
         Assert.NotNull(found);
         Assert.Equal(expected.Identity, found!.Identity);
+    }
+
+    [Fact]
+    public void FindByFullName_MismatchedDirectoryAndManifest_ReturnsNull()
+    {
+        string probe = LoosePackageBuilder.Create(_root, "probe");
+        InstalledPackageInfo requested = InstalledPackageInfo.ReadFromDirectory(probe);
+        Directory.Delete(probe, recursive: true);
+        LoosePackageBuilder.Create(
+            _root,
+            requested.Identity.PackageFullName,
+            LoosePackageBuilder.ManifestXml(name: "Fabrikam.Different"));
+        var store = new FileSystemPackageStore(_root);
+
+        InstalledPackageInfo? found = store.FindByFullName(requested.Identity.PackageFullName);
+
+        Assert.Null(found);
     }
 
     [Fact]
