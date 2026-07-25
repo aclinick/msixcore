@@ -5,7 +5,7 @@ namespace MsixCore.Packaging.Authoring;
 
 internal static class OpcPartNameEncoder
 {
-    private const string ReservedCharacters = " !+#%{}^`@&";
+    private const string ReservedCharacters = " !+#%{}^`@&[]";
 
     public static string Encode(string partName)
     {

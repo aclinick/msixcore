@@ -193,6 +193,7 @@ public sealed class AuthoringTests : IDisposable
     [InlineData("plain.txt", "plain.txt")]
     [InlineData("space name.txt", "space%20name.txt")]
     [InlineData("!+#%{}^`@&", "%21%2B%23%25%7B%7D%5E%60%40%26")]
+    [InlineData("[Content_Types].old", "%5BContent_Types%5D.old")]
     [InlineData("folder/a b.txt", "folder/a%20b.txt")]
     public void OpcPartNameEncoder_EncodesMakeAppxReservedCharacters(string input, string expected)
     {

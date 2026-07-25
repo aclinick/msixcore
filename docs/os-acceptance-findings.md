@@ -8,7 +8,7 @@ The Windows OS AppxPackaging COM reader **does accept packages authored by MSIX 
 
 For the OS reader, **ZIP64 is not required, data descriptors are not required, and the UTF-8 general-purpose bit is tolerated**.  The ablation matrix also shows the reader accepts ZIP64, data descriptors, both together, and clearing the UTF-8 bit.
 
-Full `Add-AppxPackage` registration was attempted first with throwaway identities and then, after scope correction, with the user's own `CcProto` package.  `CcProto` was not installed before the test, so the real identity path was used and each attempt was followed by `Remove-AppxPackage` if anything registered.  The non-elevated environment still could not complete signed installation: AppX deployment rejected current-user-root test certificates with `0x800B0109` even though `signtool verify /pa` trusted them.  No install failure implicated ZIP64, UTF-8, block map, or MSIX Core's baseline ZIP structure.
+Full `Add-AppxPackage` registration was time-boxed after the reader matrix.  After scope correction, the install subject was the user's own `CcProto` package only.  `CcProto` was not installed before the test, so the real identity path was used and each attempt was followed by `Remove-AppxPackage` if anything registered.  The non-elevated environment still could not complete signed installation: the makeappx-produced control and the MSIX Core variants failed identically with AppX deployment certificate-trust policy (`0x800B0109`).  That makes Tier 2 **blocked by environment/policy**, not by MSIX Core ZIP structure.
 
 ## Controls and real packages
 
@@ -53,57 +53,7 @@ Variants were post-processed from MSIX Core `Optimal` output without changing pa
 
 All cells returned exit code 0 from the OS reader helper; no HRESULT/error was emitted.
 
-## Tier 2 install attempts and exact failures
-
-Safety: every install attempt used a throwaway identity beginning with `MsixCoreOSTest`; no real package identity was installed or removed.
-
-### Attempt 1: signed framework package, publisher `CN=MsixCoreOSTest`
-
-Package: normalized WindowsAppRuntime package rewritten to `Name=MsixCoreOSTest.WindowsAppRuntime18Experimental3`, signed with a 7-day self-signed code-signing cert subject `CN=MsixCoreOSTest`.  The cert thumbprint was `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86`; it was imported to CurrentUser `TrustedPeople` and CurrentUser `Root` only.
-
-`signtool verify /pa /v C:\osaccept-work\install-signed\variant-baseline.msix` succeeded.  `Add-AppxPackage` still failed for baseline/ZIP64/both/no-UTF8 with trust error:
-
-- Cmdlet exception wrapper: `HResult=0x80070002`
-- Deployment HRESULT: `0x80073CF0` (`Package could not be opened`)
-- Specific error: `0x800B0109: The root certificate of the signature in the app package or bundle must be trusted.`
-- AppXDeploymentServer events included `[402] error 0x87E80034: Reading manifest ... failed with error: Unknown error` and `[404] ... error 0x80073CF0`.
-
-The signed descriptor-only package failed earlier in the reader/deployment path after signing:
-
-- OS reader: `COM failure HRESULT=0x80511007`
-- Add-AppxPackage specific error: `Common::Deployment::MsixvcStagingSession::GetManifestReader ... failed with error 0x87E80034`.
-
-Because signing adds `AppxSignature.p7x`, this descriptor-only signed failure is not evidence that unsigned descriptor-only ZIPs are unreadable; the unsigned descriptor-only package was accepted by the OS reader before signing.
-
-### Attempt 2: `Add-AppxPackage -AllowUnsigned`, framework package with unsigned OID
-
-Package: WindowsAppRuntime rewritten to `Name=MsixCoreOSTest.Unsigned.WAR18`, `Publisher=CN=MsixCoreOSTest, OID.2.25.311729368913984317654407730594956997722=1`.
-
-All variants failed identically by unsigned-package policy after the package identity was read:
-
-- Cmdlet exception wrapper: `HResult=0x80131500`
-- Deployment HRESULT: `0x80073D2B`
-- Event 798: `Windows cannot install package MsixCoreOSTest.Unsigned.WAR18_8000.526.1808.0_x64__cb2j79ga0v7n2 because an unsigned package must be a Main package.`
-
-### Attempt 3: `Add-AppxPackage -AllowUnsigned`, CcProto main package with unsigned OID
-
-Package: CcProto rewritten to `Name=MsixCoreOSTest.Unsigned.CcProto`, same unsigned OID publisher.
-
-All variants failed identically by unsigned-package policy after the package identity was read:
-
-- Cmdlet exception wrapper: `HResult=0x80131500`
-- Deployment HRESULT: `0x80073D2B`
-- Event 796: `Windows cannot install package MsixCoreOSTest.Unsigned.CcProto because an unsigned package cannot include Executable activations.`
-
-### Attempt 4: minimal UWP web-content package with unsigned OID
-
-A scratch package with `StartPage=index.html` and no executable field was authored in both makeappx and MSIX Core forms.  The OS reader accepted makeappx, MSIX Core Stored, MSIX Core Optimal, and all five ZIP variants.  `Add-AppxPackage -AllowUnsigned` rejected all forms identically:
-
-- Cmdlet exception wrapper: `HResult=0x80131500`
-- Deployment HRESULT: `0x80073D2B`
-- Event 791: `Windows cannot install package MsixCoreOSTest.UwpContent_1.0.0.0_x64__cb2j79ga0v7n2 because it is not a valid unsigned package.`
-
-### Scope-corrected attempt 5: signed CcProto real identity
+## Tier 2 install status: blocked by environment/policy, not ZIP structure
 
 After the user's scope correction, install testing was repeated with `CcProto_1.0.2.0_x64_Debug.msix`, which is the user's own app and is safe for install testing.  Pre-check:
 
@@ -113,49 +63,37 @@ Get-AppxPackage -Name '*CcProto*'
 
 returned no installed CcProto package, so the real identity `fruitybunny.CcProto_1.0.2.0_x64__rf6ttnqpqgr0w` was used.  No pre-existing CcProto was removed.
 
-The original CcProto package is signed by `CN=Fruit`, but that certificate expired on 2026-06-29.  Repacked packages were therefore signed with a fresh 7-day self-signed certificate:
+The original CcProto package is signed by `CN=Fruit`, but that certificate expired on 2026-06-29.  Repacked packages were therefore signed with a fresh 7-day self-signed certificate.  The final plumbing retry staged under `%USERPROFILE%\osaccept`, called `Test-Path` immediately before `Add-AppxPackage`, ran `Unblock-File`, tried both an absolute path and a `file://` URI, and verified the signature before every install attempt.
 
 - Subject: `CN=Fruit`
-- Thumbprint: `157125F316332997849C3587836AFB8C06FE4D93`
+- Thumbprints used during retries: `157125F316332997849C3587836AFB8C06FE4D93`, then `6C2D03BF8F5DD16DEB434082ED80BBE4BC7B8A85`
 - Stores touched: CurrentUser `My`, `TrustedPeople`, and `Root`
-- `signtool verify /pa /v C:\osaccept-work\ccproto-signed\variant-baseline.msix`: success
+- Attempt to add the cert to LocalMachine `Root`: failed without elevation, `0x80070005 ERROR_ACCESS_DENIED`
+- Manifest Publisher: `CN=Fruit`; cert Subject: `CN=Fruit`; exact match: `True`
+- `signtool verify /pa /v`: success for the makeappx control, baseline, and both
+- OS AppxPackaging reader: OK for the makeappx control, baseline, and both
 
 Install matrix:
 
-| Package | Install result | Exact failure |
-|---|---|---|
-| original CcProto | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; AppXDeploymentServer `[402] error 0x87E80034: Reading manifest from location: CcProto_1.0.2.0_x64_Debug.msix failed with error: Unknown error`; `[495] Common::Deployment::MsixvcStagingSession::GetManifestReader ... failed with error 0x87E80034` |
-| makeappx, re-signed `CN=Fruit` | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; specific error `0x800B0109: The root certificate of the signature in the app package or bundle must be trusted`; AppXDeploymentServer `[402] error 0x87E80034`; `[495] GetManifestReader ... 0x87E80034` |
-| MSIX Core Stored, re-signed | FAIL | Same `0x800B0109` trust failure |
-| MSIX Core Optimal, re-signed | FAIL | Same `0x800B0109` trust failure |
-| A baseline, re-signed | FAIL | Same `0x800B0109` trust failure |
-| B +ZIP64, re-signed | FAIL | Same `0x800B0109` trust failure |
-| C +data descriptors, re-signed | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; `Common::Deployment::MsixvcStagingSession::GetManifestReader ... failed with error 0x87E80034` |
-| D +both, re-signed | FAIL | Same `0x800B0109` trust failure |
-| E no UTF-8, re-signed | FAIL | Same `0x800B0109` trust failure |
+| Package / path mode | `Test-Path` | Install result | Exact failure |
+|---|---|---|---|
+| makeappx control, absolute path | True | FAIL | Cmdlet wrapper `0x80070002`; deployment `0x80073CF0`; specific error `0x800B0109: The root certificate of the signature in the app package or bundle must be trusted`; AppXDeploymentServer `[404] ... 0x80073CF0`, `[402] error 0x87E80034`, `[495] GetManifestReader ... 0x87E80034` |
+| makeappx control, `file://` URI | True | FAIL | Same `0x800B0109` trust failure |
+| A baseline, absolute path | True | FAIL | Same `0x800B0109` trust failure |
+| A baseline, `file://` URI | True | FAIL | Same `0x800B0109` trust failure |
+| D both, absolute path | True | FAIL | Same `0x800B0109` trust failure |
+| D both, `file://` URI | True | FAIL | Same `0x800B0109` trust failure |
 
-Reader check on the signed CcProto packages:
-
-| Signed package | OS reader result |
-|---|---|
-| makeappx | OK |
-| MSIX Core Stored | OK |
-| MSIX Core Optimal | OK |
-| A baseline | OK |
-| B +ZIP64 | OK |
-| C +data descriptors | FAIL: `COM failure HRESULT=0x80511007` |
-| D +both | OK |
-| E no UTF-8 | OK |
-
-Interpretation: the corrected install subject still could not prove full registration because this non-elevated shell could not establish the trust root required by AppX deployment.  The data-descriptor-only signed package also becomes unreadable (`0x80511007` / `0x87E80034`) after `signtool` signs it; the unsigned descriptor-only package remains accepted by the OS reader.  This points to an interaction between the experimental post-processed descriptor-only shape and signing, not to a requirement that MSIX Core's default writer add descriptors.
+Interpretation: the makeappx-produced control fails through the exact same install path, with the same trust error as MSIX Core baseline and the makeappx-style `both` variant.  Therefore Tier 2 is blocked by certificate trust/environment in this non-elevated shell, not by MSIX Core's ZIP shape.  Earlier `-AllowUnsigned` attempts also failed by unsigned-package policy (`0x80073D2C` publisher not in unsigned namespace; `0x80073D2B` invalid unsigned content), and those policy failures were identical across variants including `both`.
 
 ## Recommendation
 
-1. **Do not change `StoredZipWriter` for ZIP64 or data descriptors as a correctness fix.**  The real OS reader accepted MSIX Core-authored packages without either feature, and accepted the ablation variants with either or both features present.
-2. **Treat makeappx's always-ZIP64 output as cosmetic for normal-size packages.**  Implement ZIP64 only when needed for >4 GiB offsets/sizes or >65,535 entries, or if a future compatibility target proves it necessary.
-3. **Treat makeappx's data descriptors as cosmetic for reader compatibility.**  They are not required by the OS reader.  Descriptor-only packages should not be signed using the experimental post-processor without further investigation because the signed copy failed reader/deployment (`0x80511007` / `0x87E80034`).
-4. **The UTF-8 bit is tolerated.**  Clearing it was also tolerated for these ASCII-only package paths, so there is no evidence that either setting is a correctness issue.
-5. **Follow-up if full install proof is required:** run the same committed commands from an elevated shell, import the test certificate into the machine trust store, then repeat the signed CcProto `Add-AppxPackage` matrix.  The current non-elevated run could not alter machine trust and therefore could not complete signed installation.
+1. **Correctness: fix OPC escaping for bracketed payload names.**  `[Content_Types].old` must be stored as `%5BContent_Types%5D.old`, not as a literal bracketed ZIP name.  This is independent of the ZIP64/data-descriptor question and is now fixed in `OpcPartNameEncoder` with a regression test.
+2. **Cosmetic for normal-size packages: makeappx's always-ZIP64 output.**  The OS reader accepted non-ZIP64 baseline packages and ZIP64 variants.  Implement ZIP64 only when needed for >4 GiB offsets/sizes or >65,535 entries, or if a future compatibility target proves it necessary.
+3. **Cosmetic for reader compatibility: makeappx's data descriptors.**  The OS reader accepted baseline packages without descriptors and unsigned descriptor variants.  Descriptor-only packages should not be signed using the experimental post-processor without further investigation because the signed copy failed reader/deployment (`0x80511007` / `0x87E80034`).
+4. **Cosmetic/tolerated: UTF-8 general-purpose bit.**  Baseline with bit `0x0800` set and variant E with it cleared both opened successfully for these ASCII-only package paths.
+5. **No writer change recommended for ZIP version-needed/local CRC+sizes/EOCD shape.**  Those differences are tied to ZIP64/descriptors and were accepted by the OS reader.
+6. **Follow-up if full install proof is required:** run the same committed commands from an elevated shell, import the test certificate into the machine trust store, then repeat the signed CcProto `Add-AppxPackage` matrix.  The current non-elevated run could not alter machine trust and therefore could not complete signed installation.
 
 ## Repro commands
 
@@ -183,19 +121,16 @@ foreach ($p in @(
 # Tier 2 corrected CcProto install example; first verify CcProto is not pre-installed.
 Get-AppxPackage -Name '*CcProto*'
 
-# If absent, sign the CcProto real-identity variants with a fresh CN=Fruit cert and run Add-AppxPackage.
-# If present, rewrite to a throwaway MsixCoreOSTest identity before installing.
-
-# Earlier throwaway install example; all installed packages are removed immediately by name prefix.
-dotnet $tool pack-throwaway 'C:\Users\andre\Downloads\CcProto_1.0.2.0_x64_Debug_Test\CcProto_1.0.2.0_x64_Debug_Test\Dependencies\x64\Microsoft.WindowsAppRuntime.1.8-experimental3.msix' C:\osaccept-work\install MsixCoreOSTest.WindowsAppRuntime18Experimental3 'CN=MsixCoreOSTest'
-foreach ($v in 'baseline','zip64','descriptor','both','no-utf8') {
-  dotnet $tool variant C:\osaccept-work\install\ours-optimal.msix C:\osaccept-work\install\variant-$v.msix $v
-}
+# If absent, sign the CcProto real-identity variants with a fresh CN=Fruit cert,
+# stage them under $env:USERPROFILE\osaccept, verify with signtool /pa, and run
+# Add-AppxPackage against makeappx, baseline, and both.  If present, rewrite to a
+# throwaway MsixCoreOSTest identity before installing.
 ```
 
 ## Cleanup performed
 
 - Removed all packages matching `MsixCoreOSTest*`; final `Get-AppxPackage -Name 'MsixCoreOSTest*'` returned no packages.
-- Removed the test certificates `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86` and `157125F316332997849C3587836AFB8C06FE4D93` from CurrentUser `My`, `TrustedPeople`, and `Root`.
-- Deleted scratch directory `C:\osaccept-work` after recording the results above.
+- Removed all packages matching `fruitybunny.CcProto`; final `Get-AppxPackage -Name 'fruitybunny.CcProto'` returned no packages.
+- Removed the test certificates `C04748A55D9B1BD8FE5FB361EB7B7D82FFD13A86`, `157125F316332997849C3587836AFB8C06FE4D93`, and `6C2D03BF8F5DD16DEB434082ED80BBE4BC7B8A85` from CurrentUser `My`, `TrustedPeople`, and `Root`.
+- Deleted scratch directories `C:\osaccept-work` and `%USERPROFILE%\osaccept` after recording the results above.
 - No package bytes or payloads are committed.
