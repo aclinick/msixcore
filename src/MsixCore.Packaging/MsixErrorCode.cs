@@ -42,6 +42,14 @@ public enum MsixErrorCode
     /// <summary>A bundle manifest or package/bundle kind relationship is invalid.</summary>
     BundleSemantics,
 
+    /// <summary>
+    /// A bundle is structurally valid but contains no package applicable to the requested target —
+    /// for example an x64-only bundle resolved against an ARM64 target. Distinct from
+    /// <see cref="BundleSemantics"/> because the bundle is not malformed; the caller asked for
+    /// something it does not carry.
+    /// </summary>
+    NoApplicablePackage,
+
     /// <summary>The package signature or its APPX digest table is malformed.</summary>
     SignatureFormat,
 
