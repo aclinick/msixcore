@@ -30,7 +30,16 @@ public sealed record AppxManifest
     public IReadOnlyList<BundleResource> Resources { get; init; } = [];
 
     /// <summary>The declared capabilities (e.g. <c>runFullTrust</c>, <c>internetClient</c>).</summary>
+    /// <remarks>
+    /// Names only, de-duplicated and in document order. Use <see cref="DeclaredCapabilities"/> when
+    /// the category (general, device, restricted, custom) matters.
+    /// </remarks>
     public IReadOnlyList<string> Capabilities { get; init; } = [];
+
+    /// <summary>
+    /// The declared capabilities with their category and declaring namespace, in document order.
+    /// </summary>
+    public IReadOnlyList<ManifestCapability> DeclaredCapabilities { get; init; } = [];
 
     /// <summary>The declared applications.</summary>
     public IReadOnlyList<ManifestApplication> Applications { get; init; } = [];

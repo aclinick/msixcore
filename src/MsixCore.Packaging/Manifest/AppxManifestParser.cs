@@ -64,6 +64,7 @@ public static partial class AppxManifestParser
 
         PackageIdentity identity = ParseIdentity(root);
         XElement? properties = root.ElementByLocalName("Properties");
+        List<ManifestCapability> capabilities = ParseCapabilities(root);
 
         return new AppxManifest
         {
@@ -75,7 +76,8 @@ public static partial class AppxManifestParser
             IsFramework = ParseFrameworkFlag(properties?.ElementByLocalName("Framework")?.Value),
             IsResourcePackage = ParseFrameworkFlag(properties?.ElementByLocalName("ResourcePackage")?.Value),
             Resources = ParseResources(root),
-            Capabilities = ParseCapabilities(root),
+            Capabilities = ToCapabilityNames(capabilities),
+            DeclaredCapabilities = capabilities,
             Applications = ParseApplications(root),
             TargetDeviceFamilies = ParseTargetDeviceFamilies(root),
             PackageDependencies = ParsePackageDependencies(root),
@@ -123,30 +125,6 @@ public static partial class AppxManifestParser
             _ => ProcessorArchitecture.Unknown,
         };
 
-    private static List<string> ParseCapabilities(XElement root)
-    {
-        XElement? capabilities = root.ElementByLocalName("Capabilities");
-        if (capabilities is null)
-        {
-            return [];
-        }
-
-        // Collect the Name of every capability-like child (Capability, DeviceCapability,
-        // RestrictedCapability, CustomCapability, ...), preserving order and de-duplicating.
-        var names = new List<string>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (XElement child in capabilities.Elements())
-        {
-            string? name = child.AttributeValue("Name");
-            if (!string.IsNullOrEmpty(name) && seen.Add(name))
-            {
-                names.Add(name);
-            }
-        }
-
-        return names;
-    }
-
     private static List<BundleResource> ParseResources(XElement root) =>
         root.ElementByLocalName("Resources")?
             .ElementsByLocalName("Resource")
@@ -187,24 +165,6 @@ public static partial class AppxManifestParser
         }
 
         return result;
-    }
-
-    private static VisualElements ParseVisualElements(XElement? element)
-    {
-        if (element is null)
-        {
-            return new VisualElements();
-        }
-
-        return new VisualElements
-        {
-            DisplayName = element.AttributeValue("DisplayName") ?? string.Empty,
-            Description = element.AttributeValue("Description") ?? string.Empty,
-            Square150x150Logo = NullIfEmpty(element.AttributeValue("Square150x150Logo")),
-            Square44x44Logo = NullIfEmpty(element.AttributeValue("Square44x44Logo")),
-            BackgroundColor = NullIfEmpty(element.AttributeValue("BackgroundColor")),
-            AppListEntry = !string.Equals(element.AttributeValue("AppListEntry"), "none", StringComparison.OrdinalIgnoreCase),
-        };
     }
 
     private static List<TargetDeviceFamily> ParseTargetDeviceFamilies(XElement root)

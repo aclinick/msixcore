@@ -107,13 +107,18 @@ Architecture    : x64
 Display name    : Contoso My App
 Publisher       : Contoso Ltd
 Signed          : False
-Capabilities    : internetClient, runFullTrust
+Capabilities    : internetClient, runFullTrust (restricted), location (device)
 Dependencies    :
   framework   Microsoft.VCLibs.140.00 >= 14.0.30704.0
 Extensions      :
   [App] windows.fileTypeAssociation contoso-doc: .cdoc
 Block map       : 2 files (Sha256)
 ```
+
+A capability is annotated with its category when it is anything other than a plain general-use
+capability — `restricted`, `windows`, `device`, `custom`, or `unknown`. The category comes from the
+XML namespace the capability was declared with, not from its name: `runFullTrust` is restricted
+because it must be declared as `<rescap:Capability>`.
 
 The `Dependencies` and `Extensions` sections are printed only when the package declares any. An
 extension is tagged with the id of the declaring application, or `package` for a package-level
@@ -135,6 +140,18 @@ $ dotnet $DLL inspect ./Contoso.MyApp --json
   "Capabilities": [
     "internetClient",
     "runFullTrust"
+  ],
+  "DeclaredCapabilities": [
+    {
+      "Name": "internetClient",
+      "Kind": "general",
+      "Namespace": "http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    },
+    {
+      "Name": "runFullTrust",
+      "Kind": "restricted",
+      "Namespace": "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    }
   ],
   "Dependencies": [
     {
@@ -160,6 +177,12 @@ $ dotnet $DLL inspect ./Contoso.MyApp --json
 
 `BlockMapFileCount`/`BlockMapHashMethod` are omitted from JSON when the package
 has no readable block map (null values are not serialized).
+
+`Capabilities` remains the flat, de-duplicated list of names it has always been; `DeclaredCapabilities`
+is the additive, categorized view, in document order and without de-duplication. One behaviour did
+change: a recognised capability element with no `Name` is now a hard error rather than being silently
+ignored. An element the parser does not recognise is still reported when it carries a `Name`, and
+still ignored when it does not.
 
 ## `validate`
 

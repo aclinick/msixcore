@@ -121,9 +121,15 @@ publisher hash used in family/full names.
 | Type | Kind | Description |
 |------|------|-------------|
 | `AppxManifestParser` | static class | `Parse(Stream)` / `Parse(XDocument)` → `AppxManifest`. |
-| `AppxManifest` | record | Identity, display/publisher names, description, logo, `IsFramework`, capabilities, applications, target device families, package dependencies, package-level extensions. |
+| `AppxManifest` | record | Identity, display/publisher names, description, logo, `IsFramework`, capabilities (flat `Capabilities` names plus categorized `DeclaredCapabilities`), applications, target device families, package dependencies, package-level extensions. |
 | `ManifestApplication` | record | `Id`, `Executable`, `EntryPoint`, `VisualElements`, `Extensions`. |
-| `VisualElements` | record | `DisplayName`, `Description`, logos, `BackgroundColor`, `AppListEntry`. |
+| `VisualElements` | record | `DisplayName`, `Description`, `Square150x150Logo`, `Square44x44Logo`, `BackgroundColor`, `AppListEntry`, `VisualGroup`, `DefaultTile`, `SplashScreen`, `LockScreen`, `InitialRotationPreferences`. |
+| `DefaultTile` | record | `Wide310x150Logo`, `Square310x310Logo`, `Square71x71Logo`, `ShortName`, `ShowNameOnTiles`. The wide/large/small logos live here, not on `VisualElements`. |
+| `SplashScreen` | record | `Image`, `BackgroundColor`, `IsOptional` (`uap5:Optional`). |
+| `LockScreen` | record | `BadgeLogo`, `Notification`. |
+| `ManifestCapability` | record | `Name`, `Kind`, `Namespace`, `Devices`. |
+| `CapabilityKind` | enum | `Unknown`, `General`, `Device`, `Restricted`, `Windows`, `Custom` — derived from the declaring namespace, which is where MSIX carries the distinction. |
+| `CapabilityDevice` | record | `Id`, `Functions` — the `Device`/`Function` children of a `DeviceCapability`. |
 | `TargetDeviceFamily` | record | `Name`, `MinVersion`, `MaxVersionTested`. |
 | `PackageDependency` | record | `Kind`, `Name`, `Publisher`, `MinVersion`, `MaxMajorVersionTested`, `IsOptional`. See [manifest dependencies](manifest-dependencies.md). |
 | `PackageDependencyKind` | enum | `Framework`, `MainPackage`, `HostRuntime`. |

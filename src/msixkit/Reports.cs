@@ -25,6 +25,12 @@ internal sealed record InspectionReport
     public required IReadOnlyList<string> Capabilities { get; init; }
 
     /// <summary>
+    /// The declared capabilities with their category and declaring namespace. Additive to schema
+    /// version 1; <see cref="Capabilities"/> remains the flat name list for existing consumers.
+    /// </summary>
+    public IReadOnlyList<CapabilityReport> DeclaredCapabilities { get; init; } = [];
+
+    /// <summary>
     /// The declared package-to-package dependencies. Additive to schema version 1: consumers that
     /// predate it simply ignore the property.
     /// </summary>
@@ -41,6 +47,24 @@ internal sealed record InspectionReport
     public int? BlockMapFileCount { get; init; }
 
     public string? BlockMapHashMethod { get; init; }
+}
+
+/// <summary>One declared capability, as reported by <c>inspect</c>.</summary>
+internal sealed record CapabilityReport
+{
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// The category: <c>general</c>, <c>device</c>, <c>restricted</c>, <c>windows</c>,
+    /// <c>custom</c>, or <c>unknown</c>.
+    /// </summary>
+    public required string Kind { get; init; }
+
+    /// <summary>
+    /// The XML namespace the capability was declared with, or <see langword="null"/> when the
+    /// element was unqualified.
+    /// </summary>
+    public string? Namespace { get; init; }
 }
 
 /// <summary>One declared <c>Extension</c>, as reported by <c>inspect</c>.</summary>

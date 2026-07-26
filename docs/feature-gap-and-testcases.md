@@ -241,14 +241,28 @@ are hashed while extracted and committed only after validation; progress is surf
   `IPackageHandler` handlers ordered on add / reversed on remove. Assert (future) a fake handler's
   call order once the pipeline is wired.
 
-### P1-6. Richer VisualElements / capability categorization
-**Gap:** VisualElements omits many logos/tiles; capabilities aren't categorized by type/namespace.
+### P1-6. Richer VisualElements / capability categorization — **IMPLEMENTED**
+**Gap (closed):** VisualElements omitted many logos/tiles; capabilities weren't categorized by
+type/namespace.
 
-**Test cases:**
+`VisualElements` now carries `VisualGroup`, `DefaultTile` (wide/large/small logos, `ShortName`,
+`ShowNameOnTiles`), `SplashScreen`, `LockScreen`, and `InitialRotationPreferences`.
+`AppxManifest.DeclaredCapabilities` categorizes every capability by the namespace it was declared
+with (`ManifestCapability` + `CapabilityKind`), and `msixkit inspect` annotates gated capabilities in
+both text and JSON. `AppxManifest.Capabilities` keeps its shape — the flat, de-duplicated names in
+document order — with one intentional behaviour change: a recognised capability element that declares
+no `Name` is now rejected instead of silently ignored.
+
+**Test cases (all covered by `VisualElementsAndCapabilityTests` / `InspectCapabilityTests`):**
 - **TC-P1-6a:** Manifest with wide/large/small logos, `DefaultTile`, `SplashScreen`; assert each parsed.
 - **TC-P1-6b:** Capabilities mixing `Capability`, `DeviceCapability`, `rescap:Capability`,
   `uap:Capability`, `CustomCapability`; assert each is categorized (not just name-collected).
 - **TC-P1-6c (restricted):** `runFullTrust` (restricted) is flagged as restricted-capability.
+
+**Deliberately not modelled:** `uap:TileUpdate` and the holographic / `uap5:MixedRealityModel` tile
+content — neither affects deployment or inspection of a desktop package, and both would grow the
+model surface for no consumer. Capability *names* are not validated against the per-namespace
+enumerations; that belongs to the schema validator.
 
 ---
 
