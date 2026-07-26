@@ -115,6 +115,35 @@ Ref: [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview).
 
 ---
 
+## Investigated and found not applicable
+
+Findings carried over from the upstream C++ implementation that do **not** reproduce in this port.
+Recorded here so a future upstream comparison does not re-derive them as open gaps.
+
+### Decompression quota / "zip bomb" on the unpack path — NOT APPLICABLE
+
+**Upstream defect:** the C++ `InflateStream` applies no decompression quota, so a crafted entry can
+inflate without bound.
+
+**Why it does not carry over:** the .NET `ZipArchive` reader stops inflating at the uncompressed size
+declared in the ZIP central directory. Verified empirically: an entry holding 1 MB of compressed
+zeros, patched so its central-directory uncompressed size reads 64, yields exactly **64 bytes** with
+no exception. Expansion is therefore already bounded by the runtime, and `msixmgr unpack` cannot be
+made to inflate without limit.
+
+**Why no size check was added:** because the runtime stops exactly at the declared size, the bytes
+produced always equal the declared value, so an understated size is self-consistent and is invisible
+to any size comparison in the extractor. Tampering of this kind is detectable only by content hashing
+— which is what `validate` (block-map verification) and `PackageExtractor.ExtractAndVerify` already
+do. Adding a bound to `PackageExtractor.Extract` would be dead code asserting a protection it does
+not provide.
+
+**Residual, accepted:** an honest package that declares a genuinely huge uncompressed size will
+extract to that size. Capping it is a disk-space policy, not a security boundary, so it is left to
+the OS per the project's "security is the OS domain" principle.
+
+---
+
 ## P1 — High-value modern MSIX surface
 
 ### P1-1. Bundle reading — IMPLEMENTED
