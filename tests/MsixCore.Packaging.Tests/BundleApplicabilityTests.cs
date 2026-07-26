@@ -76,6 +76,33 @@ public class BundleApplicabilityTests
     }
 
     [Fact]
+    public void Select_X86OnlyBundle_RemainsInstallableOn64BitTargets()
+    {
+        // Our tools are 64-bit only, but x86 is still a fully supported *package* architecture:
+        // 64-bit Windows runs x86 packages, and an x86-only bundle must keep resolving. Do not
+        // remove ProcessorArchitecture.X86 from the preference table when narrowing host support.
+        const string x86Only =
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle" SchemaVersion="4.0">
+              <Identity Name="Contoso.MyApp" Publisher="CN=Contoso" Version="1.2.3.4" />
+              <Packages>
+                <Package Type="application" Version="1.2.3.4" Architecture="x86" FileName="MyApp_x86.msix" />
+              </Packages>
+            </Bundle>
+            """;
+
+        foreach (ProcessorArchitecture target in new[] { ProcessorArchitecture.X64, ProcessorArchitecture.Arm64 })
+        {
+            BundleApplicabilityResult result = BundleApplicability.Select(
+                Parse(x86Only),
+                new BundleTarget { Architecture = target });
+
+            Assert.Equal("MyApp_x86.msix", result.ApplicationPackage.FileName);
+        }
+    }
+
+    [Fact]
     public void Select_X64Target_FallsBackToX86UnderWow64()
     {
         const string x86Only =

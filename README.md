@@ -79,6 +79,14 @@ or CI/CD code-signing services.
 ## Requirements
 
 - .NET 10 SDK (pinned in `global.json`; `10.0.100`, `rollForward: latestMajor`).
+- A 64-bit host: **x64 or arm64**. 32-bit hosts are not supported, since 64-bit
+  Windows is the default everywhere the tools run.
+
+This is a statement about the machine running the tools, **not** about the
+packages they handle. `x86` remains a fully supported *package* architecture:
+packages that are x86, or that carry x86 binaries, are read, validated, authored
+and resolved exactly like any other. A 64-bit Windows machine installs x86
+packages, so an x86-only bundle still resolves against an x64 or arm64 target.
 
 ## Build & test
 

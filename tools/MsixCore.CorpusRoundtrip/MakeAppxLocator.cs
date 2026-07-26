@@ -15,8 +15,11 @@ public sealed class MakeAppxLocator
     /// </remarks>
     public static string? Find()
     {
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() || ExecutableArchitectures().Length == 0)
         {
+            // An unsupported host can run nothing, so the tool is absent by definition. Checking
+            // here rather than only per-candidate keeps CanExecute's fail-open policy — which
+            // accepts a file it cannot parse — from letting a PATH candidate through.
             return null;
         }
 
@@ -58,19 +61,18 @@ public sealed class MakeAppxLocator
 
     /// <summary>The SDK bin architectures this host can execute, best first.</summary>
     /// <remarks>
-    /// Windows on ARM64 emulates x86 on every version, but x64 emulation arrived in Windows 11
-    /// (build 22000). Listing x64 on Windows 10 ARM64 would recreate the very failure this ranking
-    /// exists to avoid.
+    /// Only arm64 and x64 are supported hosts. An unsupported host reports nothing runnable, so
+    /// callers treat the tool as absent rather than starting a binary that cannot run. Windows on
+    /// ARM64 gains x64 emulation in Windows 11 (build 22000); before that it has only x86
+    /// emulation, which is not a host architecture we support.
     /// </remarks>
     internal static string[] ExecutableArchitectures() => RuntimeInformation.OSArchitecture switch
     {
         Architecture.Arm64 when OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) =>
-            ["arm64", "x64", "x86"],
-        Architecture.Arm64 => ["arm64", "x86"],
-        Architecture.X64 => ["x64", "x86"],
-        Architecture.X86 => ["x86"],
-        Architecture.Arm => ["arm", "x86"],
-        _ => ["x64", "x86"],
+            ["arm64", "x64"],
+        Architecture.Arm64 => ["arm64"],
+        Architecture.X64 => ["x64"],
+        _ => [],
     };
 
     private static string? FindOnPath()
@@ -112,6 +114,11 @@ public sealed class MakeAppxLocator
     private static bool CanExecute(string path)
     {
         string[] runnable = ExecutableArchitectures();
+        if (runnable.Length == 0)
+        {
+            return false;
+        }
+
         try
         {
             using FileStream stream = File.OpenRead(path);
