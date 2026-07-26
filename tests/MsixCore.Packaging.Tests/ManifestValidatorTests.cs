@@ -232,6 +232,21 @@ public class ManifestValidatorTests
         Assert.Equal("Identity/@Publisher", SingleIssue(result, ManifestValidationRule.PublisherMalformed).Target);
     }
 
+    // TC-VAL-12d
+    [Theory]
+    [InlineData("CN=Contoso&#xA;")]
+    [InlineData("&#x20;CN=Contoso")]
+    [InlineData("CN=Contoso&#x9;")]
+    public void Validate_PublisherWithSurroundingWhitespace_IsMalformed(string publisher)
+    {
+        // The unquoted value class admits whitespace, but ST_Publisher_2010_v2 restricts
+        // ST_NonEmptyString, whose pattern forbids a leading or trailing whitespace character.
+        ManifestValidationResult result = Validate(BuildManifest(publisher: publisher));
+
+        Assert.False(result.IsValid);
+        Assert.Equal("Identity/@Publisher", SingleIssue(result, ManifestValidationRule.PublisherMalformed).Target);
+    }
+
     // TC-VAL-13
     [Fact]
     public void Validate_PublisherLongerThanTheSchemaMaximum_IsMalformed()

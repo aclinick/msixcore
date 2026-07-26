@@ -52,9 +52,9 @@ so the namespace is reported, and its content is simply not validated.
 | Rule | Severity | Checks |
 |------|----------|--------|
 | `IdentifierMalformed` | Error | `Identity/@Name`, `Identity/@ResourceId`, and every dependency `Name` contain only letters, digits, `.`, and `-`. |
-| `IdentifierLength` | Error | `Identity/@Name` and `PackageDependency`/`MainPackageDependency` names are 3–50 characters; `Identity/@ResourceId` is 1–30. |
+| `IdentifierLength` | Error | `Identity/@Name` and `PackageDependency`/`MainPackageDependency` names are 3–50 characters; `Identity/@ResourceId` is 1–30; a `HostRuntimeDependency` name is 1–32767. |
 | `IdentifierReserved` | Error | A package identifier is not `.`/`..`, a DOS device name (`con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9`), does not start with one of those followed by a period or with `xn--`, and does not end with a period. |
-| `PublisherMalformed` | Error | `Identity/@Publisher` matches the schema's `ST_Publisher_2010_v2` pattern — a `", "`-separated list of `attribute=value` pairs drawn from a fixed attribute set (or a numeric `OID.n.n…`), each value either a quoted string or a non-empty run excluding `,+="<>#;` — and is 1–8192 characters. |
+| `PublisherMalformed` | Error | `Identity/@Publisher` matches the schema's `ST_Publisher_2010_v2` pattern — a `", "`-separated list of `attribute=value` pairs drawn from a fixed attribute set (or a numeric `OID.n.n…`), each value either a quoted string or a non-empty run excluding `,+="<>#;` — is 1–8192 characters, and has no leading or trailing whitespace. |
 | `VersionRangeInverted` | Error | A `PackageDependency`'s `MinVersion` major does not exceed its `MaxMajorVersionTested`, and a `TargetDeviceFamily`'s `MinVersion` does not exceed its `MaxVersionTested`. |
 | `ConflictingPackageType` | Error | A package is not both a framework and a resource package, and an optional package is neither. |
 | `FrameworkContent` | Error | A framework package declares no `Applications` and no `Capabilities`. |
@@ -68,10 +68,10 @@ so the namespace is reported, and its content is simply not validated.
 Identifier rules are stricter than a character-class check because a package
 identifier becomes a directory name on disk, and Windows still reserves the DOS
 device names at the filesystem level. A `HostRuntimeDependency/@Name` is exempt
-from the length and reserved-name rules: the schema types it as
+from the 3–50 bound and the reserved-name rule: the schema types it as
 `ST_AsciiIdentifier`, not `ST_PackageName`, so it shares the character set but
-has neither the 3–50 bound nor the reserved-name prohibition (it keeps
-`ST_NonEmptyString`'s inherited 1–32767 bound).
+carries `ST_NonEmptyString`'s inherited 1–32767 bound instead and has no
+reserved-name prohibition.
 
 Capability uniqueness follows the foundation schema's `xs:unique` constraints
 literally, and they are not per element type:

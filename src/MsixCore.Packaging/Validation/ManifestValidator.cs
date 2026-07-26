@@ -40,6 +40,9 @@ public static partial class ManifestValidator
     private const int MinAsciiIdentifierLength = 1;
     private const int MaxAsciiIdentifierLength = 32767;
 
+    /// <summary>The whitespace characters XSD's <c>\s</c> matches.</summary>
+    private static readonly char[] XmlWhitespace = [' ', '\t', '\r', '\n'];
+
     /// <summary>DTD processing off and no resolver, to avoid XXE and entity-expansion attacks.</summary>
     private static readonly XmlReaderSettings SafeReaderSettings = new()
     {
@@ -324,6 +327,18 @@ public static partial class ManifestValidator
                 publisher.Length == 0
                     ? "The publisher is empty; a distinguished name is required."
                     : $"The publisher is {publisher.Length} characters; the schema allows at most {MaxPublisherLength}."));
+            return;
+        }
+
+        // ST_Publisher_2010_v2 restricts ST_NonEmptyString, whose own pattern forbids leading and
+        // trailing whitespace. The derived pattern does not repeat that, and its unquoted value class
+        // happens to admit whitespace, so the base facet has to be enforced separately.
+        if (XmlWhitespace.Contains(publisher[0]) || XmlWhitespace.Contains(publisher[^1]))
+        {
+            issues.Add(Error(
+                ManifestValidationRule.PublisherMalformed,
+                Target,
+                "The publisher has leading or trailing whitespace, which the schema's base type forbids."));
             return;
         }
 
