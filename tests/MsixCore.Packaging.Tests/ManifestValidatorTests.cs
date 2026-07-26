@@ -208,6 +208,7 @@ public class ManifestValidatorTests
     [InlineData("X21Address=1234")]
     [InlineData("OID.2.5.4.15=Private Organization, CN=Contoso")]
     [InlineData("dnQualifier=abc")]
+    [InlineData("CN=&quot;Contoso, Ltd.&quot;")]
     public void Validate_PublisherMatchingTheSchemaPattern_IsAccepted(string publisher)
     {
         // The accepted forms come straight from the ST_Publisher_2010_v2 facet: a fixed set of
@@ -216,6 +217,19 @@ public class ManifestValidatorTests
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Issues);
+    }
+
+    // TC-VAL-12c
+    [Fact]
+    public void Validate_PublisherWithATrailingNewline_IsMalformed()
+    {
+        // An XSD pattern matches the whole value. .NET's '$' would also match before a trailing
+        // newline, so the pattern is anchored with \A and \z instead. A quoted value is the case that
+        // exposes it: the unquoted value class permits a newline, but '".*"' does not.
+        ManifestValidationResult result = Validate(BuildManifest(publisher: "CN=&quot;Contoso&quot;&#xA;"));
+
+        Assert.False(result.IsValid);
+        Assert.Equal("Identity/@Publisher", SingleIssue(result, ManifestValidationRule.PublisherMalformed).Target);
     }
 
     // TC-VAL-13
@@ -459,6 +473,23 @@ public class ManifestValidatorTests
         Assert.Equal(
             "Dependencies/HostRuntimeDependency[Bad Host]/@Name",
             SingleIssue(result, ManifestValidationRule.IdentifierMalformed).Target);
+    }
+
+    // TC-VAL-24e
+    [Fact]
+    public void Validate_HostRuntimeDependencyLongerThanTheSchemaMaximum_IsTooLong()
+    {
+        // ST_AsciiIdentifier inherits ST_NonEmptyString's 1..32767 bound; only the 3..50 package-name
+        // bound is inapplicable here.
+        string name = new('a', 32768);
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap10=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/10\"",
+            dependencies: $"""<uap10:HostRuntimeDependency Name="{name}" Publisher="CN=Contoso" MinVersion="1.0.0.0" />"""));
+
+        Assert.False(result.IsValid);
+        Assert.Equal(
+            $"Dependencies/HostRuntimeDependency[{name}]/@Name",
+            SingleIssue(result, ManifestValidationRule.IdentifierLength).Target);
     }
 
     // TC-VAL-25

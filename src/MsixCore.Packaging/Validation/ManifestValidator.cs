@@ -33,6 +33,13 @@ public static partial class ManifestValidator
     private const int MaxResourceIdLength = 30;
     private const int MaxApplicationIdLength = 64;
 
+    /// <summary>
+    /// Length facets inherited by <c>ST_AsciiIdentifier</c> from <c>ST_NonEmptyString</c>, which is
+    /// what a <c>HostRuntimeDependency/@Name</c> is typed as.
+    /// </summary>
+    private const int MinAsciiIdentifierLength = 1;
+    private const int MaxAsciiIdentifierLength = 32767;
+
     /// <summary>DTD processing off and no resolver, to avoid XXE and entity-expansion attacks.</summary>
     private static readonly XmlReaderSettings SafeReaderSettings = new()
     {
@@ -88,7 +95,9 @@ public static partial class ManifestValidator
 
     /// <summary>
     /// The schema's <c>ST_Publisher_2010_v2</c> pattern, transcribed from
-    /// <c>AppxManifestTypes.xsd</c>. Anchored because XSD patterns match the whole value.
+    /// <c>AppxManifestTypes.xsd</c>. Anchored with <c>\A</c>/<c>\z</c> rather than <c>^</c>/<c>$</c>
+    /// because XSD patterns match the whole value, whereas .NET's <c>$</c> also matches before a
+    /// trailing newline.
     /// </summary>
     /// <remarks>
     /// Matched non-backtracking so that a hostile publisher string cannot cause catastrophic
@@ -96,7 +105,7 @@ public static partial class ManifestValidator
     /// that goes exponential under a backtracking engine.
     /// </remarks>
     private static readonly Regex PublisherPattern = new(
-        $"^{RelativeDistinguishedName}(, ({RelativeDistinguishedName}))*$",
+        $@"\A{RelativeDistinguishedName}(, ({RelativeDistinguishedName}))*\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     /// <summary>Validates the semantic rules that can be checked from the parsed manifest alone.</summary>
@@ -221,13 +230,7 @@ public static partial class ManifestValidator
         int maxLength,
         List<ManifestValidationIssue> issues)
     {
-        if (value.Length < minLength || value.Length > maxLength)
-        {
-            issues.Add(Error(
-                ManifestValidationRule.IdentifierLength,
-                target,
-                $"'{value}' is {value.Length} characters; the schema allows {minLength} to {maxLength}."));
-        }
+        ValidateIdentifierLength(value, target, minLength, maxLength, issues);
 
         if (!ValidateIdentifierCharacters(value, target, issues))
         {
@@ -237,6 +240,25 @@ public static partial class ManifestValidator
         if (ReservedName(value) is { } reason)
         {
             issues.Add(Error(ManifestValidationRule.IdentifierReserved, target, $"'{value}' {reason}"));
+        }
+    }
+
+    /// <summary>
+    /// Checks an identifier's length against the schema facets that apply to it.
+    /// </summary>
+    private static void ValidateIdentifierLength(
+        string value,
+        string target,
+        int minLength,
+        int maxLength,
+        List<ManifestValidationIssue> issues)
+    {
+        if (value.Length < minLength || value.Length > maxLength)
+        {
+            issues.Add(Error(
+                ManifestValidationRule.IdentifierLength,
+                target,
+                $"'{value}' is {value.Length} characters; the schema allows {minLength} to {maxLength}."));
         }
     }
 
@@ -323,11 +345,17 @@ public static partial class ManifestValidator
             string target = $"Dependencies/{DependencyElementName(dependency.Kind)}[{dependency.Name}]";
 
             // Only PackageDependency and MainPackageDependency names are package names. A
-            // HostRuntimeDependency name is a plain ST_AsciiIdentifier: same character set, but no
-            // 3..50 bound and no reserved-name rule, so holding it to those would reject valid
-            // manifests.
+            // HostRuntimeDependency name is a plain ST_AsciiIdentifier: same character set, but the
+            // inherited 1..32767 bound instead of 3..50 and no reserved-name rule, so holding it to
+            // those would reject valid manifests.
             if (dependency.Kind == PackageDependencyKind.HostRuntime)
             {
+                ValidateIdentifierLength(
+                    dependency.Name,
+                    target + "/@Name",
+                    MinAsciiIdentifierLength,
+                    MaxAsciiIdentifierLength,
+                    issues);
                 ValidateIdentifierCharacters(dependency.Name, target + "/@Name", issues);
             }
             else

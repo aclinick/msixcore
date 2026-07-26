@@ -70,7 +70,8 @@ identifier becomes a directory name on disk, and Windows still reserves the DOS
 device names at the filesystem level. A `HostRuntimeDependency/@Name` is exempt
 from the length and reserved-name rules: the schema types it as
 `ST_AsciiIdentifier`, not `ST_PackageName`, so it shares the character set but
-has neither the 3–50 bound nor the reserved-name prohibition.
+has neither the 3–50 bound nor the reserved-name prohibition (it keeps
+`ST_NonEmptyString`'s inherited 1–32767 bound).
 
 Capability uniqueness follows the foundation schema's `xs:unique` constraints
 literally, and they are not per element type:
