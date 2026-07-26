@@ -73,8 +73,10 @@ public readonly record struct Bcp47Tag
     /// <summary>Parses a BCP-47 language tag.</summary>
     /// <param name="tag">The tag to parse (e.g. <c>zh-Hans-CN</c>). Case-insensitive.</param>
     /// <returns>
-    /// The parsed tag, or <see langword="null"/> when <paramref name="tag"/> is null, empty, or
-    /// whitespace. Malformed tags are not rejected; unrecognized subtags are ignored.
+    /// The parsed tag, or <see langword="null"/> when <paramref name="tag"/> is null, empty,
+    /// whitespace, or does not begin with a 2-8 letter primary language subtag (which excludes
+    /// private-use and grandfathered forms such as <c>x-private</c> and <c>i-klingon</c>).
+    /// Otherwise unrecognized trailing subtags are ignored rather than rejected.
     /// </returns>
     public static Bcp47Tag? Parse(string? tag)
     {
@@ -84,7 +86,7 @@ public readonly record struct Bcp47Tag
         }
 
         string[] parts = tag.Trim().Split('-', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0)
+        if (parts.Length == 0 || !IsPrimaryLanguage(parts[0]))
         {
             return null;
         }
@@ -139,9 +141,11 @@ public readonly record struct Bcp47Tag
             return LanguageMatch.None;
         }
 
-        // A differing explicit script is a genuine mismatch: zh-Hans resources are not usable by a
-        // zh-Hant reader. An absent script on either side is treated as compatible.
-        if (requested.Script.Length != 0 && offered.Script.Length != 0 && requested.Script != offered.Script)
+        // Scripts must match exactly, including empty against non-empty. 'sr' is not interchangeable
+        // with 'sr-Latn' or 'sr-Cyrl' — treating an absent script as a wildcard would hand a reader
+        // a script they cannot read. This matches upstream, and suppress-script inference (which is
+        // what would let 'sr' resolve to a default script) is deliberately not implemented.
+        if (requested.Script != offered.Script)
         {
             return LanguageMatch.None;
         }
@@ -181,4 +185,13 @@ public readonly record struct Bcp47Tag
     private static bool IsRegion(string part) =>
         (part.Length == 2 && part.All(char.IsAsciiLetter))
         || (part.Length == 3 && part.All(char.IsAsciiDigit));
+
+    /// <summary>
+    /// A primary language subtag is 2-8 ASCII letters. Rejecting anything else keeps private-use
+    /// (<c>x-private</c>) and grandfathered (<c>i-klingon</c>) tags out: their single-letter prefix
+    /// would otherwise become the language, making every <c>x-*</c> tag compare equal to every
+    /// other.
+    /// </summary>
+    private static bool IsPrimaryLanguage(string part) =>
+        part.Length is >= 2 and <= 8 && part.All(char.IsAsciiLetter);
 }

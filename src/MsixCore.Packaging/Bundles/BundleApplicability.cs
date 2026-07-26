@@ -92,23 +92,27 @@ public static class BundleApplicability
                 "The bundle contains no application package.");
         }
 
-        if (options.HasFlag(BundleApplicabilityOptions.SkipArchitecture))
-        {
-            return applications;
-        }
+        bool skipArchitecture = options.HasFlag(BundleApplicabilityOptions.SkipArchitecture);
 
         if (!ArchitecturePreference.TryGetValue(target.Architecture, out ProcessorArchitecture[]? preference))
         {
+            if (skipArchitecture)
+            {
+                return applications;
+            }
+
             throw MsixError.Format(
                 MsixErrorCode.NoApplicablePackage,
                 $"Bundle applicability cannot be resolved for target architecture '{target.Architecture}'.");
         }
 
-        // Rank by position in the preference list; anything absent from it cannot run.
+        // Rank by position in the preference list; anything absent from it cannot run. Under
+        // SkipArchitecture, unrunnable packages are kept rather than dropped, but the ranking still
+        // applies so the chosen package remains the best one for the target.
         List<BundlePackageEntry> candidates = applications
             .Select(p => (Package: p, Rank: Array.IndexOf(preference, p.Architecture)))
-            .Where(x => x.Rank >= 0)
-            .OrderBy(x => x.Rank)
+            .Where(x => skipArchitecture || x.Rank >= 0)
+            .OrderBy(x => x.Rank >= 0 ? x.Rank : int.MaxValue)
             .Select(x => x.Package)
             .ToList();
 
@@ -135,34 +139,34 @@ public static class BundleApplicability
             .Select(t => t!.Value)
             .ToList();
 
-        var selected = new List<BundlePackageEntry>();
-        var languageFallbacks = new List<BundlePackageEntry>();
-        bool anyStrongLanguageMatch = false;
+        // Selection is tracked by manifest index, not by value. BundlePackageEntry is a record, so
+        // a value-based lookup would conflate two structurally identical Package entries.
+        var selected = new List<int>();
+        var languageFallbacks = new List<int>();
+        bool anyLanguageMatched = false;
 
-        List<BundlePackageEntry> resources = manifest.Packages
-            .Where(p => p.Type == BundlePackageType.Resource)
-            .ToList();
-
-        int?[] availableScales = resources
-            .SelectMany(p => p.Resources)
-            .Select(r => ParseScale(r.Scale))
-            .Where(s => s is not null)
-            .Distinct()
-            .ToArray();
-
-        int? chosenScale = ChooseScale(target.Scale, availableScales);
-
-        foreach (BundlePackageEntry resource in resources)
+        // Pass 1: language and DirectX. Scale is resolved afterwards, over only the packages that
+        // survive here — resolving it across the whole bundle first can pick a scale that no
+        // remaining package offers and then discard everything. For example a bundle of
+        // (en, scale-100) and (fr, scale-200) resolved for en at scale 150 would globally choose
+        // 200, then drop the English package on scale and the French one on language, returning
+        // nothing.
+        for (int index = 0; index < manifest.Packages.Count; index++)
         {
-            // A resource package with no qualifiers at all carries unconditional payload.
-            if (resource.Resources.Count == 0)
+            BundlePackageEntry resource = manifest.Packages[index];
+            if (resource.Type != BundlePackageType.Resource)
             {
-                selected.Add(resource);
                 continue;
             }
 
-            if (!ScaleApplies(resource, chosenScale, options)
-                || !DXFeatureLevelApplies(resource, target, options))
+            // A resource package with no qualifiers at all carries unconditional payload.
+            if (resource.Resources.Count == 0)
+            {
+                selected.Add(index);
+                continue;
+            }
+
+            if (!DXFeatureLevelApplies(resource, target, options))
             {
                 continue;
             }
@@ -175,27 +179,44 @@ public static class BundleApplicability
 
             if (match == LanguageMatch.Variant)
             {
-                languageFallbacks.Add(resource);
+                languageFallbacks.Add(index);
                 continue;
             }
 
-            if (HasLanguageQualifier(resource))
+            // Only a real language match suppresses the fallbacks. An 'und' package carries
+            // language-neutral payload, so counting it here would leave a fr-FR user with no French
+            // at all whenever the bundle also happens to ship an 'und' package.
+            if (match is LanguageMatch.Exact or LanguageMatch.Neutral)
             {
-                anyStrongLanguageMatch = true;
+                anyLanguageMatched = true;
             }
 
-            selected.Add(resource);
+            selected.Add(index);
         }
 
         // Sibling/child-region packages are a last resort: include them only when nothing matched
         // the request directly, so a fr-FR user does not also receive fr-CA.
-        if (!anyStrongLanguageMatch)
+        if (!anyLanguageMatched)
         {
             selected.AddRange(languageFallbacks);
         }
 
-        // Restore bundle-manifest order, which callers rely on for deterministic output.
-        return manifest.Packages.Where(selected.Contains).ToList();
+        selected.Sort();
+
+        // Pass 2: resolve the requested scale against what the surviving packages actually offer.
+        int?[] availableScales = selected
+            .SelectMany(i => manifest.Packages[i].Resources)
+            .Select(r => ParseScale(r.Scale))
+            .Where(s => s is not null)
+            .Distinct()
+            .ToArray();
+
+        int? chosenScale = ChooseScale(target.Scale, availableScales);
+
+        return selected
+            .Where(i => ScaleApplies(manifest.Packages[i], chosenScale, options))
+            .Select(i => manifest.Packages[i])
+            .ToList();
     }
 
     private static bool HasLanguageQualifier(BundlePackageEntry resource) =>

@@ -40,6 +40,24 @@ public class Bcp47TagTests
     public void Parse_EmptyInput_ReturnsNull(string? input) => Assert.Null(Bcp47Tag.Parse(input));
 
     [Theory]
+    // Without this, the single-letter prefix becomes the language and every x-* tag compares equal.
+    [InlineData("x-private")]
+    [InlineData("i-klingon")]
+    [InlineData("123")]
+    [InlineData("toolongsubtag")]
+    public void Parse_NonLanguagePrimarySubtag_ReturnsNull(string input) =>
+        Assert.Null(Bcp47Tag.Parse(input));
+
+    [Theory]
+    // An absent script is not a wildcard: 'sr' must not be satisfied by either written form.
+    [InlineData("sr", "sr-Latn")]
+    [InlineData("sr", "sr-Cyrl")]
+    [InlineData("sr-Latn", "sr")]
+    [InlineData("zh-Hans", "zh-Hant")]
+    public void Compare_DifferingScript_IsNoMatch(string requested, string offered) =>
+        Assert.Equal(LanguageMatch.None, Bcp47Tag.Compare(Tag(requested), Tag(offered)));
+
+    [Theory]
     // Chinese is conventionally written without a script, so region implies it.
     [InlineData("zh-CN", "zh", "hans", "cn")]
     [InlineData("zh-TW", "zh", "hant", "tw")]

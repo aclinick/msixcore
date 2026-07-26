@@ -349,7 +349,42 @@ public class BundleApplicabilityTests
     }
 
     [Fact]
-    public void Select_SkipAll_ReturnsEveryPackage()
+    public void Select_ScaleOfNonSelectedLanguage_DoesNotEliminateEverything()
+    {
+        // Scale must be resolved among the packages that survive language filtering. Resolving it
+        // over the whole bundle first would choose 200 (round up from 150) because of the French
+        // package, then drop the English package on scale and the French one on language.
+        const string bundle =
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle" SchemaVersion="4.0">
+              <Identity Name="Contoso.MyApp" Publisher="CN=Contoso" Version="1.2.3.4" />
+              <Packages>
+                <Package Type="application" Version="1.2.3.4" Architecture="x64" FileName="MyApp_x64.msix" />
+                <Package Type="resource" Version="1.2.3.4" ResourceId="en" FileName="en-100.msix">
+                  <Resources><Resource Language="en" Scale="100" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.2.3.4" ResourceId="fr" FileName="fr-200.msix">
+                  <Resources><Resource Language="fr" Scale="200" /></Resources>
+                </Package>
+              </Packages>
+            </Bundle>
+            """;
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(bundle),
+            new BundleTarget
+            {
+                Architecture = ProcessorArchitecture.X64,
+                Languages = ["en"],
+                Scale = 150,
+            });
+
+        Assert.Equal(["en-100.msix"], FileNames(result.ResourcePackages));
+    }
+
+    [Fact]
+    public void Select_SkipAll_ReturnsEveryResourcePackage()
     {
         BundleManifest manifest = Parse(ResourceBundle);
 
@@ -364,6 +399,21 @@ public class BundleApplicabilityTests
             BundleApplicabilityOptions.All);
 
         Assert.Equal(manifest.Packages.Count, result.ApplicablePackages.Count);
+    }
+
+    [Fact]
+    public void Select_SkipAll_StillReturnsOneApplicationPackage()
+    {
+        // 'All' means "apply no qualifier", not "install everything": a bundle's application
+        // packages are alternatives to one another, so only one can ever be installed.
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(MultiArchBundle),
+            new BundleTarget { Architecture = ProcessorArchitecture.Arm64 },
+            BundleApplicabilityOptions.All);
+
+        Assert.Equal("MyApp_arm64.msix", result.ApplicationPackage!.FileName);
+        Assert.Equal(3, result.CandidateApplicationPackages.Count);
+        Assert.Single(result.ApplicablePackages);
     }
 
     [Fact]
@@ -400,6 +450,159 @@ public class BundleApplicabilityTests
         Assert.Equal(
             ["MyApp_x64.msix", "lang-en-US.msix", "lang-fr-FR.msix", "scale-200.msix", "scale-400.msix"],
             FileNames(result.ApplicablePackages));
+    }
+
+    [Fact]
+    public void Select_UndeterminedPackage_DoesNotSuppressLanguageFallback()
+    {
+        // 'und' carries language-neutral payload, so it must not count as "French was found" and
+        // leave a fr-FR user with no French at all.
+        const string undAndSibling =
+            """
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle">
+              <Identity Name="A" Publisher="CN=C" Version="1.0.0.0" />
+              <Packages>
+                <Package Type="application" Version="1.0.0.0" Architecture="x64" FileName="a.msix" />
+                <Package Type="resource" Version="1.0.0.0" ResourceId="und" FileName="und.msix">
+                  <Resources><Resource Language="und" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.0.0.0" ResourceId="fr-CA" FileName="fr-CA.msix">
+                  <Resources><Resource Language="fr-CA" /></Resources>
+                </Package>
+              </Packages>
+            </Bundle>
+            """;
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(undAndSibling),
+            new BundleTarget { Architecture = ProcessorArchitecture.X64, Languages = ["fr-FR"] });
+
+        Assert.Equal(["und.msix", "fr-CA.msix"], FileNames(result.ResourcePackages));
+    }
+
+    [Fact]
+    public void Select_ExactMatchPresent_StillSuppressesSiblingRegion()
+    {
+        // The mirror of the 'und' case: a real French match must suppress fr-CA.
+        const string undAndExact =
+            """
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle">
+              <Identity Name="A" Publisher="CN=C" Version="1.0.0.0" />
+              <Packages>
+                <Package Type="application" Version="1.0.0.0" Architecture="x64" FileName="a.msix" />
+                <Package Type="resource" Version="1.0.0.0" ResourceId="und" FileName="und.msix">
+                  <Resources><Resource Language="und" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.0.0.0" ResourceId="fr-FR" FileName="fr-FR.msix">
+                  <Resources><Resource Language="fr-FR" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.0.0.0" ResourceId="fr-CA" FileName="fr-CA.msix">
+                  <Resources><Resource Language="fr-CA" /></Resources>
+                </Package>
+              </Packages>
+            </Bundle>
+            """;
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(undAndExact),
+            new BundleTarget { Architecture = ProcessorArchitecture.X64, Languages = ["fr-FR"] });
+
+        Assert.Equal(["und.msix", "fr-FR.msix"], FileNames(result.ResourcePackages));
+    }
+
+    [Fact]
+    public void Select_DuplicateManifestEntries_AreNotConflated()
+    {
+        // BundlePackageEntry is a record; selection must be tracked by manifest position so that a
+        // value-based lookup cannot conflate two structurally identical entries.
+        const string duplicates =
+            """
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle">
+              <Identity Name="A" Publisher="CN=C" Version="1.0.0.0" />
+              <Packages>
+                <Package Type="application" Version="1.0.0.0" Architecture="x64" FileName="a.msix" />
+                <Package Type="resource" Version="1.0.0.0" ResourceId="fr" FileName="fr.msix">
+                  <Resources><Resource Language="fr-FR" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.0.0.0" ResourceId="fr" FileName="fr.msix">
+                  <Resources><Resource Language="fr-FR" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.0.0.0" ResourceId="de" FileName="de.msix">
+                  <Resources><Resource Language="de-DE" /></Resources>
+                </Package>
+              </Packages>
+            </Bundle>
+            """;
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(duplicates),
+            new BundleTarget { Architecture = ProcessorArchitecture.X64, Languages = ["fr-FR"] });
+
+        // Both declared entries are reported, and the non-matching German package is still excluded.
+        Assert.Equal(["fr.msix", "fr.msix"], FileNames(result.ResourcePackages));
+    }
+
+    [Fact]
+    public void Select_SkipLanguageOnly_KeepsAllLanguagesButStillFiltersScale()
+    {
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(ResourceBundle),
+            new BundleTarget
+            {
+                Architecture = ProcessorArchitecture.X64,
+                Languages = ["ja-JP"],
+                Scale = 200,
+            },
+            BundleApplicabilityOptions.SkipLanguage);
+
+        Assert.Equal(
+            ["lang-en-US.msix", "lang-fr-FR.msix", "scale-200.msix"],
+            FileNames(result.ResourcePackages));
+    }
+
+    [Fact]
+    public void Select_SkipScaleOnly_KeepsAllScalesButStillFiltersLanguage()
+    {
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(ResourceBundle),
+            new BundleTarget
+            {
+                Architecture = ProcessorArchitecture.X64,
+                Languages = ["fr-FR"],
+                Scale = 200,
+            },
+            BundleApplicabilityOptions.SkipScale);
+
+        Assert.Equal(
+            ["lang-fr-FR.msix", "scale-200.msix", "scale-400.msix"],
+            FileNames(result.ResourcePackages));
+    }
+
+    [Fact]
+    public void Select_SkipDXFeatureLevelOnly_KeepsAllDXResources()
+    {
+        const string dx =
+            """
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle">
+              <Identity Name="A" Publisher="CN=C" Version="1.0.0.0" />
+              <Packages>
+                <Package Type="application" Version="1.0.0.0" Architecture="x64" FileName="a.msix" />
+                <Package Type="resource" Version="1.0.0.0" ResourceId="dx10" FileName="dx10.msix">
+                  <Resources><Resource DXFeatureLevel="DX10" /></Resources>
+                </Package>
+                <Package Type="resource" Version="1.0.0.0" ResourceId="dx11" FileName="dx11.msix">
+                  <Resources><Resource DXFeatureLevel="DX11" /></Resources>
+                </Package>
+              </Packages>
+            </Bundle>
+            """;
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(dx),
+            new BundleTarget { Architecture = ProcessorArchitecture.X64, DXFeatureLevel = "DX11" },
+            BundleApplicabilityOptions.SkipDXFeatureLevel);
+
+        Assert.Equal(["dx10.msix", "dx11.msix"], FileNames(result.ResourcePackages));
     }
 
     [Fact]

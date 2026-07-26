@@ -48,8 +48,8 @@ implementation follows the **documented Windows behaviour** instead. Where the t
 behaviour is treated as an incomplete implementation rather than a specification.
 
 The one part of upstream worth keeping is its BCP-47 comparison, which is a reasonable, well-defined
-subset. `Bcp47Tag` mirrors it, including the `zh-CN`/`zh-TW`/`zh-HK` script normalization without
-which `zh-CN` would not match a `zh-Hans` resource.
+subset. `Bcp47Tag` mirrors it, including strict script equality and the `zh-CN`/`zh-TW`/`zh-HK` script
+normalization without which `zh-CN` would not match a `zh-Hans` resource.
 
 ## Architecture
 
@@ -86,18 +86,35 @@ Each resource package language is compared against the requested languages and c
 | `fr` | `fr-FR` | Variant — fallback only |
 | `fr-FR` | `fr-CA` | Variant — fallback only |
 | `fr-FR` | `de-DE` | No match |
-| `zh-Hans` | `zh-Hant` | No match (explicit script mismatch) |
+| `zh-Hans` | `zh-Hant` | No match (script mismatch) |
+| `sr` | `sr-Latn` | No match (script mismatch) |
 | anything | `und` | Matches |
 
 Exact and neutral-parent matches are selected. **Variants are included only when nothing matched
 directly anywhere in the bundle**, so a `fr-FR` user does not also receive `fr-CA` payload, but a
 `fr-FR` user of a bundle containing only `fr-CA` still gets French.
 
+An `und` package is always selected but does **not** count as a direct match, because it carries
+language-neutral payload. Otherwise a bundle that happened to ship an `und` package would leave a
+`fr-FR` user with no French at all.
+
+Scripts must match **exactly, including absent against present**: `sr` does not match `sr-Latn`,
+because handing a reader a script they cannot read is worse than handing them a fallback language.
+Resolving a bare `sr` to a default script would require suppress-script inference, which is not
+implemented. Tags whose primary subtag is not 2-8 letters — private-use (`x-private`) and
+grandfathered (`i-klingon`) forms — are rejected outright rather than being read as a language `x`
+or `i`, which would make every such tag compare equal to every other.
+
 ## Scale
 
-The requested scale is resolved against the scales the bundle actually carries: the exact scale when
-present, otherwise the **next largest** (downscaling an image degrades better than upscaling),
-otherwise the largest available.
+The requested scale is resolved against the scales carried by the resource packages that **survive
+language and DirectX filtering**, not by the bundle as a whole: the exact scale when present,
+otherwise the **next largest** (downscaling an image degrades better than upscaling), otherwise the
+largest available.
+
+Resolving it bundle-wide would let an unselected package eliminate a selected one. A bundle of
+(`en`, scale-100) and (`fr`, scale-200) resolved for `en` at scale 150 would globally round up to
+200, drop the English package on scale and the French one on language, and return nothing.
 
 ## Unspecified qualifiers do not filter
 
@@ -109,8 +126,12 @@ discoverable from a cross-platform runtime API, and guessing would drop resource
 
 ## Options
 
-`BundleApplicabilityOptions` ignores individual qualifiers; `All` returns every package in the
-bundle.
+`BundleApplicabilityOptions` ignores individual qualifiers; `All` ignores every qualifier, so no
+resource package is filtered out and any application package counts as runnable. It still yields
+exactly one application package: a bundle's application packages are alternatives to each other, so
+"install them all" is never meaningful. `SkipArchitecture` keeps unrunnable application packages as
+candidates rather than dropping them, but the preference ranking above still decides which one is
+chosen.
 
 These flags intentionally do **not** reuse upstream's `MSIX_APPLICABILITY_OPTIONS` numeric values.
 Upstream defines `SKIPPLATFORM = 1` and `SKIPLANGUAGE = 2`, but its platform filtering is disabled,

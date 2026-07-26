@@ -32,6 +32,15 @@ public enum BundleApplicabilityOptions
     /// <summary>Select DirectX resource packages regardless of feature level.</summary>
     SkipDXFeatureLevel = 1 << 3,
 
-    /// <summary>Ignore every qualifier, selecting all packages in the bundle.</summary>
+    /// <summary>
+    /// Ignore every qualifier, so no resource package is filtered out and any application package
+    /// is considered runnable.
+    /// </summary>
+    /// <remarks>
+    /// This still yields exactly one <see cref="BundleApplicabilityResult.ApplicationPackage"/>;
+    /// see <see cref="BundleApplicabilityResult.CandidateApplicationPackages"/> for the rest. A
+    /// bundle's application packages are alternatives to each other, so "install them all" is never
+    /// a meaningful request even when no qualifier is being applied.
+    /// </remarks>
     All = SkipArchitecture | SkipLanguage | SkipScale | SkipDXFeatureLevel,
 }

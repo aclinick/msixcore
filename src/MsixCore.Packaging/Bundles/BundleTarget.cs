@@ -50,9 +50,15 @@ public sealed record BundleTarget
         Languages = CurrentLanguages(),
     };
 
-    /// <summary>Maps the current process architecture onto an MSIX package architecture.</summary>
+    /// <summary>Maps the current device architecture onto an MSIX package architecture.</summary>
     /// <returns>The current architecture, or <see cref="ProcessorArchitecture.Unknown"/> if unmapped.</returns>
-    internal static ProcessorArchitecture CurrentArchitecture() => RuntimeInformation.ProcessArchitecture switch
+    /// <remarks>
+    /// Uses <see cref="RuntimeInformation.OSArchitecture"/>, not <c>ProcessArchitecture</c>. What can
+    /// be installed is a property of the machine, not of the bitness this process happens to be
+    /// running at: a 32-bit tool on an x64 machine must still resolve x64 packages, and a tool
+    /// running under ARM64 emulation must not reject an ARM64-only bundle.
+    /// </remarks>
+    internal static ProcessorArchitecture CurrentArchitecture() => RuntimeInformation.OSArchitecture switch
     {
         System.Runtime.InteropServices.Architecture.X86 => ProcessorArchitecture.X86,
         System.Runtime.InteropServices.Architecture.X64 => ProcessorArchitecture.X64,
