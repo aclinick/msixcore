@@ -144,6 +144,48 @@ public class CliCommandTests : IDisposable
         Assert.Contains("\"BlockMapValid\": true", output);
     }
 
+    #region Real-signed fixture validation (exit codes + attack signature)
+
+    private static string RealSignedFixture(string name) =>
+        Path.Combine(AppContext.BaseDirectory, "Fixtures", "RealSigned", name);
+
+    [Fact]
+    public void Validate_RealSignedPackage_ExitsZero()
+    {
+        (int code, string output, _) = RunValidate(RealSignedFixture("SignTest.msix"));
+
+        Assert.Equal(0, code);
+        Assert.Contains("INTEGRITY OK", output);
+    }
+
+    [Fact]
+    public void Validate_StapledPackage_ExitsNonZero()
+    {
+        (int code, string output, _) = RunValidate(RealSignedFixture("Stapled.msix"));
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("INTEGRITY FAILED", output);
+    }
+
+    [Fact]
+    public void Validate_StapledPackage_Json_ShowsAttackSignature()
+    {
+        // The pairing "CMS valid + binding invalid" is precisely the attack signature
+        // for a stolen-signature stapling attack. This must never regress.
+        (int code, string output, _) = RunValidate(RealSignedFixture("Stapled.msix"), "--json");
+
+        Assert.NotEqual(0, code);
+
+        using JsonDocument doc = JsonDocument.Parse(output);
+        JsonElement root = doc.RootElement;
+
+        Assert.False(root.GetProperty("IsValid").GetBoolean());
+        Assert.True(root.GetProperty("CmsIntegrityValid").GetBoolean());
+        Assert.False(root.GetProperty("SignatureBindingVerified").GetBoolean());
+    }
+
+    #endregion
+
     private static (int Code, string Out, string Err) RunUnpack(params string[] args)
     {
         var o = new StringWriter();
