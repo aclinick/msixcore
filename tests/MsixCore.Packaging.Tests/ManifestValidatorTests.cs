@@ -19,7 +19,7 @@ public class ManifestValidatorTests
     private static string BuildManifest(
         string name = "Contoso.MyApp",
         string publisher = Publisher,
-        string architecture = "x64",
+        string? architecture = "x64",
         string? resourceId = null,
         string properties = "",
         string dependencies = "",
@@ -33,7 +33,7 @@ public class ManifestValidatorTests
           xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
           xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
           xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"{extraNamespaces}>
-          <Identity Name="{name}" Publisher="{publisher}" Version="1.0.0.0" ProcessorArchitecture="{architecture}"{(resourceId is null ? "" : $" ResourceId=\"{resourceId}\"")} />
+          <Identity Name="{name}" Publisher="{publisher}" Version="1.0.0.0"{(architecture is null ? "" : $" ProcessorArchitecture=\"{architecture}\"")}{(resourceId is null ? "" : $" ResourceId=\"{resourceId}\"")} />
           <Properties>
             <DisplayName>App</DisplayName>
             <PublisherDisplayName>Contoso</PublisherDisplayName>
@@ -189,12 +189,33 @@ public class ManifestValidatorTests
     [InlineData("Contoso")]
     [InlineData("CN=")]
     [InlineData("=Contoso")]
+    [InlineData("CN=One;OU=Two")]
+    [InlineData("CN=One,OU=Two")]
+    [InlineData("CN=One+OU=Two")]
+    [InlineData("XX=Contoso")]
     public void Validate_PublisherThatIsNotADistinguishedName_IsMalformed(string publisher)
     {
         ManifestValidationResult result = Validate(BuildManifest(publisher: publisher));
 
         Assert.False(result.IsValid);
         Assert.Equal("Identity/@Publisher", SingleIssue(result, ManifestValidationRule.PublisherMalformed).Target);
+    }
+
+    // TC-VAL-12b
+    [Theory]
+    [InlineData("CN=Contoso")]
+    [InlineData("CN=Contoso Corporation, O=Contoso, L=Redmond, S=Washington, C=US")]
+    [InlineData("X21Address=1234")]
+    [InlineData("OID.2.5.4.15=Private Organization, CN=Contoso")]
+    [InlineData("dnQualifier=abc")]
+    public void Validate_PublisherMatchingTheSchemaPattern_IsAccepted(string publisher)
+    {
+        // The accepted forms come straight from the ST_Publisher_2010_v2 facet: a fixed set of
+        // attribute keywords or a dotted OID, separated by a comma and a space.
+        ManifestValidationResult result = Validate(BuildManifest(publisher: publisher));
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Issues);
     }
 
     // TC-VAL-13
@@ -335,16 +356,48 @@ public class ManifestValidatorTests
 
     // TC-VAL-23
     [Fact]
-    public void Validate_NeutralResourcePackage_IsAccepted()
+    public void Validate_ResourcePackageWithAnExplicitNeutralArchitecture_IsRejected()
     {
+        // The rule is about the attribute being declared at all, not about its value — the parser
+        // maps absent and "neutral" to the same enum, so this can only be caught from the XML.
         ManifestValidationResult result = Validate(BuildManifest(
             properties: "    <ResourcePackage>true</ResourcePackage>",
             architecture: "neutral",
             resourceId: "en-US",
             applications: ""));
 
+        Assert.False(result.IsValid);
+        ManifestValidationIssue issue = Assert.Single(result.Errors);
+        Assert.Equal("Identity/@ProcessorArchitecture", issue.Target);
+        Assert.Contains("neutral", issue.Message, StringComparison.Ordinal);
+    }
+
+    // TC-VAL-23b
+    [Fact]
+    public void Validate_ResourcePackageWithNoArchitectureAttribute_IsAccepted()
+    {
+        ManifestValidationResult result = Validate(BuildManifest(
+            properties: "    <ResourcePackage>true</ResourcePackage>",
+            architecture: null,
+            resourceId: "en-US",
+            applications: ""));
+
         Assert.True(result.IsValid);
         Assert.Empty(result.Issues);
+    }
+
+    // TC-VAL-23c
+    [Fact]
+    public void Validate_ExplicitNeutralArchitecture_IsSkippedWithoutTheDocument()
+    {
+        // The manifest-only overload cannot see the raw attribute, so it must not guess.
+        AppxManifest manifest = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(BuildManifest(
+            properties: "    <ResourcePackage>true</ResourcePackage>",
+            architecture: "neutral",
+            resourceId: "en-US",
+            applications: ""))));
+
+        Assert.Empty(ManifestValidator.Validate(manifest).Issues);
     }
 
     // TC-VAL-24
@@ -353,7 +406,7 @@ public class ManifestValidatorTests
     {
         ManifestValidationResult result = Validate(BuildManifest(
             properties: "    <ResourcePackage>true</ResourcePackage>",
-            architecture: "neutral",
+            architecture: null,
             dependencies: """<PackageDependency Name="Microsoft.VCLibs.140.00" Publisher="CN=Microsoft" MinVersion="14.0.0.0" />""",
             applications: ""));
 
@@ -361,6 +414,51 @@ public class ManifestValidatorTests
         Assert.Equal(
             "Dependencies/PackageDependency",
             SingleIssue(result, ManifestValidationRule.ResourcePackageContent).Target);
+    }
+
+    // TC-VAL-24b
+    [Fact]
+    public void Validate_ResourcePackageWithOnlyAHostRuntimeDependency_IsAccepted()
+    {
+        // The rule forbids PackageDependency and MainPackageDependency; a host-runtime dependency is
+        // a different relationship and is not covered.
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap10=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/10\"",
+            properties: "    <ResourcePackage>true</ResourcePackage>",
+            architecture: null,
+            dependencies: """<uap10:HostRuntimeDependency Name="Contoso.Host" Publisher="CN=Contoso" MinVersion="1.0.0.0" />""",
+            applications: ""));
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Issues);
+    }
+
+    // TC-VAL-24c
+    [Fact]
+    public void Validate_HostRuntimeDependencyWithATwoCharacterName_IsAccepted()
+    {
+        // HostRuntimeDependency/@Name is ST_AsciiIdentifier, which has no 3..50 bound and no
+        // reserved-name rule — holding it to the package-name rules would reject valid manifests.
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap10=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/10\"",
+            dependencies: """<uap10:HostRuntimeDependency Name="con" Publisher="CN=Contoso" MinVersion="1.0.0.0" />"""));
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Issues);
+    }
+
+    // TC-VAL-24d
+    [Fact]
+    public void Validate_HostRuntimeDependencyWithIllegalCharacters_IsStillMalformed()
+    {
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap10=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/10\"",
+            dependencies: """<uap10:HostRuntimeDependency Name="Bad Host" Publisher="CN=Contoso" MinVersion="1.0.0.0" />"""));
+
+        Assert.False(result.IsValid);
+        Assert.Equal(
+            "Dependencies/HostRuntimeDependency[Bad Host]/@Name",
+            SingleIssue(result, ManifestValidationRule.IdentifierMalformed).Target);
     }
 
     // TC-VAL-25
@@ -399,6 +497,35 @@ public class ManifestValidatorTests
         ManifestValidationResult result = Validate(BuildManifest(
             extraNamespaces: "\n  xmlns:uap4=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/4\"",
             dependencies: """<uap4:MainPackageDependency Name="Contoso.MainApp" />"""));
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Issues);
+    }
+
+    // TC-VAL-27b
+    [Fact]
+    public void Validate_OptionalPackageWithSupportedUsers_IsRejected()
+    {
+        // SupportedUsers is not modelled by the parser, so this rule lives on the XML path.
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap4=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/4\"",
+            properties: "    <uap4:SupportedUsers>multiple</uap4:SupportedUsers>",
+            dependencies: """<uap4:MainPackageDependency Name="Contoso.MainApp" />"""));
+
+        Assert.False(result.IsValid);
+        Assert.Equal(
+            "Properties/SupportedUsers",
+            SingleIssue(result, ManifestValidationRule.OptionalPackageContent).Target);
+    }
+
+    // TC-VAL-27c
+    [Fact]
+    public void Validate_NonOptionalPackageWithSupportedUsers_IsAccepted()
+    {
+        // The prohibition applies only to optional packages; an ordinary package may declare it.
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap4=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/4\"",
+            properties: "    <uap4:SupportedUsers>multiple</uap4:SupportedUsers>"));
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Issues);
@@ -467,12 +594,38 @@ public class ManifestValidatorTests
 
     // TC-VAL-33
     [Fact]
-    public void Validate_SameCapabilityNameInTwoNamespaces_IsNotADuplicate()
+    public void Validate_SameCapabilityNameInTwoUnnumberedNamespaces_IsADuplicate()
     {
-        // The schema's uniqueness constraints are per element type, so a foundation Capability and a
-        // restricted one that happen to share a name are two different declarations.
+        // The foundation schema's Capability_Name constraint has a union selector covering the
+        // foundation, uap, wincap, and rescap Capability elements together, so these collide.
         ManifestValidationResult result = Validate(BuildManifest(
             capabilities: """  <Capabilities><Capability Name="documentsLibrary" /><rescap:Capability Name="documentsLibrary" /></Capabilities>"""));
+
+        Assert.False(result.IsValid);
+        Assert.Equal(ManifestValidationRule.DuplicateCapability, Assert.Single(result.Errors).Rule);
+    }
+
+    // TC-VAL-33b
+    [Fact]
+    public void Validate_SameNameOnACapabilityAndADeviceCapability_IsNotADuplicate()
+    {
+        // DeviceCapability_Name is a separate constraint from Capability_Name.
+        ManifestValidationResult result = Validate(BuildManifest(
+            capabilities: """  <Capabilities><Capability Name="location" /><DeviceCapability Name="location" /></Capabilities>"""));
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Issues);
+    }
+
+    // TC-VAL-33c
+    [Fact]
+    public void Validate_SameNameInANumberedNamespace_IsNotADuplicate()
+    {
+        // Only the unnumbered namespaces appear in the union selector; a numbered revision is under
+        // no uniqueness constraint at all.
+        ManifestValidationResult result = Validate(BuildManifest(
+            extraNamespaces: "\n  xmlns:uap2=\"http://schemas.microsoft.com/appx/manifest/uap/windows10/2\"",
+            capabilities: """  <Capabilities><Capability Name="internetClient" /><uap2:Capability Name="internetClient" /></Capabilities>"""));
 
         Assert.True(result.IsValid);
         Assert.Empty(result.Issues);

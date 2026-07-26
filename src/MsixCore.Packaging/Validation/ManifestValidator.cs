@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -44,6 +42,18 @@ public static partial class ManifestValidator
     };
 
     /// <summary>
+    /// The namespaces named in the foundation schema's <c>Capability_Name</c> union selector. Only
+    /// the unnumbered revisions appear there.
+    /// </summary>
+    private static readonly HashSet<string> UnionSelectorNamespaces = new(StringComparer.Ordinal)
+    {
+        "http://schemas.microsoft.com/appx/manifest/foundation/windows10",
+        "http://schemas.microsoft.com/appx/manifest/uap/windows10",
+        "http://schemas.microsoft.com/appx/manifest/foundation/windows10/windowscapabilities",
+        "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities",
+    };
+
+    /// <summary>
     /// Names that cannot be used as identifiers because a package identifier becomes a directory
     /// name, and Windows still reserves the DOS device names at the filesystem level.
     /// </summary>
@@ -67,6 +77,27 @@ public static partial class ManifestValidator
 
     [GeneratedRegex(@"^([A-Za-z][A-Za-z0-9]*)(\.[A-Za-z][A-Za-z0-9]*)*$", RegexOptions.CultureInvariant)]
     private static partial Regex ApplicationIdPattern();
+
+    /// <summary>
+    /// One relative distinguished name: an attribute type the schema names (or a dotted OID), an
+    /// <c>=</c>, and either a non-empty run of characters excluding the DN metacharacters or a
+    /// quoted string.
+    /// </summary>
+    private const string RelativeDistinguishedName =
+        """(CN|L|O|OU|E|C|S|STREET|T|G|I|SN|DC|SERIALNUMBER|Description|PostalCode|POBox|Phone|X21Address|dnQualifier|(OID\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))+))=(([^,+="<>#;])+|".*")""";
+
+    /// <summary>
+    /// The schema's <c>ST_Publisher_2010_v2</c> pattern, transcribed from
+    /// <c>AppxManifestTypes.xsd</c>. Anchored because XSD patterns match the whole value.
+    /// </summary>
+    /// <remarks>
+    /// Matched non-backtracking so that a hostile publisher string cannot cause catastrophic
+    /// backtracking: the alternation between a quoted value and an unquoted run is exactly the shape
+    /// that goes exponential under a backtracking engine.
+    /// </remarks>
+    private static readonly Regex PublisherPattern = new(
+        $"^{RelativeDistinguishedName}(, ({RelativeDistinguishedName}))*$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     /// <summary>Validates the semantic rules that can be checked from the parsed manifest alone.</summary>
     /// <param name="manifest">The manifest to validate.</param>
@@ -97,8 +128,48 @@ public static partial class ManifestValidator
         ArgumentNullException.ThrowIfNull(document);
 
         List<ManifestValidationIssue> issues = [.. Validate(manifest).Issues];
+        ValidateDocumentOnlyRules(manifest, document, issues);
         ValidateNamespaces(document, issues);
         return new ManifestValidationResult(issues);
+    }
+
+    /// <summary>
+    /// The rules that cannot be expressed against the parsed model, because the parser normalizes
+    /// away the distinction they turn on or does not model the element at all.
+    /// </summary>
+    private static void ValidateDocumentOnlyRules(
+        AppxManifest manifest,
+        XDocument document,
+        List<ManifestValidationIssue> issues)
+    {
+        XElement? root = document.Root;
+        if (root is null)
+        {
+            return;
+        }
+
+        if (manifest.IsResourcePackage &&
+            manifest.Identity.Architecture == ProcessorArchitecture.Neutral &&
+            root.ElementByLocalName("Identity")?.Attribute("ProcessorArchitecture")?.Value is { Length: > 0 })
+        {
+            // The parser maps both an absent attribute and an explicit "neutral" to Neutral, but the
+            // rule is about the attribute being present at all — so it has to be read from the XML.
+            issues.Add(Error(
+                ManifestValidationRule.ResourcePackageContent,
+                "Identity/@ProcessorArchitecture",
+                "A resource package cannot declare a processor architecture, not even 'neutral'."));
+        }
+
+        bool isOptional = manifest.PackageDependencies.Any(d => d.Kind == PackageDependencyKind.MainPackage);
+        if (isOptional &&
+            root.ElementByLocalName("Properties")?.ElementByLocalName("SupportedUsers") is not null)
+        {
+            // SupportedUsers is not modelled, so this rule likewise only exists on the XML path.
+            issues.Add(Error(
+                ManifestValidationRule.OptionalPackageContent,
+                "Properties/SupportedUsers",
+                "An optional package cannot declare Properties/SupportedUsers."));
+        }
     }
 
     /// <summary>
@@ -158,12 +229,8 @@ public static partial class ManifestValidator
                 $"'{value}' is {value.Length} characters; the schema allows {minLength} to {maxLength}."));
         }
 
-        if (value.Length > 0 && !IdentifierPattern().IsMatch(value))
+        if (!ValidateIdentifierCharacters(value, target, issues))
         {
-            issues.Add(Error(
-                ManifestValidationRule.IdentifierMalformed,
-                target,
-                $"'{value}' contains characters outside the allowed set (letters, digits, '.', '-')."));
             return;
         }
 
@@ -171,6 +238,27 @@ public static partial class ManifestValidator
         {
             issues.Add(Error(ManifestValidationRule.IdentifierReserved, target, $"'{value}' {reason}"));
         }
+    }
+
+    /// <summary>
+    /// Checks the <c>ST_AsciiIdentifier</c> character set, which every identifier shares.
+    /// </summary>
+    /// <returns><see langword="true"/> when the value is well-formed.</returns>
+    private static bool ValidateIdentifierCharacters(
+        string value,
+        string target,
+        List<ManifestValidationIssue> issues)
+    {
+        if (value.Length > 0 && !IdentifierPattern().IsMatch(value))
+        {
+            issues.Add(Error(
+                ManifestValidationRule.IdentifierMalformed,
+                target,
+                $"'{value}' contains characters outside the allowed set (letters, digits, '.', '-')."));
+            return false;
+        }
+
+        return true;
     }
 
     private static string? ReservedName(string value)
@@ -205,7 +293,7 @@ public static partial class ManifestValidator
     {
         const string Target = "Identity/@Publisher";
 
-        // Length is checked first so a pathological value is rejected before any parsing.
+        // Length is checked first so a pathological value is rejected before any matching.
         if (publisher.Length is 0 or > MaxPublisherLength)
         {
             issues.Add(Error(
@@ -217,38 +305,14 @@ public static partial class ManifestValidator
             return;
         }
 
-        try
-        {
-            var name = new X500DistinguishedName(publisher);
-
-            // A syntactically parseable DN can still carry an empty value ("CN="), which Windows
-            // rejects; the schema's DN pattern requires at least one character per attribute.
-            foreach (X500RelativeDistinguishedName rdn in name.EnumerateRelativeDistinguishedNames())
-            {
-                if (rdn.GetSingleElementValue() is not { Length: > 0 })
-                {
-                    issues.Add(Error(
-                        ManifestValidationRule.PublisherMalformed,
-                        Target,
-                        $"'{publisher}' has an attribute with no value."));
-                    return;
-                }
-            }
-
-            if (name.EnumerateRelativeDistinguishedNames().Any() is false)
-            {
-                issues.Add(Error(
-                    ManifestValidationRule.PublisherMalformed,
-                    Target,
-                    $"'{publisher}' contains no distinguished-name attributes."));
-            }
-        }
-        catch (CryptographicException)
+        if (!PublisherPattern.IsMatch(publisher))
         {
             issues.Add(Error(
                 ManifestValidationRule.PublisherMalformed,
                 Target,
-                $"'{publisher}' is not a well-formed X.500 distinguished name."));
+                $"'{publisher}' is not a well-formed distinguished name: each attribute must be one of the " +
+                "types the schema names (or an OID), values may not be empty, and attributes must be " +
+                "separated by a comma and a space."));
         }
     }
 
@@ -257,7 +321,24 @@ public static partial class ManifestValidator
         foreach (PackageDependency dependency in manifest.PackageDependencies)
         {
             string target = $"Dependencies/{DependencyElementName(dependency.Kind)}[{dependency.Name}]";
-            ValidateIdentifier(dependency.Name, target + "/@Name", MinPackageNameLength, MaxPackageNameLength, issues);
+
+            // Only PackageDependency and MainPackageDependency names are package names. A
+            // HostRuntimeDependency name is a plain ST_AsciiIdentifier: same character set, but no
+            // 3..50 bound and no reserved-name rule, so holding it to those would reject valid
+            // manifests.
+            if (dependency.Kind == PackageDependencyKind.HostRuntime)
+            {
+                ValidateIdentifierCharacters(dependency.Name, target + "/@Name", issues);
+            }
+            else
+            {
+                ValidateIdentifier(
+                    dependency.Name,
+                    target + "/@Name",
+                    MinPackageNameLength,
+                    MaxPackageNameLength,
+                    issues);
+            }
 
             if (dependency.MinVersion is { } min &&
                 dependency.MaxMajorVersionTested is { } maxMajor &&
@@ -320,15 +401,18 @@ public static partial class ManifestValidator
             Forbid(manifest.Applications.Count > 0, ManifestValidationRule.ResourcePackageContent, "Applications", "resource", issues);
             Forbid(manifest.Capabilities.Count > 0, ManifestValidationRule.ResourcePackageContent, "Capabilities", "resource", issues);
             Forbid(manifest.Extensions.Count > 0, ManifestValidationRule.ResourcePackageContent, "Extensions", "resource", issues);
+
+            // Only PackageDependency and MainPackageDependency are forbidden; a HostRuntimeDependency
+            // is not one of the relationships the rule covers.
             Forbid(
-                manifest.PackageDependencies.Count > 0,
+                manifest.PackageDependencies.Any(d => d.Kind is PackageDependencyKind.Framework or PackageDependencyKind.MainPackage),
                 ManifestValidationRule.ResourcePackageContent,
                 "Dependencies/PackageDependency",
                 "resource",
                 issues);
 
-            // The parser maps an absent ProcessorArchitecture to Neutral, so only a positively
-            // declared non-neutral architecture is distinguishable — and only that is flagged.
+            // An absent ProcessorArchitecture and an explicit neutral are indistinguishable here;
+            // the document-aware pass reads the raw attribute and catches the explicit case.
             if (manifest.Identity.Architecture != ProcessorArchitecture.Neutral)
             {
                 issues.Add(Error(
@@ -394,12 +478,15 @@ public static partial class ManifestValidator
 
     private static void ValidateCapabilities(AppxManifest manifest, List<ManifestValidationIssue> issues)
     {
-        // The schema's uniqueness constraints are per element type, and the element type is what the
-        // namespace plus name identify — so the same name in two namespaces is not a duplicate.
-        HashSet<(string Namespace, string Name)> seen = [];
+        HashSet<(string Scope, string Name)> seen = [];
         foreach (ManifestCapability capability in manifest.DeclaredCapabilities)
         {
-            if (!seen.Add((capability.Namespace, capability.Name)))
+            if (UniquenessScope(capability) is not { } scope)
+            {
+                continue;
+            }
+
+            if (!seen.Add((scope, capability.Name)))
             {
                 issues.Add(Error(
                     ManifestValidationRule.DuplicateCapability,
@@ -408,6 +495,34 @@ public static partial class ManifestValidator
             }
         }
     }
+
+    /// <summary>
+    /// The schema's <c>xs:unique</c> constraint that governs a capability, or <see langword="null"/>
+    /// when none does.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The foundation schema declares three constraints on <c>Package</c>. <c>Capability_Name</c>
+    /// has a <em>union</em> selector covering the foundation, <c>uap</c>, <c>wincap</c>, and
+    /// <c>rescap</c> <c>Capability</c> elements together, so a foundation
+    /// <c>&lt;Capability Name="x"/&gt;</c> and a <c>&lt;rescap:Capability Name="x"/&gt;</c> in the
+    /// same manifest do collide. <c>DeviceCapability_Name</c> and <c>CustomCapability_Name</c> are
+    /// separate scopes.
+    /// </para>
+    /// <para>
+    /// Only the <em>unnumbered</em> namespaces appear in that selector. A numbered revision
+    /// (<c>uap2:Capability</c> and later), <c>mobile:</c>, and <c>iot:</c> are under no uniqueness
+    /// constraint at all, so a repeat there is not reported.
+    /// </para>
+    /// </remarks>
+    private static string? UniquenessScope(ManifestCapability capability) => capability.Kind switch
+    {
+        CapabilityKind.Device => "DeviceCapability",
+        CapabilityKind.Custom => "CustomCapability",
+        CapabilityKind.General or CapabilityKind.Restricted or CapabilityKind.Windows
+            when UnionSelectorNamespaces.Contains(capability.Namespace) => "Capability",
+        _ => null,
+    };
 
     private static void ValidateNamespaces(XDocument document, List<ManifestValidationIssue> issues)
     {
