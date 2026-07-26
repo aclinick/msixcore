@@ -15,8 +15,11 @@ public sealed class MakeAppxLocator
     /// </remarks>
     public static string? Find()
     {
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() || ExecutableArchitectures().Length == 0)
         {
+            // An unsupported host can run nothing, so the tool is absent by definition. Checking
+            // here rather than only per-candidate keeps CanExecute's fail-open policy — which
+            // accepts a file it cannot parse — from letting a PATH candidate through.
             return null;
         }
 
@@ -111,6 +114,11 @@ public sealed class MakeAppxLocator
     private static bool CanExecute(string path)
     {
         string[] runnable = ExecutableArchitectures();
+        if (runnable.Length == 0)
+        {
+            return false;
+        }
+
         try
         {
             using FileStream stream = File.OpenRead(path);
