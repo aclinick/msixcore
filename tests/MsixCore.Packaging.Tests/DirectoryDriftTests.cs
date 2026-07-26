@@ -42,7 +42,7 @@ public sealed class DirectoryDriftTests : IDisposable
         BlockMapVerificationResult result = package.VerifyBlockMap();
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.CoverageErrors, error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+        Assert.Contains(result.CoverageErrors, error => error.Contains("Package snapshot drift detected", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -53,22 +53,23 @@ public sealed class DirectoryDriftTests : IDisposable
         string directory = CreatePackage();
         using MsixPackage package = MsixPackage.OpenDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "unmapped.txt"), "unmapped");
+        using var decorated = new DelegatingOpcPackage(package.Opc);
 
         IReadOnlyList<string> coverageErrors;
         if (verifyContent)
         {
-            BlockMapVerificationResult result = BlockMapVerifier.Verify(package.Opc, package.BlockMap);
+            BlockMapVerificationResult result = BlockMapVerifier.Verify(decorated, package.BlockMap);
             Assert.False(result.IsValid);
             coverageErrors = result.CoverageErrors;
         }
         else
         {
-            coverageErrors = BlockMapVerifier.VerifyCoverage(package.Opc, package.BlockMap);
+            coverageErrors = BlockMapVerifier.VerifyCoverage(decorated, package.BlockMap);
         }
 
         string driftError = Assert.Single(
             coverageErrors,
-            error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+            error => error.Contains("Package snapshot drift detected", StringComparison.Ordinal));
         Assert.Contains("unmapped.txt", driftError);
     }
 
@@ -167,6 +168,21 @@ public sealed class DirectoryDriftTests : IDisposable
         finally
         {
             File.Delete(lower);
+        }
+    }
+
+    private sealed class DelegatingOpcPackage(IOpcPackage inner) : IOpcPackage
+    {
+        public IReadOnlyCollection<string> PartNames => inner.PartNames;
+
+        public string? DetectSnapshotDrift() => inner.DetectSnapshotDrift();
+
+        public bool ContainsPart(string partName) => inner.ContainsPart(partName);
+
+        public Stream OpenPart(string partName) => inner.OpenPart(partName);
+
+        public void Dispose()
+        {
         }
     }
 }

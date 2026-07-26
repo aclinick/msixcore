@@ -189,15 +189,16 @@ public class PackageExtractorTests : IDisposable
         File.WriteAllText(Path.Combine(looseDirectory, "unmapped.txt"), "attacker");
         string destination = Path.Combine(_root, "drift-output");
 
+        using var decorated = new CountingOpcPackage(loose.Opc);
         BlockMapVerificationResult result = PackageExtractor.ExtractAndVerify(
-            loose.Opc,
+            decorated,
             loose.BlockMap,
             destination);
 
         Assert.False(result.IsValid);
         string driftError = Assert.Single(
             result.CoverageErrors,
-            error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+            error => error.Contains("Package snapshot drift detected", StringComparison.Ordinal));
         Assert.Contains("unmapped.txt", driftError);
         Assert.False(Directory.Exists(destination));
     }
@@ -206,6 +207,9 @@ public class PackageExtractorTests : IDisposable
     private sealed class EscapingOpcPackage : IOpcPackage
     {
         public IReadOnlyCollection<string> PartNames => new[] { "../escape.txt" };
+
+        // This hostile test double has a fixed in-memory part set and no mutable backing namespace.
+        public string? DetectSnapshotDrift() => null;
 
         public bool ContainsPart(string partName) => true;
 
@@ -221,6 +225,8 @@ public class PackageExtractorTests : IDisposable
         public Dictionary<string, int> OpenCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public IReadOnlyCollection<string> PartNames => inner.PartNames;
+
+        public string? DetectSnapshotDrift() => inner.DetectSnapshotDrift();
 
         public bool ContainsPart(string partName) => inner.ContainsPart(partName);
 

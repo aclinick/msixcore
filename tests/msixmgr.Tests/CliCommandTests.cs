@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using MsixCore.Deployment;
 using MsixCore.Packaging;
 
 namespace MsixMgr.Tests;
@@ -184,6 +185,31 @@ public class CliCommandTests : IDisposable
         Assert.False(root.GetProperty("SignatureBindingVerified").GetBoolean());
     }
 
+    [Fact]
+    public void Validate_SignedDirectoryMutatedAfterOpen_ReportsDriftCauseWithoutAxci()
+    {
+        string directory = Path.Combine(_root, "signed-directory-drift");
+        using (MsixPackage packed = MsixPackage.Open(RealSignedFixture("SignTest.msix")))
+        {
+            PackageExtractor.Extract(packed.Opc, directory);
+        }
+
+        using MsixPackage loose = MsixPackage.OpenDirectory(directory);
+        Assert.True(loose.IsSigned);
+        File.WriteAllText(Path.Combine(directory, "evil.dll"), "attacker");
+
+        ValidationReport report = ValidateCommand.Validate(loose);
+
+        Assert.False(report.IsValid);
+        string bindingError = Assert.Single(
+            report.Errors,
+            error => error.StartsWith("signature: APPX indirect-data binding FAILED", StringComparison.Ordinal));
+        Assert.Contains("directory drift detected", bindingError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            report.Errors,
+            error => error.Contains("AXCI", StringComparison.OrdinalIgnoreCase));
+    }
+
     #endregion
 
     #region Directory payload-set integrity (extra/missing files fail validate)
@@ -238,7 +264,7 @@ public class CliCommandTests : IDisposable
         string driftError = Assert.Single(
             report.Errors,
             error => error.Contains("evil.dll", StringComparison.Ordinal));
-        Assert.Contains("Directory drift detected", driftError);
+        Assert.Contains("Package snapshot drift detected", driftError);
         Assert.Contains("evil.dll", driftError);
     }
 

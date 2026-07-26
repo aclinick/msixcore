@@ -65,6 +65,15 @@ public sealed class OpcPackage : IOpcPackage
     /// <inheritdoc/>
     public IReadOnlyCollection<string> PartNames => _partNames;
 
+    /// <inheritdoc/>
+    public string? DetectSnapshotDrift()
+    {
+        // The immutable part-name snapshot was read from this one already-open ZipArchive's
+        // central directory, and OpenPart stays bound to that archive. There is no separately
+        // re-enumerated backing namespace whose part set can drift.
+        return null;
+    }
+
     /// <summary>Opens an OPC package from a file path.</summary>
     /// <param name="path">Path to the <c>.msix</c>/<c>.appx</c>/bundle file.</param>
     /// <returns>An open <see cref="OpcPackage"/>.</returns>

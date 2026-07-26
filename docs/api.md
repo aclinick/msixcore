@@ -111,7 +111,7 @@ publisher hash used in family/full names.
 
 | Type | Kind | Key members |
 |------|------|-------------|
-| `IOpcPackage` | interface, `IDisposable` | `PartNames`, `ContainsPart(name)`, `OpenPart(name)`. |
+| `IOpcPackage` | interface, `IDisposable` | `PartNames`, required snapshot-consistency check `DetectSnapshotDrift()`, `ContainsPart(name)`, `OpenPart(name)`. Decorators must delegate the drift check rather than silently assume stability. |
 | `OpcPackage` | sealed class | `static Open(string)`, `static Open(Stream, bool)`; ZIP-backed reader. |
 | `DirectoryOpcPackage` | sealed class | `static Open(string directory)`, `RootDirectory`; loose-layout reader. |
 | `OpcPartNames` | static class | Constants: `AppxManifest`, `AppxBundleManifest`, `AppxBlockMap`, `AppxSignature`, `ContentTypes`. |

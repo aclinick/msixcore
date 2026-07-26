@@ -26,8 +26,9 @@ public static class BlockMapVerifier
     };
 
     /// <summary>
-    /// Verifies a package's payload against a parsed block map. Directory-backed packages are also
-    /// re-enumerated so part-set drift since open invalidates the result.
+    /// Verifies a package's payload against a parsed block map. The package's required
+    /// <see cref="IOpcPackage.DetectSnapshotDrift"/> contract also invalidates the result when its
+    /// backing part set no longer matches the open-time snapshot.
     /// </summary>
     /// <param name="package">The OPC package to read content from.</param>
     /// <param name="blockMap">The parsed block map to verify against.</param>
@@ -154,8 +155,8 @@ public static class BlockMapVerifier
     }
 
     /// <summary>
-    /// Checks that the block map and package contain the same payload files. Directory-backed
-    /// packages are re-enumerated and any drift since open is returned as a coverage error.
+    /// Checks that the block map and package contain the same payload files. Snapshot drift
+    /// reported through <see cref="IOpcPackage.DetectSnapshotDrift"/> is returned as a coverage error.
     /// </summary>
     public static IReadOnlyList<string> VerifyCoverage(IOpcPackage package, BlockMap blockMap)
     {
@@ -217,10 +218,9 @@ public static class BlockMapVerifier
     private static List<string> CheckCoverage(IOpcPackage package, HashSet<string> mappedNames)
     {
         var errors = new List<string>();
-        if (package is DirectoryOpcPackage directoryPackage
-            && directoryPackage.DetectDrift() is string driftError)
+        if (package.DetectSnapshotDrift() is string driftError)
         {
-            errors.Add($"Directory drift detected: {driftError}");
+            errors.Add($"Package snapshot drift detected: {driftError}");
         }
 
         var payloadParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

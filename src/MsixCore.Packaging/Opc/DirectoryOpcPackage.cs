@@ -155,7 +155,8 @@ public sealed class DirectoryOpcPackage : IOpcPackage
             new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), [], error);
     }
 
-    internal string? DetectDrift()
+    /// <inheritdoc/>
+    public string? DetectSnapshotDrift()
     {
         DirectoryPartEnumeration liveEnumeration;
         try

@@ -10,6 +10,13 @@ public interface IOpcPackage : IDisposable
     /// <summary>The logical part names (forward-slash, package-root-relative) contained in the package.</summary>
     IReadOnlyCollection<string> PartNames { get; }
 
+    /// <summary>
+    /// Returns an error when the current backing part set no longer matches <see cref="PartNames"/>,
+    /// or <see langword="null"/> when the implementation can prove that snapshot is still consistent.
+    /// Implementations backed by mutable stores must perform the required consistency check here.
+    /// </summary>
+    string? DetectSnapshotDrift();
+
     /// <summary>Returns <see langword="true"/> if a part with the given name exists (case-insensitive).</summary>
     /// <param name="partName">Package-root-relative part name, e.g. <c>AppxManifest.xml</c>.</param>
     bool ContainsPart(string partName);

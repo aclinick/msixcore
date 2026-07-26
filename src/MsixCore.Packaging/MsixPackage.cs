@@ -234,21 +234,17 @@ public sealed class MsixPackage : IPackage
     }
 
     /// <summary>
-    /// For <see cref="DirectoryOpcPackage"/>-backed packages, compares the live part set on disk
-    /// against the open-time snapshot. Returns an error message if any parts were added or
-    /// removed since open or the live layout fails part validation, or <see langword="null"/> if
-    /// the directory is unchanged.
+    /// Asks the underlying <see cref="IOpcPackage"/> whether its current backing part set still
+    /// matches the open-time snapshot. Returns the reported error or <see langword="null"/> when
+    /// the implementation proves its snapshot remains consistent.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Non-directory packages have no live filesystem part set to re-enumerate, so this method
-    /// returns <see langword="null"/> for them. Mutability of a caller-supplied container
-    /// <see cref="Stream"/> is outside the scope of this directory-specific check.
-    /// </para>
-    /// <para>
-    /// Uses <see cref="DirectoryOpcPackage.EnumerateValidatedParts"/> — the single implementation
+    /// The built-in directory implementation uses
+    /// <see cref="DirectoryOpcPackage.EnumerateValidatedParts"/> — the single implementation
     /// shared with <see cref="DirectoryOpcPackage.Open"/> for traversal, normalization, validity,
-    /// root-containment, and duplicate checks.
+    /// root-containment, and duplicate checks. Other implementations must fulfill the required
+    /// <see cref="IOpcPackage.DetectSnapshotDrift"/> contract.
     /// </para>
     /// <para>
     /// This public method exposes the drift state for diagnostics. Block-map verification already
@@ -259,13 +255,7 @@ public sealed class MsixPackage : IPackage
     public string? DetectDirectoryDrift()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-
-        if (_opc is not DirectoryOpcPackage dirPkg)
-        {
-            return null; // Container packages: no drift possible from the archive.
-        }
-
-        return dirPkg.DetectDrift();
+        return _opc.DetectSnapshotDrift();
     }
 
     /// <summary>
