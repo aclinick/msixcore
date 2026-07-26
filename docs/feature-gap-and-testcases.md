@@ -159,17 +159,25 @@ specific type-mismatch error. Ref:
 - **TC-P1-1c:** Malformed bundle (empty `Packages`) surfaces `InvalidDataException` (parser already
   enforces this — add a fixture).
 
-### P1-2. Bundle applicability / resource selection
-**Gap:** No engine selects the applicable app package (by architecture) and applicable resource
-packages (by language/scale/DXFL) for a target. Ref:
-[Resource management](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system).
+### P1-2. Bundle applicability / resource selection — IMPLEMENTED
+**Done:** `BundleApplicability.Select` / `MsixBundle.SelectApplicable` choose exactly one application
+package by architecture (with WoW64 and ARM64 emulation fallbacks, native preferred) and the
+applicable resource packages by language, scale, and DirectX feature level. `Bcp47Tag` implements the
+language/script/region matching subset. Ref:
+[Resource management](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system),
+[docs/bundle-applicability.md](bundle-applicability.md).
 
-**Test cases:**
+**Note:** upstream's engine ignores architecture, scale values, and DXFeatureLevel entirely, so this
+follows documented Windows behaviour rather than porting upstream. The divergences are enumerated in
+[docs/bundle-applicability.md](bundle-applicability.md).
+
+**Test cases (regression — passing):**
 - **TC-P1-2a:** Bundle with x86/x64/arm64 app packages; for a target of x64 assert only the x64 app is
   selected.
 - **TC-P1-2b:** Resource packages `en-US`, `fr-FR`, scale-200/400; for `fr-FR`+scale-200 assert the
   matching resource packages are chosen and non-matching excluded.
-- **TC-P1-2c:** No applicable architecture → assert a clear "no applicable package" error.
+- **TC-P1-2c:** No applicable architecture → assert a clear "no applicable package" error
+  (`no_applicable_package`), naming the architectures the bundle does carry.
 
 ### P1-3. Manifest dependencies (framework / main / host runtime)
 **Gap:** Only `TargetDeviceFamily` is parsed; `PackageDependency`, `uap4:MainPackageDependency`, and

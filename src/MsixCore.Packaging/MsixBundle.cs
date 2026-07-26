@@ -1,3 +1,4 @@
+using MsixCore.Packaging.Bundles;
 using MsixCore.Packaging.Manifest;
 using MsixCore.Packaging.Opc;
 
@@ -41,6 +42,23 @@ public sealed class MsixBundle : IDisposable
 
     /// <summary>The package entries contained in the bundle.</summary>
     public IReadOnlyList<BundlePackageEntry> Packages => Manifest.Packages;
+
+    /// <summary>
+    /// Selects the packages in this bundle that apply to a target device.
+    /// </summary>
+    /// <param name="target">The device context to resolve against; defaults to the current device.</param>
+    /// <param name="options">Qualifiers to ignore.</param>
+    /// <returns>The applicable application package and resource packages.</returns>
+    /// <exception cref="InvalidDataException">
+    /// The bundle contains no application package applicable to the target.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="target"/> requests a language that is not a supported BCP-47 tag.
+    /// </exception>
+    public BundleApplicabilityResult SelectApplicable(
+        BundleTarget? target = null,
+        BundleApplicabilityOptions options = BundleApplicabilityOptions.None) =>
+        BundleApplicability.Select(Manifest, target ?? BundleTarget.Current(), options);
 
     /// <summary>Opens an MSIX/APPX bundle from a file path.</summary>
     public static MsixBundle Open(string path) => Create(OpcPackage.Open(path));

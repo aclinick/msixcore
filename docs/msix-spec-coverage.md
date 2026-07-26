@@ -29,19 +29,20 @@ the public read path; **no** = not implemented.
 | Extensions | 0 | 0 | 11 | 11 |
 | Block map | 6 | 0 | 1 | 7 |
 | Signature | 9 | 1 | 4 | 14 |
-| Bundles | 3 | 0 | 3 | 6 |
+| Bundles | 4 | 0 | 2 | 6 |
 | Package kinds | 1 | 2 | 4 | 7 |
 | Deployment | 10 | 1 | 3 | 14 |
-| **Total** | **41** | **8** | **34** | **83** |
+| **Total** | **42** | **8** | **33** | **83** |
 
 **Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
 CMS signature reading with footprint-digest binding + faithful publisher-DN matching, plus a transactional
 extract/stage/commit/rollback install/uninstall engine and loose-layout extraction. It still does
 **not** cover: manifest extensions, most manifest namespaces beyond identity/properties, framework/
-dependency resolution, bundle applicability/resource selection, non-main package kinds,
+dependency resolution, non-main package kinds,
 AXPC/AXCD verification, certificate trust, or OS-integration handlers (shortcuts, ARP,
-file-type/protocol registration).
+file-type/protocol registration). Bundle applicability (architecture/language/scale/DXFL selection)
+is now implemented.
 
 Key doc references (full list per row): MSIX package format overview
 <https://learn.microsoft.com/en-us/windows/msix/overview>; package manifest schema reference
@@ -172,7 +173,7 @@ Reference: [Bundle manifest schema](https://learn.microsoft.com/en-us/uwp/schema
 | Parse `Bundle` manifest (Identity + Packages) | [Bundle manifest root](https://learn.microsoft.com/en-us/uwp/schemas/bundlemanifestschema/root-elements-bundle-manifest) | yes | `MsixBundle.cs`, `BundleManifestParser.cs` | Bundles have an explicit reader; opening one as `MsixPackage` throws `MsixPackageTypeException`. |
 | Package entry (FileName, Type, Version, Architecture, ResourceId, Resource qualifiers) | [b:Package](https://learn.microsoft.com/en-us/uwp/schemas/bundlemanifestschema/element-package) | yes | `BundleManifestParser.ParsePackages`, `BundleManifest.cs` | Type defaults to `resource`; language/scale/DXFL qualifiers parsed. |
 | Bundle detection + open `.msixbundle`/`.appxbundle` and enumerate children | [MSIX bundles](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixPackage.IsBundle`, `MsixBundle.Open` | Child entries are exposed from the bundle manifest. |
-| Bundle applicability (pick applicable app + resource packages by arch/language/scale/DXFL) | [Resource packages](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system) | no | — | No applicability engine. |
+| Bundle applicability (pick applicable app + resource packages by arch/language/scale/DXFL) | [Resource packages](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system) | yes | `Bundles/BundleApplicability.cs`, `Bundles/Bcp47Tag.cs`, `MsixBundle.SelectApplicable` | Selects one app package by architecture (native preferred; WoW64 and ARM64 emulation fallbacks) and resource packages by language/scale/DXFL. Follows documented Windows behaviour, not upstream — upstream ignores architecture, scale values, and DXFL entirely. Unset qualifiers do not filter. Full RMS scoring (macro-regions, orthographic affinity, list-position weighting, PRI-level selection) is out of scope; see `docs/bundle-applicability.md`. |
 | `OptionalBundle` | [Bundle manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/bundlemanifestschema/root-elements-bundle-manifest) | no | — | Related-set bundles not modeled. |
 | Bundle block map / bundle signature | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | A bundle's own `AppxBlockMap.xml`/`AppxSignature.p7x` over child packages isn't verified. |
 
