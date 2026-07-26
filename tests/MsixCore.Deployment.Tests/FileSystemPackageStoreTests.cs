@@ -685,6 +685,9 @@ public class FileSystemPackageStoreTests : IDisposable
 
         InvalidOperationException exception =
             Assert.Throws<InvalidOperationException>(() => store.EnumeratePackages());
+        // The category must survive on the exception the caller actually receives. Asserting only on
+        // InnerException would pass even if the outer, public-facing exception carried nothing.
+        Assert.Equal(MsixErrorCode.PackageStore, MsixError.GetCode(exception));
         InvalidDataException inner = Assert.IsType<InvalidDataException>(exception.InnerException);
         Assert.Equal(MsixErrorCode.PackageStore, MsixError.GetCode(inner));
     }

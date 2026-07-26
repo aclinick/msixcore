@@ -42,7 +42,7 @@ public static class PackageExtractor
         // root has to be validated explicitly here, before any extraction begins.
         if (IsReparsePoint(root))
         {
-            throw MsixError.Format(MsixErrorCode.PartName,
+            throw MsixError.Format(MsixErrorCode.UnsafeDestination,
                 $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
         }
 
@@ -192,7 +192,7 @@ public static class PackageExtractor
         Directory.CreateDirectory(root);
         if (IsReparsePoint(root))
         {
-            throw MsixError.Format(MsixErrorCode.PartName,
+            throw MsixError.Format(MsixErrorCode.UnsafeDestination,
                 $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
         }
 
@@ -230,7 +230,7 @@ public static class PackageExtractor
             current = Path.Combine(current, segment);
             if (IsReparsePoint(current))
             {
-                throw MsixError.Format(MsixErrorCode.PartName,
+                throw MsixError.Format(MsixErrorCode.UnsafeDestination,
                     $"Destination path '{current}' contains a symbolic link or junction; refusing to extract.");
             }
         }

@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | `zip_structure` | Malformed ZIP structure | Invalid EOCD, central directory, or entry header |
 | `part_name` | Invalid or unsafe OPC part name | Traversal, rooted names, encoded separators, NUL, or equivalent names |
+| `unsafe_destination` | Unsafe extraction destination | The destination root, or a directory beneath it, is a symlink or junction |
 | `footprint_missing` | Required footprint absent | Missing `AppxManifest.xml`, `AppxBlockMap.xml`, or `[Content_Types].xml` |
 | `content_types` | Invalid content-types semantics | Invalid declaration, duplicate declaration, or uncovered part |
 | `block_map_semantics` | Invalid block-map semantics | Duplicate file, inconsistent sizes, ZIP mismatch, or mapped content-types part |

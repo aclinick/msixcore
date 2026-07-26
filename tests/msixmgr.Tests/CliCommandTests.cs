@@ -680,11 +680,34 @@ public class CliCommandTests : IDisposable
                     char.ToUpperInvariant(segment[0]) + segment[1..]));
 
             Assert.Equal(code.ToString(), roundTripped);
-            Assert.Equal(snakeCase, CliContract.ErrorCode(MsixError.Format(code, "test")));
             Assert.All(
                 snakeCase,
                 static character => Assert.True(char.IsAsciiLetterLower(character) || character == '_'));
+
+            // Unknown is a read-side fallback and MsixError.Format rejects it, so only the
+            // assignable members can be round-tripped through a real exception.
+            if (code != MsixErrorCode.Unknown)
+            {
+                Assert.Equal(snakeCase, CliContract.ErrorCode(MsixError.Format(code, "test")));
+            }
         }
+    }
+
+    [Fact]
+    public void ErrorCode_UndefinedEnumValueCannotEscapeTheRegistry()
+    {
+        // An undefined value would otherwise serialize as its number (e.g. "9999"), escaping both the
+        // documented registry and the [a-z_] shape callers are told to expect.
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MsixError.Format((MsixErrorCode)9999, "test"));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MsixError.Format(MsixErrorCode.Unknown, "test"));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MsixError.Tag(new InvalidOperationException("test"), (MsixErrorCode)9999));
+
+        var smuggled = new InvalidDataException("test");
+        smuggled.Data[MsixError.ErrorCodeDataKey] = (MsixErrorCode)9999;
+        Assert.Equal("invalid_data", CliContract.ErrorCode(smuggled));
     }
 
     [Fact]

@@ -20,6 +20,13 @@ public enum MsixErrorCode
     /// <summary>An OPC part name is invalid, unsafe, non-canonical, or duplicated.</summary>
     PartName,
 
+    /// <summary>
+    /// The caller-supplied extraction destination is unsafe — for example the destination root, or a
+    /// directory beneath it, is a symbolic link or junction that would redirect writes outside the
+    /// intended tree. This is a property of the destination, not of any package part name.
+    /// </summary>
+    UnsafeDestination,
+
     /// <summary>A required package footprint part is absent.</summary>
     FootprintMissing,
 

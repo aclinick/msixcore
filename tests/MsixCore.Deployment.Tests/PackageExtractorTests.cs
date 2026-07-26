@@ -118,7 +118,10 @@ public class PackageExtractorTests : IDisposable
 
         using OpcPackage package = OpcFrom(("AppxManifest.xml", "<manifest/>"));
 
-        Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, link));
+        InvalidDataException error =
+            Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, link));
+        // An unsafe destination is a property of the caller's directory, not of any package part name.
+        Assert.Equal(MsixErrorCode.UnsafeDestination, MsixError.GetCode(error));
     }
 
     [Fact]
@@ -141,7 +144,9 @@ public class PackageExtractorTests : IDisposable
 
         using OpcPackage package = OpcFrom(("AppxManifest.xml", "<manifest/>"), ("Assets/Logo.png", "PNG"));
 
-        Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, dest));
+        InvalidDataException error =
+            Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, dest));
+        Assert.Equal(MsixErrorCode.UnsafeDestination, MsixError.GetCode(error));
     }
 
     [Fact]
