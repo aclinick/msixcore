@@ -88,7 +88,7 @@ public sealed class DirectoryOpcPackage : IOpcPackage
     /// Recursively enumerates payload files under <paramref name="root"/>, skipping symlinks/reparse
     /// points (both files and directories) so a loose package cannot follow a link outside its root.
     /// </summary>
-    private static IEnumerable<string> EnumeratePayloadFiles(string root)
+    internal static IEnumerable<string> EnumeratePayloadFiles(string root)
     {
         var pending = new Stack<string>();
         pending.Push(root);
@@ -121,6 +121,46 @@ public sealed class DirectoryOpcPackage : IOpcPackage
     {
         ArgumentException.ThrowIfNullOrEmpty(partName);
         return _partToFullPath.ContainsKey(OpcPackage.NormalizeLookup(partName));
+    }
+
+    /// <summary>
+    /// Re-enumerates the live directory rooted at <paramref name="root"/> and returns the
+    /// normalized part names found on disk right now. Uses the same traversal (symlink-safe),
+    /// normalization (<see cref="OpcPackage.NormalizeLookup"/>), and case-insensitive semantics
+    /// as <see cref="Open"/>. This is the single shared implementation used by both opening and
+    /// drift detection — no separate enumeration logic exists.
+    /// </summary>
+    /// <remarks>
+    /// The root-escape check from <see cref="Open"/> is preserved: any file whose canonical path
+    /// escapes the root is silently skipped (rather than throwing, since drift detection must not
+    /// abort on attacker-created symlinks that <see cref="EnumeratePayloadFiles"/> already skips).
+    /// </remarks>
+    internal static HashSet<string> EnumerateLiveNormalizedParts(string root)
+    {
+        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        var parts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string fullPath in EnumeratePayloadFiles(root))
+        {
+            string relative = Path.GetRelativePath(root, fullPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            if (Path.AltDirectorySeparatorChar != '/')
+            {
+                relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
+            }
+
+            // Root-escape check: skip files that escape the root.
+            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            parts.Add(OpcPackage.NormalizeLookup(relative));
+        }
+
+        return parts;
     }
 
     /// <inheritdoc/>

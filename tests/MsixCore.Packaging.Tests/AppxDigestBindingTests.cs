@@ -1373,6 +1373,139 @@ public class AppxDigestBindingTests
 
     #endregion
 
+    #region Payload-set drift detection (additions and removals)
+
+    [Fact]
+    public void PayloadDrift_FileAddedAfterOpen_ValidationFails()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-paydrift-add-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] payload = "legitimate"u8.ToArray();
+            var files = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payload,
+            };
+            byte[] blockMapBytes = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(files));
+
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payload);
+
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // Attacker drops evil.dll after open.
+            File.WriteAllBytes(Path.Combine(dir, "evil.dll"), new byte[] { 0x4D, 0x5A });
+
+            // DetectDirectoryDrift must catch the addition.
+            string? drift = package.DetectDirectoryDrift();
+            Assert.NotNull(drift);
+            Assert.Contains("now exists on disk", drift);
+            Assert.Contains("evil.dll", drift);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PayloadDrift_FileRemovedAfterOpen_ValidationFails()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-paydrift-rm-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] payload = "legitimate"u8.ToArray();
+            var files = new Dictionary<string, byte[]>
+            {
+                ["AppxManifest.xml"] = manifest,
+                ["Assets/payload.txt"] = payload,
+            };
+            byte[] blockMapBytes = System.Text.Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(files));
+
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), blockMapBytes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payload);
+
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // Attacker removes a payload file after open.
+            File.Delete(Path.Combine(dir, "Assets", "payload.txt"));
+
+            string? drift = package.DetectDirectoryDrift();
+            Assert.NotNull(drift);
+            Assert.Contains("now missing from disk", drift);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PayloadDrift_UnmodifiedDirectory_NoDrift()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"msixcore-paydrift-ok-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(Path.Combine(dir, "Assets"));
+
+            byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] payload = "legitimate"u8.ToArray();
+
+            File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
+            File.WriteAllBytes(Path.Combine(dir, "AppxBlockMap.xml"), contentTypes); // dummy
+            File.WriteAllBytes(Path.Combine(dir, "AppxManifest.xml"), manifest);
+            File.WriteAllBytes(Path.Combine(dir, "Assets", "payload.txt"), payload);
+
+            using MsixPackage package = MsixPackage.OpenDirectory(dir);
+
+            // No modifications — drift check passes.
+            string? drift = package.DetectDirectoryDrift();
+            Assert.Null(drift);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PayloadDrift_ContainerPackage_AlwaysNull()
+    {
+        // Container packages never have drift — confirm no false positive.
+        byte[] contentTypes = "<Types />"u8.ToArray();
+        byte[] blockMap = "<BlockMap />"u8.ToArray();
+        byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
+
+        var parts = new Dictionary<string, byte[]>
+        {
+            ["[Content_Types].xml"] = contentTypes,
+            ["AppxBlockMap.xml"] = blockMap,
+            ["AppxManifest.xml"] = manifest,
+        };
+
+        using MsixPackage package = MsixPackage.Open(BuildOpcStream(parts));
+        Assert.Null(package.DetectDirectoryDrift());
+    }
+
+    #endregion
+
     #region Helper methods
 
     /// <summary>Directly constructs an <see cref="AppxDigestTable"/> for verifier tests (bypasses CMS).</summary>

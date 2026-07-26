@@ -186,6 +186,47 @@ public class CliCommandTests : IDisposable
 
     #endregion
 
+    #region Directory payload-set integrity (extra/missing files fail validate)
+
+    [Fact]
+    public void Validate_DirectoryWithExtraFile_ExitsNonZero()
+    {
+        // A file not covered by the block map must cause validation failure.
+        var extra = new Dictionary<string, byte[]>
+        {
+            ["Assets/data.bin"] = Encoding.UTF8.GetBytes("legit payload"),
+        };
+        string dir = LooseCliPackage.Create(_root, "pkgExtra", extra);
+
+        // Add a file not in the block map.
+        File.WriteAllBytes(Path.Combine(dir, "evil.dll"), new byte[] { 0x4D, 0x5A });
+
+        (int code, string output, _) = RunValidate(dir);
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("INTEGRITY FAILED", output);
+    }
+
+    [Fact]
+    public void Validate_DirectoryWithMissingPayload_ExitsNonZero()
+    {
+        var extra = new Dictionary<string, byte[]>
+        {
+            ["Assets/data.bin"] = Encoding.UTF8.GetBytes("legit payload"),
+        };
+        string dir = LooseCliPackage.Create(_root, "pkgMissing", extra);
+
+        // Remove a payload file that the block map expects.
+        File.Delete(Path.Combine(dir, "Assets", "data.bin"));
+
+        (int code, string output, _) = RunValidate(dir);
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("INTEGRITY FAILED", output);
+    }
+
+    #endregion
+
     private static (int Code, string Out, string Err) RunUnpack(params string[] args)
     {
         var o = new StringWriter();

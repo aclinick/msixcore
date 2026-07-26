@@ -211,11 +211,9 @@ public sealed class MsixPackage : IPackage
                 $"Cannot verify signature binding: {signature.DigestTableError ?? "the digest table is not available."}");
         }
 
-        // For directory-backed packages, detect footprint parts that appeared on disk after
-        // the package was opened. The open-time snapshot is frozen, so ContainsPart would
-        // return false for newly-created files — an attacker could slip an unsigned
-        // CodeIntegrity.cat after open and we would never notice. Fail closed on drift.
-        string? driftError = DetectFootprintDrift();
+        // For directory-backed packages, detect any changes to the part set (additions,
+        // removals) since open. This covers both footprint parts and payload parts.
+        string? driftError = DetectDirectoryDrift();
         if (driftError is not null)
         {
             return new IndirectDataBindingResult
@@ -241,9 +239,9 @@ public sealed class MsixPackage : IPackage
     }
 
     /// <summary>
-    /// For <see cref="DirectoryOpcPackage"/>-backed packages, checks whether any footprint
-    /// part that was absent at open time now exists on the live filesystem. Returns an error
-    /// message if drift is detected, or <see langword="null"/> if safe.
+    /// For <see cref="DirectoryOpcPackage"/>-backed packages, compares the live part set on disk
+    /// against the open-time snapshot. Returns an error message if any parts were added or
+    /// removed since open, or <see langword="null"/> if the directory is unchanged.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -252,107 +250,69 @@ public sealed class MsixPackage : IPackage
     /// applies to loose directories.
     /// </para>
     /// <para>
-    /// The live directory is re-enumerated at verification time using the same normalization
-    /// (<see cref="OpcPackage.NormalizeLookup"/>) and case-insensitive comparison as
-    /// <see cref="DirectoryOpcPackage.Open"/>. This prevents case-variation bypasses on
-    /// case-sensitive filesystems (e.g. Linux), where <c>File.Exists</c> with one canonical
-    /// spelling would miss <c>appxmetadata/codeintegrity.cat</c>.
+    /// Uses <see cref="DirectoryOpcPackage.EnumerateLiveNormalizedParts"/> — the same traversal
+    /// (symlink-safe, reparse-point-skipping, root-escape-checking) and normalization
+    /// (<see cref="OpcPackage.NormalizeLookup"/>, case-insensitive) as
+    /// <see cref="DirectoryOpcPackage.Open"/>. There is exactly one enumeration implementation.
+    /// </para>
+    /// <para>
+    /// This is a public method so that callers (including the CLI validate command) can
+    /// gate the overall validation verdict on directory integrity regardless of signature status.
     /// </para>
     /// </remarks>
-    private string? DetectFootprintDrift()
+    /// <returns>An error message describing the drift, or <see langword="null"/> if safe.</returns>
+    public string? DetectDirectoryDrift()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (_opc is not DirectoryOpcPackage dirPkg)
         {
             return null; // Container packages: no drift possible from the archive.
         }
 
-        // Footprint parts that binding verification cares about.
-        ReadOnlySpan<string> footprintParts =
-        [
-            OpcPartNames.ContentTypes,
-            OpcPartNames.AppxBlockMap,
-            OpcPartNames.CodeIntegrityCatalog,
-        ];
-
         string root = dirPkg.RootDirectory;
 
-        // Re-enumerate the live directory using the same normalization as
-        // DirectoryOpcPackage.Open, so we catch files regardless of casing.
-        // If re-enumeration fails (e.g. concurrent IO), fail closed.
-        HashSet<string> liveNormalized;
+        // Re-enumerate using the shared helper (single implementation for all callers).
+        HashSet<string> liveParts;
         try
         {
-            liveNormalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string fullPath in EnumerateLiveFiles(root))
-            {
-                string relative = Path.GetRelativePath(root, fullPath)
-                    .Replace(Path.DirectorySeparatorChar, '/');
-                if (Path.AltDirectorySeparatorChar != '/')
-                {
-                    relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
-                }
-
-                liveNormalized.Add(OpcPackage.NormalizeLookup(relative));
-            }
+            liveParts = DirectoryOpcPackage.EnumerateLiveNormalizedParts(root);
         }
         catch (IOException ex)
         {
-            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Binding cannot be trusted.";
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
         }
         catch (UnauthorizedAccessException ex)
         {
-            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Binding cannot be trusted.";
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
         }
 
-        foreach (string partName in footprintParts)
+        // Build the open-time normalized set from PartNames.
+        var openTimeParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string part in _opc.PartNames)
         {
-            string normalized = OpcPackage.NormalizeLookup(partName);
+            openTimeParts.Add(OpcPackage.NormalizeLookup(part));
+        }
 
-            if (_opc.ContainsPart(partName))
+        // Check for additions: parts on disk now that were not in the open-time snapshot.
+        foreach (string live in liveParts)
+        {
+            if (!openTimeParts.Contains(live))
             {
-                continue; // Was present at open time — already in the snapshot.
+                return $"Part '{live}' now exists on disk but was absent when the package was opened — the directory has been modified.";
             }
+        }
 
-            // File appeared after open (any casing).
-            if (liveNormalized.Contains(normalized))
+        // Check for removals: parts in the open-time snapshot that are no longer on disk.
+        foreach (string original in openTimeParts)
+        {
+            if (!liveParts.Contains(original))
             {
-                return $"Footprint part '{partName}' was absent when the package was opened but now exists on disk — the directory has been modified. Binding cannot be trusted.";
+                return $"Part '{original}' was present when the package was opened but is now missing from disk — the directory has been modified.";
             }
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Non-recursively-symlink-safe file enumerator matching the same traversal rules as
-    /// <see cref="DirectoryOpcPackage.Open"/>: skips symlinks/reparse points.
-    /// </summary>
-    private static IEnumerable<string> EnumerateLiveFiles(string root)
-    {
-        var pending = new Stack<string>();
-        pending.Push(root);
-
-        while (pending.Count > 0)
-        {
-            string current = pending.Pop();
-            foreach (string entry in Directory.EnumerateFileSystemEntries(current))
-            {
-                var attributes = File.GetAttributes(entry);
-                if (attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    continue;
-                }
-
-                if (attributes.HasFlag(FileAttributes.Directory))
-                {
-                    pending.Push(entry);
-                }
-                else
-                {
-                    yield return entry;
-                }
-            }
-        }
     }
 
     /// <summary>
