@@ -1,29 +1,25 @@
 using System.Runtime.InteropServices;
 
-namespace MsixCore.CorpusRoundtrip;
+namespace MsixCore.Packaging.Tests;
 
-/// <summary>Locates makeappx.exe from PATH or installed Windows SDK folders.</summary>
-public sealed class MakeAppxLocator
+/// <summary>Locates Windows SDK tools that some tests compare our output against.</summary>
+internal static class WindowsSdkTools
 {
-    /// <summary>Returns the best available makeappx.exe path, or <see langword="null"/>.</summary>
+    /// <summary>
+    /// Returns a makeappx.exe the current host can execute, or <see langword="null"/> when the
+    /// Windows SDK is not installed (or this is not Windows), in which case the caller should skip.
+    /// </summary>
     /// <remarks>
-    /// The Windows SDK ships makeappx.exe once per architecture. Picking a fixed architecture works
-    /// only on the machine it was written on: an arm64 binary cannot start on an x64 host, and the
-    /// failure surfaces as a confusing "not a valid application for this OS platform"
-    /// <see cref="System.ComponentModel.Win32Exception"/> rather than as "tool not found".
-    /// Candidates are therefore ranked by what the host can actually execute.
+    /// The SDK ships makeappx.exe once per architecture. Preferring a fixed architecture works only
+    /// on the machine the preference was written on: an arm64 binary on an x64 host fails to start
+    /// with "not a valid application for this OS platform", which reads as a test failure rather
+    /// than as an absent tool.
     /// </remarks>
-    public static string? Find()
+    public static string? FindMakeAppx()
     {
         if (!OperatingSystem.IsWindows())
         {
             return null;
-        }
-
-        string? fromPath = FindOnPath();
-        if (fromPath is not null)
-        {
-            return fromPath;
         }
 
         string kitsBin = Path.Combine(
@@ -66,29 +62,4 @@ public sealed class MakeAppxLocator
         Architecture.Arm => ["arm", "x86"],
         _ => ["x64", "x86"],
     };
-
-    private static string? FindOnPath()
-    {
-        string? pathValue = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(pathValue))
-        {
-            return null;
-        }
-
-        foreach (string directory in pathValue.Split(Path.PathSeparator))
-        {
-            if (string.IsNullOrWhiteSpace(directory))
-            {
-                continue;
-            }
-
-            string candidate = Path.Combine(directory.Trim(), "makeappx.exe");
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
 }

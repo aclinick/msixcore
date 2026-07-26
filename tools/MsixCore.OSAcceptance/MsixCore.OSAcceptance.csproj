@@ -6,8 +6,15 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!-- Windows-only tool, but it must still restore and build on Linux CI so that a Linux run
+         type-checks it rather than failing outright at restore. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Shared with the roundtrip tool by link rather than by copy: two copies of this file had
+         already drifted apart, and one of them preferred an SDK architecture the host could not
+         execute. -->
+    <Compile Include="..\MsixCore.CorpusRoundtrip\MakeAppxLocator.cs" Link="MakeAppxLocator.cs" />
     <ProjectReference Include="..\..\src\MsixCore.Packaging\MsixCore.Packaging.csproj" />
   </ItemGroup>
 </Project>

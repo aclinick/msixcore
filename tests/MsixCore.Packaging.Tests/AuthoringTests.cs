@@ -795,30 +795,7 @@ public sealed class AuthoringTests : IDisposable
         return XDocument.Load(stream);
     }
 
-    private static string? FindMakeAppx()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return null;
-        }
-
-        string? programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-        string kitsBin = Path.Combine(programFilesX86, "Windows Kits", "10", "bin");
-        if (!Directory.Exists(kitsBin))
-        {
-            return null;
-        }
-
-        string[] candidates = Directory.EnumerateFiles(kitsBin, "makeappx.exe", SearchOption.AllDirectories)
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return candidates.LastOrDefault(static path => path.Contains(
-                $"{Path.DirectorySeparatorChar}arm64{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase))
-            ?? candidates.LastOrDefault(static path => path.Contains(
-                $"{Path.DirectorySeparatorChar}x64{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase));
-    }
+    private static string? FindMakeAppx() => WindowsSdkTools.FindMakeAppx();
 
     private static (int ExitCode, string Diagnostics) RunProcess(string fileName, params string[] arguments)
     {
