@@ -663,10 +663,33 @@ public class BundleApplicabilityTests
         BundleTarget target = BundleTarget.Current();
 
         Assert.NotEqual(ProcessorArchitecture.Unknown, target.Architecture);
-        Assert.NotEmpty(target.Languages);
+
+        // The language list is legitimately empty when the host has no UI culture — a container
+        // running under the invariant culture, which is the default on many Linux CI images. Empty
+        // means "do not filter on language", so it is a valid target, not a broken one. Every tag
+        // present must still be usable, since an unparseable one now makes Select throw.
+        Assert.All(target.Languages, language => Assert.NotNull(Bcp47Tag.Parse(language)));
 
         // Scale and DXFL are deliberately unset so they cannot silently drop resource packages.
         Assert.Null(target.Scale);
         Assert.Null(target.DXFeatureLevel);
+    }
+
+    [Fact]
+    public void Select_CurrentTargetLanguages_AreAlwaysAccepted()
+    {
+        // Current() must never produce a target that Select rejects. It walks CultureInfo, which can
+        // yield tags Bcp47Tag does not accept, and an unparseable requested tag throws.
+        BundleTarget current = BundleTarget.Current();
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(ResourceBundle),
+            new BundleTarget
+            {
+                Architecture = ProcessorArchitecture.X64,
+                Languages = current.Languages,
+            });
+
+        Assert.NotNull(result.ApplicationPackage);
     }
 }

@@ -74,7 +74,14 @@ public sealed record BundleTarget
              !string.IsNullOrEmpty(culture.Name);
              culture = culture.Parent)
         {
-            languages.Add(culture.Name);
+            // Select rejects a requested tag it cannot parse, so a culture name we do not support
+            // must be dropped here rather than turned into an exception the caller cannot avoid.
+            // The list is legitimately empty under the invariant culture, which is common in
+            // containers; empty simply means "do not filter on language".
+            if (Bcp47Tag.Parse(culture.Name) is not null)
+            {
+                languages.Add(culture.Name);
+            }
         }
 
         return languages;
