@@ -52,6 +52,9 @@ public sealed class MsixBundle : IDisposable
     /// <exception cref="InvalidDataException">
     /// The bundle contains no application package applicable to the target.
     /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="target"/> requests a language that is not a supported BCP-47 tag.
+    /// </exception>
     public BundleApplicabilityResult SelectApplicable(
         BundleTarget? target = null,
         BundleApplicabilityOptions options = BundleApplicabilityOptions.None) =>

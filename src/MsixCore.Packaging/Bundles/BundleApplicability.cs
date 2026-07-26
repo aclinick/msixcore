@@ -54,6 +54,9 @@ public static class BundleApplicability
     /// <param name="options">Qualifiers to ignore.</param>
     /// <returns>The applicable application package and resource packages.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="manifest"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="target"/> requests a language that is not a supported BCP-47 tag.
+    /// </exception>
     /// <exception cref="InvalidDataException">
     /// The bundle contains no application package at all, or none that can run on the target
     /// architecture. Tagged <see cref="MsixErrorCode.NoApplicablePackage"/>.
@@ -133,11 +136,21 @@ public static class BundleApplicability
         BundleTarget target,
         BundleApplicabilityOptions options)
     {
-        List<Bcp47Tag> requested = target.Languages
-            .Select(Bcp47Tag.Parse)
-            .Where(t => t is not null)
-            .Select(t => t!.Value)
-            .ToList();
+        // A requested tag we cannot parse is an error, not a no-op. Silently dropping it would, once
+        // every requested tag had been dropped, leave requested.Count == 0 and disable language
+        // filtering entirely — quietly selecting every language in the bundle.
+        var requested = new List<Bcp47Tag>(target.Languages.Count);
+        foreach (string language in target.Languages)
+        {
+            if (Bcp47Tag.Parse(language) is not { } tag)
+            {
+                throw new ArgumentException(
+                    $"'{language}' is not a supported BCP-47 language tag.",
+                    nameof(target));
+            }
+
+            requested.Add(tag);
+        }
 
         // Selection is tracked by manifest index, not by value. BundlePackageEntry is a record, so
         // a value-based lookup would conflate two structurally identical Package entries.
@@ -220,7 +233,7 @@ public static class BundleApplicability
     }
 
     private static bool HasLanguageQualifier(BundlePackageEntry resource) =>
-        resource.Resources.Any(r => Bcp47Tag.Parse(r.Language) is not null);
+        resource.Resources.Any(r => !string.IsNullOrWhiteSpace(r.Language));
 
     private static LanguageMatch BestLanguageMatch(
         BundlePackageEntry resource,
@@ -238,6 +251,10 @@ public static class BundleApplicability
             return LanguageMatch.Undetermined;
         }
 
+        // A declared language that cannot be parsed is skipped below rather than treated as absent.
+        // Treating it as absent would make the package unqualified and therefore applicable to
+        // everyone, which is the opposite of the safe reading: payload declared for a language we
+        // cannot understand is payload we cannot claim applies.
         LanguageMatch best = LanguageMatch.None;
         foreach (BundleResource offeredResource in resource.Resources)
         {

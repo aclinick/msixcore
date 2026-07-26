@@ -36,7 +36,7 @@ public sealed record BundleTarget
     public string? DXFeatureLevel { get; init; }
 
     /// <summary>
-    /// Builds a target describing the machine this process is running on: the current process
+    /// Builds a target describing the machine this process is running on: the current device
     /// architecture and the current UI culture followed by its parent cultures.
     /// </summary>
     /// <returns>A target for the current device.</returns>

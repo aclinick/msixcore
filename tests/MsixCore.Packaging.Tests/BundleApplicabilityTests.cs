@@ -348,6 +348,48 @@ public class BundleApplicabilityTests
         Assert.Equal(["dx11.msix"], FileNames(result.ResourcePackages));
     }
 
+    [Theory]
+    [InlineData("x-private")]
+    [InlineData("")]
+    public void Select_UnsupportedTargetLanguage_Throws(string language)
+    {
+        // Silently dropping it would eventually leave no requested languages at all, which disables
+        // language filtering and quietly selects every language in the bundle.
+        Assert.Throws<ArgumentException>(() => BundleApplicability.Select(
+            Parse(ResourceBundle),
+            new BundleTarget
+            {
+                Architecture = ProcessorArchitecture.X64,
+                Languages = ["en-US", language],
+            }));
+    }
+
+    [Fact]
+    public void Select_UnsupportedDeclaredLanguage_IsNotTreatedAsUnqualified()
+    {
+        // A package declaring a language we cannot parse is still language-qualified. Treating it as
+        // unqualified would make it applicable to every device instead of none.
+        const string bundle =
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Bundle xmlns="http://schemas.microsoft.com/appx/2013/bundle" SchemaVersion="4.0">
+              <Identity Name="Contoso.MyApp" Publisher="CN=Contoso" Version="1.2.3.4" />
+              <Packages>
+                <Package Type="application" Version="1.2.3.4" Architecture="x64" FileName="MyApp_x64.msix" />
+                <Package Type="resource" Version="1.2.3.4" ResourceId="odd" FileName="odd.msix">
+                  <Resources><Resource Language="x-private" /></Resources>
+                </Package>
+              </Packages>
+            </Bundle>
+            """;
+
+        BundleApplicabilityResult result = BundleApplicability.Select(
+            Parse(bundle),
+            new BundleTarget { Architecture = ProcessorArchitecture.X64, Languages = ["en-US"] });
+
+        Assert.Empty(result.ResourcePackages);
+    }
+
     [Fact]
     public void Select_ScaleOfNonSelectedLanguage_DoesNotEliminateEverything()
     {

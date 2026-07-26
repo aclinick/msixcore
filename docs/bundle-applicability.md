@@ -105,6 +105,16 @@ implemented. Tags whose primary subtag is not 2-8 letters — private-use (`x-pr
 grandfathered (`i-klingon`) forms — are rejected outright rather than being read as a language `x`
 or `i`, which would make every such tag compare equal to every other.
 
+Rejection means something different on each side of the comparison, and neither side treats an
+unsupported tag as absent:
+
+- A **requested** tag that cannot be parsed throws `ArgumentException`. Dropping it silently would,
+  once every requested tag had been dropped, leave no requested languages at all — which means "do
+  not filter" and would quietly select every language in the bundle.
+- A **declared** tag on a resource package that cannot be parsed simply never matches. The package is
+  still language-qualified, so it is not selected. Treating it as unqualified would make payload
+  declared for a language we cannot understand applicable to *every* device.
+
 ## Scale
 
 The requested scale is resolved against the scales carried by the resource packages that **survive
