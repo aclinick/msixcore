@@ -1,6 +1,8 @@
 using System.IO.Compression;
 using System.Text;
 using MsixCore.Packaging;
+using MsixCore.Packaging.Authoring;
+using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Packaging.Tests;
 
@@ -124,6 +126,7 @@ public class MsixPackageTests
         var allParts = new Dictionary<string, byte[]>(payload, StringComparer.Ordinal)
         {
             ["AppxBlockMap.xml"] = Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(payload)),
+            [OpcPartNames.ContentTypes] = ContentTypesWriter.Write(payload.Keys),
         };
 
         using var zip = new MemoryStream();
@@ -131,7 +134,7 @@ public class MsixPackageTests
         {
             foreach ((string name, byte[] content) in allParts)
             {
-                using Stream entry = archive.CreateEntry(name).Open();
+                using Stream entry = archive.CreateEntry(name, CompressionLevel.NoCompression).Open();
                 entry.Write(content);
             }
         }
@@ -161,4 +164,3 @@ public class MsixPackageTests
         Assert.Null(package.ReadSignature());
     }
 }
-

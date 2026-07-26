@@ -40,13 +40,11 @@ public static class BlockMapVerifier
         ArgumentNullException.ThrowIfNull(blockMap);
 
         var fileResults = new List<BlockMapFileResult>(blockMap.Files.Count);
-        var mappedNames = new HashSet<string>(
-            blockMap.Files.Select(static file => file.Name),
-            StringComparer.OrdinalIgnoreCase);
+        var mappedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Check snapshot consistency before opening any payload streams. This narrows, but cannot
         // eliminate, the race window for mutable backing stores.
-        List<string> coverageErrors = CheckCoverage(package, mappedNames);
+        List<string> coverageErrors = CheckCoverage(package, blockMap, mappedNames);
         bool allValid = coverageErrors.Count == 0;
 
         // Rent a single block buffer and reuse it across every verified file. The pool may return an
@@ -166,7 +164,8 @@ public static class BlockMapVerifier
         ArgumentNullException.ThrowIfNull(blockMap);
         return CheckCoverage(
             package,
-            new HashSet<string>(blockMap.Files.Select(static file => file.Name), StringComparer.OrdinalIgnoreCase));
+            blockMap,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
     private static BlockMapFileResult VerifyFile(IOpcPackage package, BlockMapHashMethod hashMethod, BlockMapFile file, byte[] buffer)
@@ -217,9 +216,36 @@ public static class BlockMapVerifier
         return filled;
     }
 
-    private static List<string> CheckCoverage(IOpcPackage package, HashSet<string> mappedNames)
+    private static List<string> CheckCoverage(
+        IOpcPackage package,
+        BlockMap blockMap,
+        HashSet<string> mappedNames)
     {
         var errors = new List<string>();
+        foreach (BlockMapFile file in blockMap.Files)
+        {
+            if (!mappedNames.Add(file.Name))
+            {
+                errors.Add($"Block map contains a duplicate file entry for '{file.Name}'.");
+            }
+
+            if (file.Size > 0 && file.Blocks.Count == 0)
+            {
+                errors.Add($"Block map file '{file.Name}' is non-empty but declares zero blocks.");
+            }
+
+            OpcPartZipInfo? zipInfo = package.GetZipInfo(file.Name);
+            if (zipInfo is not null && ValidateZipMetadata(file, zipInfo) is string metadataError)
+            {
+                errors.Add($"Block map file '{file.Name}': {metadataError}");
+            }
+        }
+
+        if (mappedNames.Contains(OpcPartNames.ContentTypes))
+        {
+            errors.Add($"'{OpcPartNames.ContentTypes}' must not appear in the block map.");
+        }
+
         if (package.DetectSnapshotDrift() is string driftError)
         {
             errors.Add($"Package snapshot drift detected: {driftError}");
@@ -249,7 +275,75 @@ public static class BlockMapVerifier
             }
         }
 
+        ValidateContentTypes(package, errors);
+
         return errors;
+    }
+
+    private static void ValidateContentTypes(IOpcPackage package, List<string> errors)
+    {
+        if (!package.ContainsPart(OpcPartNames.ContentTypes))
+        {
+            errors.Add($"Package is missing the required '{OpcPartNames.ContentTypes}' part.");
+            return;
+        }
+
+        ContentTypesMap contentTypes;
+        try
+        {
+            using Stream stream = package.OpenPart(OpcPartNames.ContentTypes);
+            contentTypes = ContentTypesParser.Parse(stream);
+        }
+        catch (Exception ex) when (
+            ex is InvalidDataException or IOException or ObjectDisposedException or NotSupportedException)
+        {
+            errors.Add($"Package '{OpcPartNames.ContentTypes}' is invalid: {ex.Message}");
+            return;
+        }
+
+        foreach (string part in package.PartNames)
+        {
+            if (!part.Equals(OpcPartNames.ContentTypes, StringComparison.OrdinalIgnoreCase)
+                && !contentTypes.Covers(part))
+            {
+                errors.Add($"Package part '{part}' has no content type.");
+            }
+        }
+    }
+
+    private static string? ValidateZipMetadata(BlockMapFile file, OpcPartZipInfo zipInfo)
+    {
+        if (!zipInfo.IsCompressed)
+        {
+            if (file.Blocks.Any(static block => block.CompressedSize is not null))
+            {
+                return "a stored ZIP entry must not declare per-block compressed Size attributes.";
+            }
+
+            return file.Size == zipInfo.UncompressedSize
+                ? null
+                : $"stored-size mismatch: block map declares {file.Size} bytes but the ZIP entry has {zipInfo.UncompressedSize}.";
+        }
+
+        if (file.Blocks.Any(static block => block.CompressedSize is null))
+        {
+            return "a compressed ZIP entry must declare a compressed Size for every block.";
+        }
+
+        long declaredCompressedSize;
+        try
+        {
+            declaredCompressedSize = file.Blocks.Sum(static block => block.CompressedSize!.Value);
+        }
+        catch (OverflowException)
+        {
+            return "the sum of per-block compressed sizes overflows Int64.";
+        }
+
+        long discrepancy = zipInfo.CompressedSize - declaredCompressedSize;
+        return discrepancy is 0 or 2
+            ? null
+            : $"compressed-size mismatch: block map declares {declaredCompressedSize} bytes but the ZIP entry has {zipInfo.CompressedSize}.";
     }
 
     private static bool ExpectedHashMatches(

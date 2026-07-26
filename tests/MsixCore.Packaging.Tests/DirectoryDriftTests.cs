@@ -153,6 +153,9 @@ public sealed class DirectoryDriftTests : IDisposable
             Path.Combine(_root, "AppxBlockMap.xml"),
             PackageBuilder.BlockMapXml(payload),
             Encoding.UTF8);
+        File.WriteAllBytes(
+            Path.Combine(_root, OpcPartNames.ContentTypes),
+            Authoring.ContentTypesWriter.Write(payload.Keys));
         return _root;
     }
 
@@ -176,6 +179,8 @@ public sealed class DirectoryDriftTests : IDisposable
         public IReadOnlyCollection<string> PartNames => inner.PartNames;
 
         public string? DetectSnapshotDrift() => inner.DetectSnapshotDrift();
+
+        public OpcPartZipInfo? GetZipInfo(string partName) => inner.GetZipInfo(partName);
 
         public bool ContainsPart(string partName) => inner.ContainsPart(partName);
 

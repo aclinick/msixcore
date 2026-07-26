@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Studio.Tests;
 
@@ -118,6 +119,8 @@ internal sealed class TestPackageFixture : IDisposable
         var parts = new Dictionary<string, byte[]>(payloadParts, StringComparer.Ordinal)
         {
             ["AppxBlockMap.xml"] = BuildBlockMap(payloadParts),
+            [OpcPartNames.ContentTypes] =
+                """<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/octet-stream"/><Default Extension="p7x" ContentType="application/vnd.ms-appx.signature"/></Types>"""u8.ToArray(),
         };
 
         if (signed)

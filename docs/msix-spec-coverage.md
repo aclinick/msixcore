@@ -16,32 +16,32 @@ MSIX/APPX format and manifest-schema documentation.
 Legend: **yes** = implemented and exercised; **partial** = present but incomplete or not wired into
 the public read path; **no** = not implemented.
 
-> **Refreshed after merging `origin/main` (Phase 5/6 deployment engine).** The port now has a working
-> cross-platform **install engine** (extract → stage → commit with rollback), a `PackageExtractor`,
-> the `msixmgr unpack` verb, and the publisher-DN matching bug ([#12](https://github.com/aclinick/msixcore/issues/12))
-> is **fixed**. Counts below reflect the merged state.
+> **Refreshed after signature binding and read-path validation.** Counts include the deployment
+> engine, bundle reader, signature footprint binding, ZIP compressed-size enforcement, and OPC
+> content-type validation now present in the implementation.
 
 ## Summary counts
 
 | Area | yes | partial | no | rows |
 | --- | --- | --- | --- | --- |
-| Container / OPC | 4 | 2 | 2 | 8 |
+| Container / OPC | 5 | 2 | 1 | 8 |
 | Manifest (AppxManifest.xml) | 7 | 2 | 7 | 16 |
 | Extensions | 0 | 0 | 11 | 11 |
-| Block map | 5 | 1 | 1 | 7 |
-| Signature | 4 | 0 | 5 | 9 |
-| Bundles | 1 | 1 | 4 | 6 |
+| Block map | 6 | 0 | 1 | 7 |
+| Signature | 9 | 1 | 4 | 14 |
+| Bundles | 3 | 0 | 3 | 6 |
 | Package kinds | 1 | 2 | 4 | 7 |
-| Deployment | 9 | 2 | 3 | 14 |
-| **Total** | **31** | **10** | **37** | **78** |
+| Deployment | 10 | 1 | 3 | 14 |
+| **Total** | **41** | **8** | **34** | **83** |
 
 **Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
-CMS-envelope signature reading + faithful publisher-DN matching, plus a transactional
+CMS signature reading with footprint-digest binding + faithful publisher-DN matching, plus a transactional
 extract/stage/commit/rollback install/uninstall engine and loose-layout extraction. It still does
 **not** cover: manifest extensions, most manifest namespaces beyond identity/properties, framework/
-dependency resolution, bundle detection/resolution, non-main package kinds, deep signature
-binding/trust, or OS-integration handlers (shortcuts, ARP, file-type/protocol registration).
+dependency resolution, bundle applicability/resource selection, non-main package kinds,
+AXPC/AXCD verification, certificate trust, or OS-integration handlers (shortcuts, ARP,
+file-type/protocol registration).
 
 Key doc references (full list per row): MSIX package format overview
 <https://learn.microsoft.com/en-us/windows/msix/overview>; package manifest schema reference
@@ -60,7 +60,7 @@ signing overview <https://learn.microsoft.com/en-us/windows/msix/package/signing
 | OPC part-name rules (no rooting, no `..`, no dup, case-insensitive equivalence) | [OPC / MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `OpcPackage.IsValidPartName`, `OpcPackage` ctor | Also a zip-slip defense; duplicate/equivalent part names rejected. |
 | Percent-encoded part-name canonicalization (`%21`→`!`, reject encoded separators/control chars) | [OPC physical model](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `OpcPackage.TryCanonicalizePartName` | Decodes each segment to the logical name used by the block map/manifest; re-validates after decode to defeat `%2e%2e`→`..` traversal. |
 | Zip64 / large packages | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | partial | `OpcPackage.cs` | Inherited from `ZipArchive` (which supports Zip64); not explicitly tested by the port. |
-| `[Content_Types].xml` parsing / content-type validation | [OPC content types](https://learn.microsoft.com/en-us/windows/msix/overview) | no | `OpcPartNames.ContentTypes` (constant only) | The part name is known and excluded from block-map coverage, but the content-types map is never parsed or validated against payload parts. |
+| `[Content_Types].xml` parsing / content-type validation | [OPC content types](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `ContentTypesParser`, `ContentTypesMap`, `BlockMapVerifier.CheckCoverage` | Requires the part, parses namespace-qualified defaults and canonicalized overrides with DTD/external resolution disabled, and reports every package part without a content type. |
 | `AppxMetadata/` footprint parts (e.g. `CodeIntegrity.cat`) | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | partial | `OpcPartNames.CodeIntegrityCatalog`, `BlockMapVerifier.ExcludedParts` | Recognized as a footprint part and excluded from block-map coverage, but the catalog is not parsed or verified. |
 | Encrypted packages (`.eappx`/`.emsix`) | [Package encryption](https://learn.microsoft.com/en-us/windows/msix/overview) | no | — | Not supported. |
 
@@ -126,7 +126,7 @@ Reference: [MSIX overview – AppxBlockMap.xml](https://learn.microsoft.com/en-u
 | Per-block uncompressed hash verification (64 KiB blocks) | [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `BlockMapVerifier.VerifyContent` | Streams uncompressed content via `IncrementalHash`-equivalent per-block hashing. |
 | Total-size verification per file | [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `BlockMapVerifier.VerifyContent` | Rejects short/long files. |
 | Coverage: payload parts ↔ block-map files (both directions) | [Package integrity](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | yes | `BlockMapVerifier.CheckCoverage` | Excludes footprint parts `[Content_Types].xml`, `AppxBlockMap.xml`, `AppxSignature.p7x`, and `AppxMetadata/CodeIntegrity.cat`. |
-| Per-block compressed `Size` (LFH stored size) validation | [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview) | partial | `BlockMapParser` (parses `Size`) | Compressed size is parsed into `BlockMapBlock.CompressedSize` but never enforced against the ZIP local file header. |
+| Per-block compressed `Size` validation | [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `BlockMapParser`, `BlockMapVerifier.ValidateZipMetadata`, `IOpcPackage.GetZipInfo` | For ZIP packages, stored entries forbid block `Size`; compressed sums must equal the ZIP compressed length or differ by exactly two bytes for the MakeAppx full-flush terminator. Not applicable to loose directories, which have no ZIP metadata. |
 | Local file header / offset binding used by MSIX signing | [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview) | no | — | Not validated (relevant to the AXBM digest, see §5). |
 
 ---
@@ -139,10 +139,9 @@ Reference: [Sign an MSIX package](https://learn.microsoft.com/en-us/windows/msix
 MSIX Core's signature scope is read/verify only. Signature production is an intentional
 non-goal delegated to Windows SignTool/signcode and CI/CD signing services (for example,
 Azure Trusted Signing / Artifact Signing, DigiCert KeyLocker, SSL.com eSigner, and
-SignPath). The expected toolchain is pack here, sign externally, then validate here. Rows marked **no** for APPX
-indirect-data binding, trust-chain evaluation, timestamp validation, and multiple signers
-reflect this read-only, delegate-trust-to-platform stance, not a promise to implement
-signing or platform trust policy.
+SignPath). The expected toolchain is pack here, sign externally, then validate here. Footprint
+binding is verified where byte ranges are defined; AXPC/AXCD remain partial. Trust-chain,
+timestamp, and multiple-signer rows reflect the read-only, delegate-trust-to-platform stance.
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
@@ -220,10 +219,9 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 
 - `inspect` (`InspectCommand.cs`): identity, family/full name, version, arch, display/publisher name,
   capabilities, signed flag, block-map file count/hash method. Text or `--json`.
-- `validate` (`ValidateCommand.cs`): block-map verification + coverage, and — when signed — CMS
-  envelope integrity and publisher/subject agreement. It **explicitly warns** that signature binding
-  (APPX indirect-data digests) and certificate trust are not verified, so a pass is an *integrity*
-  verdict, not an *authenticity* one. CI-friendly exit codes (0 ok, 1 fail, 2 usage).
+- `validate` (`ValidateCommand.cs`): block-map, ZIP-size, content-type, CMS-envelope, publisher, and
+  APPX footprint-digest checks. It still warns that certificate trust is not verified; AXPC/AXCD are
+  surfaced as not verified. CI-friendly exit codes (0 valid, 1 invalid/runtime failure, 2 usage).
 - `unpack` (`UnpackCommand.cs`): extracts a package to a loose layout via `PackageExtractor`
   (`unpack <path> -Destination <dir> [--json]`), cross-platform, no install/OS integration.
 - `PackageManager.AddPackage` / `RemovePackage` are now **implemented** (see §8) but not yet wired to

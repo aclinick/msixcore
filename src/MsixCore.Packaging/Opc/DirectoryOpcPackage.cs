@@ -198,6 +198,13 @@ public sealed class DirectoryOpcPackage : IOpcPackage
     }
 
     /// <inheritdoc/>
+    public OpcPartZipInfo? GetZipInfo(string partName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(partName);
+        return null;
+    }
+
+    /// <inheritdoc/>
     public Stream OpenPart(string partName)
     {
         ArgumentException.ThrowIfNullOrEmpty(partName);

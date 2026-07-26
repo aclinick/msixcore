@@ -10,12 +10,18 @@ internal static class PackageBuilder
 {
     public static OpcPackage OpcFrom(IReadOnlyDictionary<string, byte[]> parts)
     {
+        var packageParts = new Dictionary<string, byte[]>(parts, StringComparer.Ordinal);
+        if (!packageParts.ContainsKey(OpcPartNames.ContentTypes))
+        {
+            packageParts[OpcPartNames.ContentTypes] = Authoring.ContentTypesWriter.Write(parts.Keys);
+        }
+
         var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            foreach ((string name, byte[] content) in parts)
+            foreach ((string name, byte[] content) in packageParts)
             {
-                using Stream entry = archive.CreateEntry(name).Open();
+                using Stream entry = archive.CreateEntry(name, CompressionLevel.NoCompression).Open();
                 entry.Write(content);
             }
         }
