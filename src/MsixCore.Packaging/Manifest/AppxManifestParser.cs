@@ -12,7 +12,7 @@ namespace MsixCore.Packaging.Manifest;
 /// works across MSIX schema revisions. XML is read with DTD processing disabled and no external
 /// resolver to avoid XXE and entity-expansion attacks.
 /// </remarks>
-public static class AppxManifestParser
+public static partial class AppxManifestParser
 {
     private static readonly XmlReaderSettings SafeReaderSettings = new()
     {
@@ -79,6 +79,7 @@ public static class AppxManifestParser
             Applications = ParseApplications(root),
             TargetDeviceFamilies = ParseTargetDeviceFamilies(root),
             PackageDependencies = ParsePackageDependencies(root),
+            Extensions = ParseExtensions(root),
         };
     }
 
@@ -181,6 +182,7 @@ public static class AppxManifestParser
                 Executable = NullIfEmpty(app.AttributeValue("Executable")),
                 EntryPoint = NullIfEmpty(app.AttributeValue("EntryPoint")),
                 VisualElements = ParseVisualElements(app.ElementByLocalName("VisualElements")),
+                Extensions = ParseExtensions(app),
             });
         }
 
