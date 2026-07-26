@@ -5,10 +5,16 @@
 I was the GPM of MSIX at Microsoft, among other things.
 
 Back then we built **MSIX Core** with a genuinely lofty goal: an open-source core for MSIX that would
-run on every version of Windows, and then — cross-platform. We talked about replacing APK. On Android.
-On iOS, macOS, Linux.
+run on every version of Windows, and then — cross-platform. And not just *run* cross-platform. We were
+setting out to replace the **application package format on every operating system**. APK on Android.
+IPA on iOS. macOS. Linux. All of it.
 
 Looking back, that was hopelessly misguided. Heroic in scope, but misguided.
+
+And yet — you have to admire it. That was a room full of people who genuinely believed they could
+change the world, said so out loud, and then went and tried. Not a hedged roadmap with a tidy set of
+exit criteria. An actual swing. We were wrong about the destination, but we were not wrong to care
+that much, and I'd take that energy over cautious incrementalism any day of the week.
 
 What it actually became was an open-source implementation that helped people understand MSIX more
 deeply. That's it. That's the legacy. And since I left Microsoft it's bugged me that it just sat there,
@@ -18,7 +24,17 @@ realities of today's development lifecycle, let alone AI coding agents.
 The irony is that **containment in Windows matters more now than it ever has**. MSIX is finally coming
 into its own. And the tools are stuck in 2017.
 
-Then I had a Friday conversation with my good friend Ryan Mangan.
+Then, on a Friday, I got a message from my good friend Ryan Mangan.
+
+Ryan has spent years in the trenches of application delivery and packaging — he's one of the people
+the community actually goes to when MSIX doesn't behave. We've had some version of this conversation
+many times: packaging keeps *almost* getting there.
+
+It wasn't a pitch. There was no plan, no repo, no scope. It was just the kind of conversation where
+you finally say the quiet part out loud — the tooling hasn't moved, the need has moved a long way,
+and an entire industry has quietly built workarounds instead of asking for better.
+
+I couldn't let it go over the weekend.
 
 And this epic began.
 
