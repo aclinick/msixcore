@@ -39,7 +39,7 @@ public class WindowsSdkToolsTests
     }
 
     [Fact]
-    public void FindMakeAppx_WhenFound_ReturnsAnExecutableThisHostCanStart()
+    public async Task FindMakeAppx_WhenFound_ReturnsAnExecutableThisHostCanStart()
     {
         if (WindowsSdkTools.FindMakeAppx() is not { } makeAppx)
         {
@@ -47,7 +47,9 @@ public class WindowsSdkToolsTests
         }
 
         // Starting it is the only way to prove the architecture choice is right; an unusable binary
-        // throws Win32Exception here rather than reporting a usage error.
+        // throws Win32Exception here rather than reporting a usage error. Both streams are drained
+        // before waiting, because a redirected stream that is never read deadlocks once the tool
+        // writes more than the pipe buffer holds.
         using var process = Process.Start(new ProcessStartInfo
         {
             FileName = makeAppx,
@@ -58,6 +60,10 @@ public class WindowsSdkToolsTests
         });
 
         Assert.NotNull(process);
-        process.WaitForExit();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await Task.WhenAll(
+            process.StandardOutput.ReadToEndAsync(timeout.Token),
+            process.StandardError.ReadToEndAsync(timeout.Token));
+        await process.WaitForExitAsync(timeout.Token);
     }
 }

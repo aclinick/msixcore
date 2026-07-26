@@ -83,12 +83,70 @@ public sealed class MakeAppxLocator
             }
 
             string candidate = Path.Combine(directory.Trim(), "makeappx.exe");
-            if (File.Exists(candidate))
+            if (File.Exists(candidate) && CanExecute(candidate))
             {
                 return candidate;
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Reports whether this host can start <paramref name="path"/>, by reading the PE header's
+    /// machine type.
+    /// </summary>
+    /// <remarks>
+    /// A PATH entry is not architecture-tagged the way the SDK's directory layout is, so without
+    /// this check a stray arm64 makeappx.exe on PATH would reintroduce the "not a valid application
+    /// for this OS platform" failure that ranking the SDK directories avoids. A file we cannot read
+    /// or do not understand is treated as runnable so that an unexpected PE variant degrades to the
+    /// previous behaviour rather than silently hiding the tool.
+    /// </remarks>
+    private static bool CanExecute(string path)
+    {
+        string[] runnable = ExecutableArchitectures();
+        try
+        {
+            using FileStream stream = File.OpenRead(path);
+            using var reader = new BinaryReader(stream);
+            if (stream.Length < 0x40 || reader.ReadUInt16() != 0x5A4D)
+            {
+                return true;
+            }
+
+            stream.Position = 0x3C;
+            uint peOffset = reader.ReadUInt32();
+            if (peOffset + 6 > stream.Length)
+            {
+                return true;
+            }
+
+            stream.Position = peOffset;
+            if (reader.ReadUInt32() != 0x00004550)
+            {
+                return true;
+            }
+
+            // IMAGE_FILE_HEADER.Machine immediately follows the PE signature.
+            string? architecture = reader.ReadUInt16() switch
+            {
+                0x014C => "x86",
+                0x8664 => "x64",
+                0x01C4 or 0x01C0 => "arm",
+                0xAA64 => "arm64",
+                _ => null,
+            };
+
+            return architecture is null || Array.IndexOf(runnable, architecture) >= 0;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
     }
 }
