@@ -506,16 +506,68 @@ public class VisualElementsAndCapabilityTests
     }
 
     /// <summary>
-    /// A <c>uap4:CustomCapability</c> is the only custom capability the schema declares today, but a
-    /// later numbered revision must still classify as custom rather than unknown.
+    /// <c>uap4</c> is the only revision that declares <c>CustomCapability</c>, so a declaration in
+    /// any other UAP revision is not a custom capability this library can vouch for.
+    /// </summary>
+    [Theory]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10/4", CapabilityKind.Custom)]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10", CapabilityKind.Unknown)]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10/2", CapabilityKind.Unknown)]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10/7", CapabilityKind.Unknown)]
+    public void Parse_CustomCapability_IsCustomOnlyInTheUap4Namespace(string ns, CapabilityKind expected)
+    {
+        string manifest =
+            $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                     xmlns:c="{ns}">
+              <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.0.0.0" ProcessorArchitecture="x64" />
+              <Properties>
+                <DisplayName>App</DisplayName>
+                <PublisherDisplayName>Contoso</PublisherDisplayName>
+              </Properties>
+              <Capabilities>
+                <c:CustomCapability Name="Contoso.myCustomCapability_q4tqhpwrkdchy" />
+              </Capabilities>
+            </Package>
+            """;
+
+        AppxManifest parsed = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(manifest)));
+
+        Assert.Equal(expected, Assert.Single(parsed.DeclaredCapabilities).Kind);
+    }
+
+    /// <summary>
+    /// A foreign element that merely borrows the <c>DeviceCapability</c> local name must not be held
+    /// to the foundation schema's <c>Device</c>/<c>Function</c> rules — it is preserved as unknown
+    /// rather than rejected.
     /// </summary>
     [Fact]
-    public void Parse_CustomCapability_IsCustomAcrossUapRevisions()
+    public void Parse_AForeignDeviceCapability_IsNotHeldToFoundationDeviceRules()
     {
-        Assert.Equal(
-            CapabilityKind.Custom,
-            Assert.Single(ParseCapabilities(
-                """<uap4:CustomCapability Name="Contoso.myCustomCapability_q4tqhpwrkdchy" />""")).Kind);
+        string manifest =
+            $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                     xmlns:future="http://schemas.contoso.com/appx/manifest/future/windows10">
+              <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.0.0.0" ProcessorArchitecture="x64" />
+              <Properties>
+                <DisplayName>App</DisplayName>
+                <PublisherDisplayName>Contoso</PublisherDisplayName>
+              </Properties>
+              <Capabilities>
+                <future:DeviceCapability Name="quantumSensor">
+                  <future:Device Id="any" />
+                </future:DeviceCapability>
+              </Capabilities>
+            </Package>
+            """;
+
+        AppxManifest parsed = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(manifest)));
+        ManifestCapability capability = Assert.Single(parsed.DeclaredCapabilities);
+
+        Assert.Equal(CapabilityKind.Unknown, capability.Kind);
+        Assert.Empty(capability.Devices);
     }
 
     /// <summary>

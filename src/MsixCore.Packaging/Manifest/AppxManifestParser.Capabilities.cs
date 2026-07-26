@@ -22,6 +22,8 @@ public static partial class AppxManifestParser
     private const string IotNamespace =
         "http://schemas.microsoft.com/appx/manifest/iot/windows10";
 
+    private const string Uap4Namespace = UapNamespace + "/4";
+
     /// <summary>
     /// Parses <c>&lt;Capabilities&gt;</c>, categorizing each declaration by its element name and
     /// namespace.
@@ -60,12 +62,15 @@ public static partial class AppxManifestParser
                 continue;
             }
 
+            CapabilityKind kind = ClassifyCapability(child);
             result.Add(new ManifestCapability
             {
                 Name = name,
-                Kind = ClassifyCapability(child),
+                Kind = kind,
                 Namespace = child.Name.NamespaceName,
-                Devices = child.Name.LocalName == "DeviceCapability" ? ParseCapabilityDevices(child) : [],
+                // Only a foundation DeviceCapability is parsed as one: a foreign element that merely
+                // borrows the local name must not be held to foundation's Device/Function rules.
+                Devices = kind == CapabilityKind.Device ? ParseCapabilityDevices(child) : [],
             });
         }
 
@@ -89,7 +94,10 @@ public static partial class AppxManifestParser
             case "DeviceCapability":
                 return ns == FoundationNamespace ? CapabilityKind.Device : CapabilityKind.Unknown;
             case "CustomCapability":
-                return IsRevisionOf(ns, UapNamespace) ? CapabilityKind.Custom : CapabilityKind.Unknown;
+                // Pinned to uap4, the only revision that declares CustomCapability. A later revision
+                // may well add its own, but its semantics would be unconfirmed, and Unknown is the
+                // honest answer for a declaration this library has not verified.
+                return ns == Uap4Namespace ? CapabilityKind.Custom : CapabilityKind.Unknown;
             case "Capability":
                 break;
             default:
