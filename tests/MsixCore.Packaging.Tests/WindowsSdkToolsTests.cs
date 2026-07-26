@@ -8,16 +8,21 @@ public class WindowsSdkToolsTests
     [Fact]
     public void ExecutableArchitectures_PrefersHostArchitectureFirst()
     {
-        string expected = RuntimeInformation.OSArchitecture switch
-        {
-            Architecture.Arm64 => "arm64",
-            Architecture.X64 => "x64",
-            Architecture.X86 => "x86",
-            Architecture.Arm => "arm",
-            _ => "x64",
-        };
+        string[] architectures = WindowsSdkTools.ExecutableArchitectures();
 
-        Assert.Equal(expected, WindowsSdkTools.ExecutableArchitectures()[0]);
+        switch (RuntimeInformation.OSArchitecture)
+        {
+            case Architecture.Arm64:
+                Assert.Equal("arm64", architectures[0]);
+                break;
+            case Architecture.X64:
+                Assert.Equal("x64", architectures[0]);
+                break;
+            default:
+                // Only arm64 and x64 are supported hosts; anything else runs nothing.
+                Assert.Empty(architectures);
+                break;
+        }
     }
 
     [Fact]
@@ -32,17 +37,23 @@ public class WindowsSdkToolsTests
             Assert.DoesNotContain("arm64", architectures);
         }
 
-        if (RuntimeInformation.OSArchitecture == Architecture.X86)
-        {
-            Assert.DoesNotContain("x64", architectures);
-        }
-
         // x64 emulation on ARM64 requires Windows 11.
         if (RuntimeInformation.OSArchitecture == Architecture.Arm64
             && !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
             Assert.DoesNotContain("x64", architectures);
         }
+    }
+
+    [Fact]
+    public void ExecutableArchitectures_NeverRunsThe32BitTools()
+    {
+        // The tools are 64-bit only. This says nothing about the packages they handle: an x86
+        // package, or a package carrying x86 binaries, is still fully supported.
+        string[] architectures = WindowsSdkTools.ExecutableArchitectures();
+
+        Assert.DoesNotContain("x86", architectures);
+        Assert.DoesNotContain("arm", architectures);
     }
 
     [Fact]
