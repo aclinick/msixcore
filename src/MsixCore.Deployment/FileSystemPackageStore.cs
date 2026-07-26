@@ -318,9 +318,11 @@ public sealed class FileSystemPackageStore : IPackageStore
             _fileSystem.FlushDirectory(_root);
             if (!_fileSystem.DirectoryExists(resolved.StagingLocation))
             {
-                throw new InvalidOperationException(
-                    $"Staging disappeared while moving backups: '{resolved.StagingLocation}'. Backups: "
-                    + string.Join(", ", resolved.Backups.Select(static backup => backup.Original)));
+                throw MsixError.Tag(
+                    new InvalidOperationException(
+                        $"Staging disappeared while moving backups: '{resolved.StagingLocation}'. Backups: "
+                        + string.Join(", ", resolved.Backups.Select(static backup => backup.Original))),
+                    MsixErrorCode.PackageStore);
             }
 
             _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
@@ -519,8 +521,10 @@ public sealed class FileSystemPackageStore : IPackageStore
             }
             else if (originalExists == backupExists)
             {
-                throw new InvalidOperationException(
-                    $"Cannot continue package-store commit: expected exactly one of '{original}' or '{backup}' to exist.");
+                throw MsixError.Tag(
+                    new InvalidOperationException(
+                        $"Cannot continue package-store commit: expected exactly one of '{original}' or '{backup}' to exist."),
+                    MsixErrorCode.PackageStore);
             }
         }
     }

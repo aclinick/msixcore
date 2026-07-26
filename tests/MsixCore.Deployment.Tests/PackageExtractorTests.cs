@@ -150,6 +150,32 @@ public class PackageExtractorTests : IDisposable
     }
 
     [Fact]
+    public void ExtractAndVerify_RootIsReparsePoint_ThrowsUnsafeDestination()
+    {
+        // ExtractAndVerify guards its destination through PrepareDestination rather than the inline
+        // check used by Extract, so that second guard needs its own coverage — it sits on the trusted
+        // verification path.
+        string realTarget = Path.Combine(_root, "verify-real");
+        Directory.CreateDirectory(realTarget);
+        string link = Path.Combine(_root, "verify-link");
+        try
+        {
+            Directory.CreateSymbolicLink(link, realTarget);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return; // Environment cannot create symlinks (no privilege / Developer Mode); skip.
+        }
+
+        string packagePath = PackedMsixBuilder.Create(_root, "verify-unsafe-dest.msix");
+        using MsixPackage package = MsixPackage.Open(packagePath);
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(
+            () => PackageExtractor.ExtractAndVerify(package.Opc, package.BlockMap, link));
+        Assert.Equal(MsixErrorCode.UnsafeDestination, MsixError.GetCode(error));
+    }
+
+    [Fact]
     public void ExtractAndVerify_ReadsEachPayloadPartOnce()
     {
         string packagePath = PackedMsixBuilder.Create(
