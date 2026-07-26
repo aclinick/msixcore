@@ -21,20 +21,28 @@ public sealed class OpcPackage : IOpcPackage
 
     private readonly ZipArchive _archive;
     private readonly Dictionary<string, ZipArchiveEntry> _entriesByPart;
+    private readonly Dictionary<string, OpcPartZipInfo> _zipInfoByPart;
     private readonly List<string> _partNames;
     private readonly Stream? _callerStream;
     private readonly CentralDirectorySnapshot? _centralDirectorySnapshot;
     private readonly string? _snapshotUnavailableReason;
 
-    private OpcPackage(ZipArchive archive, Stream? callerStream)
+    private OpcPackage(ZipArchive archive, Stream? callerStream, IReadOnlyList<CentralDirectoryRecord>? centralDirectory)
     {
         _archive = archive;
         _callerStream = callerStream;
         _entriesByPart = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+        _zipInfoByPart = new Dictionary<string, OpcPartZipInfo>(StringComparer.OrdinalIgnoreCase);
         _partNames = new List<string>(archive.Entries.Count);
 
-        foreach (ZipArchiveEntry entry in archive.Entries)
+        if (centralDirectory is not null)
         {
+            VerifyCentralDirectoryBinding(archive, centralDirectory);
+        }
+
+        for (int entryIndex = 0; entryIndex < archive.Entries.Count; entryIndex++)
+        {
+            ZipArchiveEntry entry = archive.Entries[entryIndex];
             // Skip directory entries (zip directory markers end with '/').
             if (entry.FullName.EndsWith('/'))
             {
@@ -65,6 +73,15 @@ public sealed class OpcPackage : IOpcPackage
                     $"The package contains a duplicate OPC part name: '{partName}'.");
             }
 
+            if (centralDirectory is not null)
+            {
+                _zipInfoByPart.Add(
+                    partName,
+                    new OpcPartZipInfo(
+                        entry.Length,
+                        entry.CompressedLength,
+                        centralDirectory[entryIndex].CompressionMethod != 0));
+            }
             _partNames.Add(partName);
         }
 
@@ -164,13 +181,113 @@ public sealed class OpcPackage : IOpcPackage
         try
         {
             // The central directory is read lazily, so validation failures can surface here.
-            return new OpcPackage(archive, callerSupplied ? stream : null);
+            List<CentralDirectoryRecord>? centralDirectory = stream.CanSeek
+                ? ReadCentralDirectoryRecords(stream, archive.Entries.Count)
+                : null;
+            return new OpcPackage(archive, callerSupplied ? stream : null, centralDirectory);
         }
         catch
         {
             // Disposing the archive respects leaveOpen: the caller's stream is preserved when requested.
             archive.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// One central-directory record as read by this type's own parser, retained so the result can be
+    /// bound back to the corresponding <see cref="ZipArchiveEntry"/> by identity rather than position.
+    /// </summary>
+    private readonly record struct CentralDirectoryRecord(
+        ushort CompressionMethod,
+        uint Crc32,
+        uint CompressedSize,
+        uint UncompressedSize);
+
+    /// <summary>
+    /// Confirms that this type's central-directory parse describes exactly the same entries, in the
+    /// same order, as <see cref="ZipArchive"/>'s parse.
+    /// </summary>
+    /// <remarks>
+    /// The compression method is only available from the raw central directory, so it is read by a
+    /// second, independent parser and then matched positionally against <see cref="ZipArchive.Entries"/>.
+    /// Two parsers reading one attacker-controlled file is a trust boundary: if they could ever be made
+    /// to disagree about which records exist or what order they are in, one part's compression method
+    /// would be attributed to another part, letting an attacker choose which branch of the block-map
+    /// size check runs. Position alone is not evidence that they agree, so each record is bound to its
+    /// entry by CRC-32 and sizes. Any divergence - from a differing end-of-central-directory or ZIP64
+    /// interpretation, from reordering, or from a future runtime change - fails closed here instead of
+    /// silently mislabelling a part. ZIP64 saturates the 32-bit size fields, so those are compared only
+    /// when not saturated; the CRC is never saturated and is always compared.
+    /// </remarks>
+    private static void VerifyCentralDirectoryBinding(
+        ZipArchive archive,
+        IReadOnlyList<CentralDirectoryRecord> centralDirectory)
+    {
+        if (centralDirectory.Count != archive.Entries.Count)
+        {
+            throw new InvalidDataException("The ZIP central-directory entry count is inconsistent.");
+        }
+
+        for (int i = 0; i < centralDirectory.Count; i++)
+        {
+            ZipArchiveEntry entry = archive.Entries[i];
+            CentralDirectoryRecord record = centralDirectory[i];
+
+            if (record.Crc32 != entry.Crc32
+                || (record.CompressedSize != uint.MaxValue && record.CompressedSize != entry.CompressedLength)
+                || (record.UncompressedSize != uint.MaxValue && record.UncompressedSize != entry.Length))
+            {
+                throw new InvalidDataException(
+                    $"The ZIP central directory is inconsistent for entry '{entry.FullName}'.");
+            }
+        }
+    }
+
+    private static List<CentralDirectoryRecord> ReadCentralDirectoryRecords(Stream stream, int entryCount)
+    {
+        const uint centralHeaderSignature = 0x02014B50;
+        long originalPosition = stream.Position;
+        try
+        {
+            if (!TryReadCentralDirectoryLocation(
+                    stream,
+                    stream.Length,
+                    out long centralOffset,
+                    out _,
+                    out string? error))
+            {
+                throw new InvalidDataException($"The ZIP central directory is invalid: {error}");
+            }
+
+            var records = new List<CentralDirectoryRecord>(entryCount);
+            stream.Position = centralOffset;
+            Span<byte> header = stackalloc byte[46];
+            for (int i = 0; i < entryCount; i++)
+            {
+                if (!ReadExactly(stream, header)
+                    || BinaryPrimitives.ReadUInt32LittleEndian(header[..4]) != centralHeaderSignature)
+                {
+                    throw new InvalidDataException("The ZIP central directory contains an invalid entry header.");
+                }
+
+                records.Add(new CentralDirectoryRecord(
+                    BinaryPrimitives.ReadUInt16LittleEndian(header[10..12]),
+                    BinaryPrimitives.ReadUInt32LittleEndian(header[16..20]),
+                    BinaryPrimitives.ReadUInt32LittleEndian(header[20..24]),
+                    BinaryPrimitives.ReadUInt32LittleEndian(header[24..28])));
+                int variableLength =
+                    BinaryPrimitives.ReadUInt16LittleEndian(header[28..30])
+                    + BinaryPrimitives.ReadUInt16LittleEndian(header[30..32])
+                    + BinaryPrimitives.ReadUInt16LittleEndian(header[32..34]);
+                stream.Position = checked(stream.Position + variableLength);
+            }
+
+            return records;
+        }
+        finally
+        {
+            stream.Position = originalPosition;
         }
     }
 
@@ -412,6 +529,15 @@ public sealed class OpcPackage : IOpcPackage
     {
         ArgumentException.ThrowIfNullOrEmpty(partName);
         return _entriesByPart.ContainsKey(NormalizeLookup(partName));
+    }
+
+    /// <inheritdoc/>
+    public OpcPartZipInfo? GetZipInfo(string partName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(partName);
+        return _zipInfoByPart.TryGetValue(NormalizeLookup(partName), out OpcPartZipInfo? info)
+            ? info
+            : null;
     }
 
     /// <inheritdoc/>

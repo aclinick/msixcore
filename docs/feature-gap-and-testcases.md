@@ -17,32 +17,30 @@ Each test case lists a fixture (the package/manifest to synthesize) and the asse
 should be minimal, generated deterministically, and committed under a `fixtures/` tree so they run in
 Linux CI (the whole reader is cross-platform).
 
-> **Status refresh (post Phase 5/6 merge):** the install engine (P1-5) and the publisher-DN matching
-> defect (P0-2, [#12](https://github.com/aclinick/msixcore/issues/12)) are now **resolved**; those
-> sections are retained as *regression* test suites and re-scoped to what remains. `CodeIntegrity.cat`
-> footprint handling and OPC percent-decoding also landed (see P0-4/P0-5).
+> **Status refresh (post signature-binding and read-path validation work):** P0-1 through P0-4 are
+> now **resolved** and retained as regression suites. The install engine (P1-5), OPC
+> percent-decoding, `CodeIntegrity.cat` footprint handling, and bundle parsing have also landed.
 
 ---
 
 ## P0 — Correctness & security of existing features
 
-### P0-1. Signature binding is not verified (authenticity gap)
-**Gap:** `PackageSignatureReader` verifies only CMS envelope integrity
-(`CheckSignature(verifySignatureOnly:true)`). It never checks the APPX SIP indirect-data digests
-(`AXPC` package hash, `AXCT` content-types hash, `AXBM` block-map hash, `AXCI` code-integrity hash,
-`AXCF` central-directory hash) that bind the signature to the actual bytes. A package can therefore
-carry a structurally-valid signature that does **not** match its content and still pass CMS integrity.
+### P0-1. Signature binding — RESOLVED
+**Was:** CMS envelope integrity was checked without binding the signature to package content.
+**Fixed (f03de1c):** the APPX SIP indirect-data table is parsed and `AXCT`, `AXBM`, and optional
+`AXCI` digests are verified against cached bytes from the package. `AXPC` and `AXCD` are parsed and
+reported as not verified because their exact ZIP byte ranges are not yet reconstructed. Certificate
+trust-chain validation remains intentionally separate.
 Ref: [Package integrity enforcement](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview).
 
-**Test cases:**
+**Test cases (regression):**
 - **TC-P0-1a (negative binding):** Take a validly signed package; swap `AppxBlockMap.xml` for a
-  different (self-consistent) block map without re-signing. Assert `validate` continues to warn that
-  APPX indirect-data binding is not verified and the result is not an authenticity guarantee.
+  different (self-consistent) block map without re-signing. Assert `AXBM` mismatch and an invalid
+  validation report.
 - **TC-P0-1b (tampered payload):** Modify one payload file and regenerate its block-map hash but not
-  the signature. Assert the CMS envelope can still be internally consistent while binding remains
-  explicitly unverified.
-- **TC-P0-1c (contract guard):** Assert `ValidationReport.SignatureBindingVerified == false` so the
-  read-only signature scope stays visible unless a separate scope decision changes it.
+  the signature. Assert CMS can remain internally consistent but `AXBM` binding fails.
+- **TC-P0-1c (contract guard):** Assert `ValidationReport.SignatureBindingVerified == true` for a
+  correctly digest-bound signature and `false` when a verified footprint digest mismatches.
 
 ### P0-2. Publisher/subject DN comparison — RESOLVED ([#12](https://github.com/aclinick/msixcore/issues/12))
 **Was:** `MatchesPublisher` re-encoded the manifest string and byte-compared DER, so a certificate
@@ -64,32 +62,39 @@ and faithful to RDN order. These test cases become **regression guards**:
 - **TC-P0-2e (multi-valued RDN):** A DN with a multi-valued RDN (e.g. `CN=A+OU=B`) exercises the
   raw-encoding fallback path; assert correct equal/not-equal outcome.
 
-### P0-3. Block-map compressed `Size` (LFH) is parsed but unenforced
-**Gap:** `BlockMapBlock.CompressedSize` is read but never checked against the ZIP local file header,
-so a mismatch between declared stored size and actual entry size goes undetected.
+### P0-3. Block-map compressed `Size` validation — RESOLVED
+**Fixed:** `BlockMapVerifier` compares canonical ZIP metadata supplied through `IOpcPackage` with the
+block map. Stored entries reject per-block `Size`; compressed entries require the sum to equal the ZIP
+compressed length or be exactly two bytes smaller for the MakeAppx `Z_FULL_FLUSH` terminator.
+Duplicate files and non-empty zero-block declarations are rejected. Loose directories return no ZIP
+metadata, so this container-specific comparison is not applicable there.
 Ref: [AppxBlockMap.xml](https://learn.microsoft.com/en-us/windows/msix/overview).
 
-**Test cases:**
+**Test cases (regression):**
 - **TC-P0-3a:** Compressed file whose block `Size` attributes disagree with the actual deflate stream
-  length. Assert (future) LFH validation flags it; today assert content hash still guards correctness.
+  length. Assert compressed-size validation flags it.
 - **TC-P0-3b (uncompressed/stored):** File stored (no compression, no per-block `Size`). Assert
   verification passes.
 - **TC-P0-3c (empty file):** Zero-byte file (`Size="0"`, no `Block`). Assert valid (regression guard —
-  the current verifier handles this correctly).
+  the verifier handles this correctly).
+- Assert the two-byte `Z_FULL_FLUSH` allowance passes, any other discrepancy fails, duplicate file
+  declarations fail, and a non-empty file with zero blocks fails.
 
-### P0-4. `[Content_Types].xml` is never parsed/validated (catalog footprint now handled)
-**Gap:** The content-types map is still never parsed, so a package can omit required default/override
-content types or declare parts with no content type. (Related progress: `AppxMetadata/CodeIntegrity.cat`
-is now recognized as a footprint part and excluded from block-map coverage in `BlockMapVerifier`,
-though the catalog itself is not verified.)
+### P0-4. `[Content_Types].xml` validation — RESOLVED
+**Fixed:** the hardened `ContentTypesParser` reads OPC `Default` and canonicalized `Override`
+declarations, and `BlockMapVerifier` requires the part and content-type coverage for every package
+part. `[Content_Types].xml` is forbidden from the block map. `AppxMetadata/CodeIntegrity.cat` remains
+a footprint part excluded from block-map coverage; its content type is still required.
 Ref: [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview).
 
-**Test cases:**
-- **TC-P0-4a:** Package missing `[Content_Types].xml`. Assert a diagnostic (today: silently ignored).
+**Test cases (regression):**
+- **TC-P0-4a:** Package missing `[Content_Types].xml`. Assert a diagnostic.
 - **TC-P0-4b:** Payload part with an extension not covered by any `Default`/`Override`. Assert a
   content-type coverage error.
 - **TC-P0-4c (regression):** Package containing `AppxMetadata/CodeIntegrity.cat` passes block-map
   coverage (the catalog is a footprint part, not listed in the block map).
+- Assert `[Content_Types].xml` listed in the block map fails and a canonical `Override` can cover a
+  part whose extension has no `Default`.
 
 ### P0-5. OPC hardening regression guards (already implemented — lock them in)
 **Gap:** none functionally, but the security-critical part-name rules deserve explicit corpus tests.
@@ -263,6 +268,5 @@ result). Negative fixtures assert the specific exception type/message.
   `FileSystemPackageStore`); the in-process promotion lock does not coordinate separate processes over
   a shared store root. See TC-P1-5h.
 
-No new defects were found during this refresh: the merged Phase 5/6 code (install engine, extractor,
-OPC percent-decoding, catalog footprint handling, DN matching) verifies cleanly against its own tests
-and the spec expectations documented here.
+This refresh records the resolved signature-binding, ZIP-size, and OPC content-type gaps alongside
+the earlier install engine, extractor, canonical part-name, catalog-footprint, and DN-matching work.

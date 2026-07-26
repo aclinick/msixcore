@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Text;
 using MsixCore.Packaging;
+using MsixCore.Packaging.Authoring;
 using MsixCore.Packaging.Integrity;
+using MsixCore.Packaging.Opc;
 
 namespace MsixCore.Packaging.Tests;
 
@@ -169,6 +171,7 @@ public sealed class StreamSnapshotDriftTests
         var parts = new Dictionary<string, byte[]>(payload, StringComparer.Ordinal)
         {
             ["AppxBlockMap.xml"] = Encoding.UTF8.GetBytes(PackageBuilder.BlockMapXml(payload)),
+            [OpcPartNames.ContentTypes] = ContentTypesWriter.Write(payload.Keys),
         };
 
         var stream = new MemoryStream();

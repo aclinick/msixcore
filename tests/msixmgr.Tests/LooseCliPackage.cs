@@ -50,6 +50,7 @@ internal static class LooseCliPackage
         }
 
         File.WriteAllText(Path.Combine(dir, "AppxBlockMap.xml"), BlockMapXml(payload), Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dir, "[Content_Types].xml"), ContentTypesXml(payload.Keys), Encoding.UTF8);
         return dir;
     }
 
@@ -86,5 +87,26 @@ internal static class LooseCliPackage
 
         sb.Append("</BlockMap>");
         return sb.ToString();
+    }
+
+    private static string ContentTypesXml(IEnumerable<string> partNames)
+    {
+        string[] extensions = partNames
+            .Append("AppxBlockMap.xml")
+            .Select(static partName => Path.GetExtension(partName) ?? string.Empty)
+            .Where(static extension => extension.Length > 1)
+            .Select(static extension => extension[1..])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var xml = new StringBuilder(
+            """<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">""");
+        foreach (string extension in extensions)
+        {
+            xml.Append("<Default Extension=\"")
+                .Append(extension)
+                .Append("\" ContentType=\"application/octet-stream\"/>");
+        }
+
+        return xml.Append("</Types>").ToString();
     }
 }
