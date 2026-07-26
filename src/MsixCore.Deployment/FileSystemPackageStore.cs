@@ -268,7 +268,7 @@ public sealed class FileSystemPackageStore : IPackageStore
         {
             using FileStream journal = File.OpenRead(journalPath);
             CommitJournal envelope = JsonSerializer.Deserialize<CommitJournal>(journal)
-                ?? throw new InvalidDataException("The commit journal is empty.");
+                ?? throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal is empty.");
             transaction = ReadCommitJournal(envelope);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
@@ -435,7 +435,7 @@ public sealed class FileSystemPackageStore : IPackageStore
                 FileAttributes attributes = _fileSystem.GetAttributes(entry);
                 if (attributes.HasFlag(FileAttributes.ReparsePoint))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.PackageStore,
                         $"Staging path '{entry}' is a symbolic link or junction; refusing to commit.");
                 }
 
@@ -466,13 +466,13 @@ public sealed class FileSystemPackageStore : IPackageStore
     {
         if (journal.FormatVersion != 1)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.PackageStore,
                 $"The commit journal has unsupported format version '{journal.FormatVersion}'.");
         }
 
         if (string.IsNullOrEmpty(journal.Payload) || string.IsNullOrEmpty(journal.Sha256))
         {
-            throw new InvalidDataException("The commit journal is missing integrity data.");
+            throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal is missing integrity data.");
         }
 
         try
@@ -482,15 +482,15 @@ public sealed class FileSystemPackageStore : IPackageStore
             byte[] actualHash = SHA256.HashData(payload);
             if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash))
             {
-                throw new InvalidDataException("The commit journal failed its integrity check.");
+                throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal failed its integrity check.");
             }
 
             return JsonSerializer.Deserialize<CommitTransaction>(payload)
-                ?? throw new InvalidDataException("The commit journal transaction is empty.");
+                ?? throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal transaction is empty.");
         }
         catch (Exception ex) when (ex is FormatException or JsonException)
         {
-            throw new InvalidDataException("The commit journal is malformed.", ex);
+            throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal is malformed.", ex);
         }
     }
 

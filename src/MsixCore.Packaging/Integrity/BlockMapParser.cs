@@ -39,7 +39,7 @@ public static class BlockMapParser
         }
         catch (XmlException ex)
         {
-            throw new InvalidDataException("The block map is not well-formed XML.", ex);
+            throw MsixError.Format(MsixErrorCode.Xml, "The block map is not well-formed XML.", ex);
         }
 
         return Parse(document);
@@ -55,11 +55,11 @@ public static class BlockMapParser
         ArgumentNullException.ThrowIfNull(document);
 
         XElement root = document.Root
-            ?? throw new InvalidDataException("The block map has no root element.");
+            ?? throw MsixError.Format(MsixErrorCode.BlockMapSemantics, "The block map has no root element.");
 
         if (root.Name.LocalName != "BlockMap")
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.BlockMapSemantics,
                 $"Expected a 'BlockMap' root element but found '{root.Name.LocalName}'.");
         }
 
@@ -75,8 +75,8 @@ public static class BlockMapParser
         "http://www.w3.org/2001/04/xmlenc#sha256" => BlockMapHashMethod.Sha256,
         "http://www.w3.org/2001/04/xmldsig-more#sha384" => BlockMapHashMethod.Sha384,
         "http://www.w3.org/2001/04/xmlenc#sha512" => BlockMapHashMethod.Sha512,
-        null or "" => throw new InvalidDataException("The block map is missing the required 'HashMethod' attribute."),
-        _ => throw new InvalidDataException($"The block map declares an unsupported HashMethod '{value}'."),
+        null or "" => throw MsixError.Format(MsixErrorCode.BlockMapSemantics, "The block map is missing the required 'HashMethod' attribute."),
+        _ => throw MsixError.Format(MsixErrorCode.BlockMapSemantics, $"The block map declares an unsupported HashMethod '{value}'."),
     };
 
     private static List<BlockMapFile> ParseFiles(XElement root)
@@ -85,14 +85,14 @@ public static class BlockMapParser
         foreach (XElement file in root.ElementsByLocalName("File"))
         {
             string name = file.AttributeValue("Name")
-                ?? throw new InvalidDataException("A block map 'File' is missing the required 'Name' attribute.");
+                ?? throw MsixError.Format(MsixErrorCode.BlockMapSemantics, "A block map 'File' is missing the required 'Name' attribute.");
             long size = ParseNonNegativeLong(file.AttributeValue("Size"), $"File '{name}' Size");
 
             var blocks = new List<BlockMapBlock>();
             foreach (XElement block in file.ElementsByLocalName("Block"))
             {
                 string hash = block.AttributeValue("Hash")
-                    ?? throw new InvalidDataException($"A 'Block' in file '{name}' is missing the required 'Hash' attribute.");
+                    ?? throw MsixError.Format(MsixErrorCode.BlockMapSemantics, $"A 'Block' in file '{name}' is missing the required 'Hash' attribute.");
 
                 long? compressedSize = null;
                 string? sizeText = block.AttributeValue("Size");
@@ -121,7 +121,7 @@ public static class BlockMapParser
     {
         if (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out long result))
         {
-            throw new InvalidDataException($"{context} has an invalid non-negative integer value '{value}'.");
+            throw MsixError.Format(MsixErrorCode.BlockMapSemantics, $"{context} has an invalid non-negative integer value '{value}'.");
         }
 
         return result;

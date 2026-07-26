@@ -31,15 +31,15 @@ public static class ContentTypesParser
         }
         catch (XmlException ex)
         {
-            throw new InvalidDataException("The content-types part is not well-formed XML.", ex);
+            throw MsixError.Format(MsixErrorCode.Xml, "The content-types part is not well-formed XML.", ex);
         }
 
         XElement root = document.Root
-            ?? throw new InvalidDataException("The content-types part has no root element.");
+            ?? throw MsixError.Format(MsixErrorCode.ContentTypes, "The content-types part has no root element.");
         XNamespace contentTypes = ContentTypesNamespace;
         if (root.Name != contentTypes + "Types")
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.ContentTypes,
                 $"Expected a 'Types' root in the OPC content-types namespace but found '{root.Name}'.");
         }
 
@@ -56,13 +56,13 @@ public static class ContentTypesParser
                     || extension.Contains('\\')
                     || !IsToken(extension))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.ContentTypes,
                         $"Content-types Default has an invalid Extension '{extension}'.");
                 }
 
                 if (!defaults.TryAdd(extension, contentType))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.ContentTypes,
                         $"Content-types contains a duplicate Default for extension '{extension}'.");
                 }
             }
@@ -74,19 +74,19 @@ public static class ContentTypesParser
                     || !OpcPackage.TryCanonicalizePartName(rawPartName[1..], out string canonical)
                     || !OpcPackage.IsValidPartName(canonical))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.ContentTypes,
                         $"Content-types Override has an invalid PartName '{rawPartName}'.");
                 }
 
                 if (!overrides.TryAdd(canonical, overrideContentType))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.ContentTypes,
                         $"Content-types contains a duplicate Override for part '{canonical}'.");
                 }
             }
             else
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.ContentTypes,
                     $"Content-types contains an unexpected element '{declaration.Name}'.");
             }
         }
@@ -99,7 +99,7 @@ public static class ContentTypesParser
         string? value = element.AttributeValue(name);
         if (string.IsNullOrEmpty(value))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.ContentTypes,
                 $"Content-types '{element.Name.LocalName}' is missing the required '{name}' attribute.");
         }
 
@@ -120,7 +120,7 @@ public static class ContentTypesParser
         string value = RequiredAttribute(element, "ContentType");
         if (!IsValidContentType(value))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.ContentTypes,
                 $"Content-types '{element.Name.LocalName}' has an invalid ContentType '{value}'.");
         }
 

@@ -675,6 +675,21 @@ public class FileSystemPackageStoreTests : IDisposable
     }
 
     [Fact]
+    public void CorruptCommitJournal_HasPackageStoreCode()
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(
+            Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName),
+            """{"FormatVersion":1,"Payload":"e30=","Sha256":"00"}""");
+        var store = new FileSystemPackageStore(_root);
+
+        InvalidOperationException exception =
+            Assert.Throws<InvalidOperationException>(() => store.EnumeratePackages());
+        InvalidDataException inner = Assert.IsType<InvalidDataException>(exception.InnerException);
+        Assert.Equal(MsixErrorCode.PackageStore, MsixError.GetCode(inner));
+    }
+
+    [Fact]
     public void Commit_UnreadableInstalledManifest_FailsClosed()
     {
         var store = new FileSystemPackageStore(_root);

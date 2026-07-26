@@ -46,17 +46,17 @@ public static class PackageSignatureReader
         }
         catch (CryptographicException ex)
         {
-            throw new InvalidDataException("The signature is not a valid PKCS#7/CMS structure.", ex);
+            throw MsixError.Format(MsixErrorCode.SignatureFormat, "The signature is not a valid PKCS#7/CMS structure.", ex);
         }
 
         if (cms.SignerInfos.Count == 0)
         {
-            throw new InvalidDataException("The signature contains no signer information.");
+            throw MsixError.Format(MsixErrorCode.SignatureFormat, "The signature contains no signer information.");
         }
 
         SignerInfo signer = cms.SignerInfos[0];
         X509Certificate2 certificate = signer.Certificate
-            ?? throw new InvalidDataException("The signature does not embed the signer certificate.");
+            ?? throw MsixError.Format(MsixErrorCode.SignatureFormat, "The signature does not embed the signer certificate.");
 
         bool signatureValid;
         try
@@ -104,7 +104,7 @@ public static class PackageSignatureReader
     {
         if (signatureBytes.Length < P7xMagic.Length || !signatureBytes.AsSpan(0, P7xMagic.Length).SequenceEqual(P7xMagic))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.SignatureFormat,
                 "The signature is missing the required 'PKCX' file identifier of an AppxSignature.p7x part.");
         }
 

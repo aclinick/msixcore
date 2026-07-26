@@ -39,18 +39,18 @@ public sealed class AppxDigestTable
 
         // Validate the CMS inner content type.
         string contentType = cms.ContentInfo.ContentType.Value
-            ?? throw new InvalidDataException("The CMS content type OID is null.");
+            ?? throw MsixError.Format(MsixErrorCode.SignatureFormat, "The CMS content type OID is null.");
 
         if (!string.Equals(contentType, SpcIndirectDataContentOid, StringComparison.Ordinal))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.SignatureFormat,
                 $"Unexpected CMS content type '{contentType}'; expected SPC_INDIRECT_DATA_CONTENT ({SpcIndirectDataContentOid}).");
         }
 
         byte[] content = cms.ContentInfo.Content;
         if (content.Length == 0)
         {
-            throw new InvalidDataException("The CMS content (SpcIndirectDataContent) is empty.");
+            throw MsixError.Format(MsixErrorCode.SignatureFormat, "The CMS content (SpcIndirectDataContent) is empty.");
         }
 
         // Parse the ASN.1 SpcIndirectDataContent to extract the DigestInfo.digest OCTET STRING.
@@ -87,7 +87,7 @@ public sealed class AppxDigestTable
             // SHA-256 OID = 2.16.840.1.101.3.4.2.1
             if (!string.Equals(algOid, "2.16.840.1.101.3.4.2.1", StringComparison.Ordinal))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.SignatureFormat,
                     $"Unsupported digest algorithm OID '{algOid}'; only SHA-256 (2.16.840.1.101.3.4.2.1) is supported.");
             }
 
@@ -104,7 +104,7 @@ public sealed class AppxDigestTable
         }
         catch (AsnContentException ex)
         {
-            throw new InvalidDataException("Failed to parse SpcIndirectDataContent ASN.1 structure.", ex);
+            throw MsixError.Format(MsixErrorCode.SignatureFormat, "Failed to parse SpcIndirectDataContent ASN.1 structure.", ex);
         }
     }
 
@@ -113,20 +113,20 @@ public sealed class AppxDigestTable
     {
         if (tableBytes.Length < AppxHeader.Length)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.SignatureFormat,
                 $"APPX digest table is too short ({tableBytes.Length} bytes); expected at least {AppxHeader.Length} bytes for header.");
         }
 
         // Validate the "APPX" header.
         if (!tableBytes.AsSpan(0, AppxHeader.Length).SequenceEqual(AppxHeader))
         {
-            throw new InvalidDataException("APPX digest table does not start with the 'APPX' header.");
+            throw MsixError.Format(MsixErrorCode.SignatureFormat, "APPX digest table does not start with the 'APPX' header.");
         }
 
         int remaining = tableBytes.Length - AppxHeader.Length;
         if (remaining % EntrySize != 0)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.SignatureFormat,
                 $"APPX digest table body length ({remaining}) is not a multiple of entry size ({EntrySize}).");
         }
 
@@ -136,7 +136,7 @@ public sealed class AppxDigestTable
         // Total lengths: 4 + 4*36 = 148, or 4 + 5*36 = 184.
         if (entryCount is not (4 or 5))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.SignatureFormat,
                 $"APPX digest table has {entryCount} entries; expected 4 or 5 (total length must be 148 or 184 bytes, got {tableBytes.Length}).");
         }
 
@@ -149,14 +149,14 @@ public sealed class AppxDigestTable
             uint rawTag = BinaryPrimitives.ReadUInt32LittleEndian(tableBytes.AsSpan(offset));
             if (!Enum.IsDefined((AppxDigestTag)rawTag))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.SignatureFormat,
                     $"Unknown APPX digest tag 0x{rawTag:X8} at offset {offset}.");
             }
 
             var tag = (AppxDigestTag)rawTag;
             if (!seenTags.Add(tag))
             {
-                throw new InvalidDataException($"Duplicate APPX digest tag '{tag}' at offset {offset}.");
+                throw MsixError.Format(MsixErrorCode.SignatureFormat, $"Duplicate APPX digest tag '{tag}' at offset {offset}.");
             }
 
             byte[] digest = new byte[DigestSize];
@@ -172,7 +172,7 @@ public sealed class AppxDigestTable
         {
             if (!seenTags.Contains(required))
             {
-                throw new InvalidDataException($"APPX digest table is missing mandatory tag '{required}'.");
+                throw MsixError.Format(MsixErrorCode.SignatureFormat, $"APPX digest table is missing mandatory tag '{required}'.");
             }
         }
 

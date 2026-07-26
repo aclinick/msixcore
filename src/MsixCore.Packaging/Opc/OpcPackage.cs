@@ -51,7 +51,7 @@ public sealed class OpcPackage : IOpcPackage
 
             if (!IsValidPartName(entry.FullName))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.PartName,
                     $"The package contains an invalid OPC part name: '{entry.FullName}'.");
             }
 
@@ -62,14 +62,14 @@ public sealed class OpcPackage : IOpcPackage
             // then re-validate because decoding can reintroduce traversal segments (e.g. '%2e%2e' -> '..').
             if (!TryCanonicalizePartName(entry.FullName, out string partName) || !IsValidPartName(partName))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.PartName,
                     $"The package contains an invalid OPC part name: '{entry.FullName}'.");
             }
 
             // OPC forbids equivalent (including case-insensitively equal) part names.
             if (!_entriesByPart.TryAdd(partName, entry))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.PartName,
                     $"The package contains a duplicate OPC part name: '{partName}'.");
             }
 
@@ -226,7 +226,7 @@ public sealed class OpcPackage : IOpcPackage
     {
         if (centralDirectory.Count != archive.Entries.Count)
         {
-            throw new InvalidDataException("The ZIP central-directory entry count is inconsistent.");
+            throw MsixError.Format(MsixErrorCode.ZipStructure, "The ZIP central-directory entry count is inconsistent.");
         }
 
         for (int i = 0; i < centralDirectory.Count; i++)
@@ -238,7 +238,7 @@ public sealed class OpcPackage : IOpcPackage
                 || (record.CompressedSize != uint.MaxValue && record.CompressedSize != entry.CompressedLength)
                 || (record.UncompressedSize != uint.MaxValue && record.UncompressedSize != entry.Length))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.ZipStructure,
                     $"The ZIP central directory is inconsistent for entry '{entry.FullName}'.");
             }
         }
@@ -257,7 +257,7 @@ public sealed class OpcPackage : IOpcPackage
                     out _,
                     out string? error))
             {
-                throw new InvalidDataException($"The ZIP central directory is invalid: {error}");
+                throw MsixError.Format(MsixErrorCode.ZipStructure, $"The ZIP central directory is invalid: {error}");
             }
 
             var records = new List<CentralDirectoryRecord>(entryCount);
@@ -268,7 +268,7 @@ public sealed class OpcPackage : IOpcPackage
                 if (!ReadExactly(stream, header)
                     || BinaryPrimitives.ReadUInt32LittleEndian(header[..4]) != centralHeaderSignature)
                 {
-                    throw new InvalidDataException("The ZIP central directory contains an invalid entry header.");
+                    throw MsixError.Format(MsixErrorCode.ZipStructure, "The ZIP central directory contains an invalid entry header.");
                 }
 
                 records.Add(new CentralDirectoryRecord(

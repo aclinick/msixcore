@@ -54,7 +54,7 @@ public sealed class MsixPackageBuilder
         using DirectoryOpcPackage source = DirectoryOpcPackage.Open(sourceDirectory);
         if (!source.PartNames.Contains(OpcPartNames.AppxManifest, StringComparer.Ordinal))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.FootprintMissing,
                 $"The source directory must contain '{OpcPartNames.AppxManifest}' at its root.");
         }
 
@@ -187,7 +187,7 @@ public sealed class MsixPackageBuilder
                 BlockMapVerificationResult verification = package.VerifyBlockMap();
                 if (!verification.IsValid)
                 {
-                    throw new InvalidDataException("The authored package failed its generated block-map verification.");
+                    throw MsixError.Format(MsixErrorCode.BlockMapSemantics, "The authored package failed its generated block-map verification.");
                 }
             }
 

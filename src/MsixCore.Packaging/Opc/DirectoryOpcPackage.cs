@@ -49,7 +49,7 @@ public sealed class DirectoryOpcPackage : IOpcPackage
         DirectoryPartEnumeration enumeration = EnumerateValidatedParts(root);
         if (enumeration.Error is not null)
         {
-            throw new InvalidDataException(enumeration.Error);
+            throw MsixError.Format(MsixErrorCode.PartName, enumeration.Error);
         }
 
         return new DirectoryOpcPackage(root, enumeration.PartToFullPath, enumeration.PartNames);

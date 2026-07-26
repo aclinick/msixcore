@@ -34,7 +34,7 @@ public sealed record InstalledPackageInfo
         ArgumentException.ThrowIfNullOrEmpty(directory);
         string root = Path.GetFullPath(directory);
         string manifestPath = FindManifest(root)
-            ?? throw new InvalidDataException($"The installed package does not contain '{OpcPartNames.AppxManifest}'.");
+            ?? throw MsixError.Format(MsixErrorCode.FootprintMissing, $"The installed package does not contain '{OpcPartNames.AppxManifest}'.");
 
         using Stream manifestStream = File.OpenRead(manifestPath);
         AppxManifest manifest = AppxManifestParser.Parse(manifestStream);
@@ -102,7 +102,7 @@ public sealed record InstalledPackageInfo
     {
         if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
         {
-            throw new InvalidDataException($"The installed package manifest '{path}' is not a regular file.");
+            throw MsixError.Format(MsixErrorCode.PackageStore, $"The installed package manifest '{path}' is not a regular file.");
         }
 
         return path;

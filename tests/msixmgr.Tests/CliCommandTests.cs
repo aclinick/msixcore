@@ -621,7 +621,7 @@ public class CliCommandTests : IDisposable
     [InlineData("inspect", "not_found")]
     [InlineData("validate", "not_found")]
     [InlineData("unpack", "not_found")]
-    [InlineData("pack", "invalid_data")]
+    [InlineData("pack", "footprint_missing")]
     [InlineData("bundle", "invalid_data")]
     public void JsonOperationalErrors_EmitErrorReportOnStdout(string verb, string expectedCode)
     {
@@ -644,6 +644,47 @@ public class CliCommandTests : IDisposable
         Assert.Equal(3, code);
         Assert.Empty(error);
         AssertJsonError(output, expectedCode);
+    }
+
+    [Theory]
+    [InlineData("malformed-xml", "xml")]
+    [InlineData("missing-manifest", "footprint_missing")]
+    public void Inspect_Json_ReportsSpecificMsixErrorCode(string scenario, string expectedCode)
+    {
+        string directory = LooseCliPackage.Create(_root, "coded-" + scenario);
+        string manifest = Path.Combine(directory, LooseCliPackage.ManifestName);
+        if (scenario == "malformed-xml")
+        {
+            File.WriteAllText(manifest, "<Package>");
+        }
+        else
+        {
+            File.Delete(manifest);
+        }
+
+        (int code, string output, string error) = RunInspect(directory, "--json");
+
+        Assert.Equal(3, code);
+        Assert.Empty(error);
+        AssertJsonError(output, expectedCode);
+    }
+
+    [Fact]
+    public void ErrorCode_SnakeCaseRoundTripsEveryEnumMember()
+    {
+        foreach (MsixErrorCode code in Enum.GetValues<MsixErrorCode>())
+        {
+            string snakeCase = CliContract.ToSnakeCase(code);
+            string roundTripped = string.Concat(
+                snakeCase.Split('_').Select(static segment =>
+                    char.ToUpperInvariant(segment[0]) + segment[1..]));
+
+            Assert.Equal(code.ToString(), roundTripped);
+            Assert.Equal(snakeCase, CliContract.ErrorCode(MsixError.Format(code, "test")));
+            Assert.All(
+                snakeCase,
+                static character => Assert.True(char.IsAsciiLetterLower(character) || character == '_'));
+        }
     }
 
     [Fact]

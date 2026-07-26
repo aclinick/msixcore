@@ -49,13 +49,17 @@ internal static class ManifestVersion
     /// <summary>Parses a value as an MSIX four-part version quad, throwing on failure.</summary>
     /// <param name="value">The version text.</param>
     /// <param name="context">A short description used in the error message (e.g. <c>Identity</c>).</param>
+    /// <param name="errorCode">The category appropriate to the containing manifest kind.</param>
     /// <returns>The parsed version.</returns>
     /// <exception cref="InvalidDataException"><paramref name="value"/> is not a valid MSIX version.</exception>
-    public static Version Parse(string? value, string context)
+    public static Version Parse(
+        string? value,
+        string context,
+        MsixErrorCode errorCode)
     {
         if (!TryParse(value, out Version version))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(errorCode,
                 $"{context} has an invalid MSIX version '{value}'. Expected four components, each 0-65535.");
         }
 

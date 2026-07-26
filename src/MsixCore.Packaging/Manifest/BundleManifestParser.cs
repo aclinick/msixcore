@@ -33,7 +33,7 @@ public static class BundleManifestParser
         }
         catch (XmlException ex)
         {
-            throw new InvalidDataException("The bundle manifest is not well-formed XML.", ex);
+            throw MsixError.Format(MsixErrorCode.Xml, "The bundle manifest is not well-formed XML.", ex);
         }
 
         return Parse(document);
@@ -49,11 +49,11 @@ public static class BundleManifestParser
         ArgumentNullException.ThrowIfNull(document);
 
         XElement root = document.Root
-            ?? throw new InvalidDataException("The bundle manifest has no root element.");
+            ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "The bundle manifest has no root element.");
 
         if (root.Name.LocalName != "Bundle")
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.BundleSemantics,
                 $"Expected a 'Bundle' root element but found '{root.Name.LocalName}'.");
         }
 
@@ -67,18 +67,18 @@ public static class BundleManifestParser
     private static PackageIdentity ParseIdentity(XElement root)
     {
         XElement identity = root.ElementByLocalName("Identity")
-            ?? throw new InvalidDataException("The bundle manifest is missing the required 'Identity' element.");
+            ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "The bundle manifest is missing the required 'Identity' element.");
 
         string name = identity.AttributeValue("Name")
-            ?? throw new InvalidDataException("Bundle Identity is missing the required 'Name' attribute.");
+            ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "Bundle Identity is missing the required 'Name' attribute.");
         string publisher = identity.AttributeValue("Publisher")
-            ?? throw new InvalidDataException("Bundle Identity is missing the required 'Publisher' attribute.");
+            ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "Bundle Identity is missing the required 'Publisher' attribute.");
         string versionText = identity.AttributeValue("Version")
-            ?? throw new InvalidDataException("Bundle Identity is missing the required 'Version' attribute.");
+            ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "Bundle Identity is missing the required 'Version' attribute.");
 
         if (!ManifestVersion.TryParse(versionText, out Version version))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.BundleSemantics,
                 $"Bundle Identity has an invalid MSIX version '{versionText}'. Expected four components, each 0-65535.");
         }
 
@@ -94,15 +94,17 @@ public static class BundleManifestParser
     private static List<BundlePackageEntry> ParsePackages(XElement root)
     {
         XElement packages = root.ElementByLocalName("Packages")
-            ?? throw new InvalidDataException("The bundle manifest is missing the required 'Packages' element.");
+            ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "The bundle manifest is missing the required 'Packages' element.");
 
         var result = new List<BundlePackageEntry>();
         foreach (XElement package in packages.ElementsByLocalName("Package"))
         {
             string fileName = package.AttributeValue("FileName")
-                ?? throw new InvalidDataException("A bundle 'Package' is missing the required 'FileName' attribute.");
+                ?? throw MsixError.Format(MsixErrorCode.BundleSemantics, "A bundle 'Package' is missing the required 'FileName' attribute.");
             Version version = ManifestVersion.Parse(
-                package.AttributeValue("Version"), $"Bundle package '{fileName}' Version");
+                package.AttributeValue("Version"),
+                $"Bundle package '{fileName}' Version",
+                MsixErrorCode.BundleSemantics);
 
             BundlePackageType type = ParsePackageType(package.AttributeValue("Type"), fileName);
 
@@ -134,7 +136,7 @@ public static class BundleManifestParser
 
         if (result.Count == 0)
         {
-            throw new InvalidDataException("The bundle manifest declares no packages.");
+            throw MsixError.Format(MsixErrorCode.BundleSemantics, "The bundle manifest declares no packages.");
         }
 
         return result;
@@ -154,7 +156,7 @@ public static class BundleManifestParser
             out long result)
             || result < 0)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.BundleSemantics,
                 $"Bundle package '{fileName}' has an invalid {attributeName} '{value}'.");
         }
 
@@ -173,17 +175,19 @@ public static class BundleManifestParser
         foreach (XElement family in dependencies.ElementsByLocalName("TargetDeviceFamily"))
         {
             string name = family.AttributeValue("Name")
-                ?? throw new InvalidDataException(
+                ?? throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     $"Bundle package '{fileName}' has a TargetDeviceFamily without a Name.");
             result.Add(new TargetDeviceFamily
             {
                 Name = name,
                 MinVersion = ManifestVersion.Parse(
                     family.AttributeValue("MinVersion"),
-                    $"Bundle package '{fileName}' TargetDeviceFamily '{name}' MinVersion"),
+                    $"Bundle package '{fileName}' TargetDeviceFamily '{name}' MinVersion",
+                    MsixErrorCode.BundleSemantics),
                 MaxVersionTested = ManifestVersion.Parse(
                     family.AttributeValue("MaxVersionTested"),
-                    $"Bundle package '{fileName}' TargetDeviceFamily '{name}' MaxVersionTested"),
+                    $"Bundle package '{fileName}' TargetDeviceFamily '{name}' MaxVersionTested",
+                    MsixErrorCode.BundleSemantics),
             });
         }
 
@@ -203,6 +207,6 @@ public static class BundleManifestParser
             return BundlePackageType.Application;
         }
 
-        throw new InvalidDataException($"Bundle package '{fileName}' has an invalid Type '{value}'.");
+        throw MsixError.Format(MsixErrorCode.BundleSemantics, $"Bundle package '{fileName}' has an invalid Type '{value}'.");
     }
 }
