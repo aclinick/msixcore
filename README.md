@@ -80,7 +80,8 @@ or CI/CD code-signing services.
 
 - .NET 10 SDK (pinned in `global.json`; `10.0.100`, `rollForward: latestMajor`).
 - A 64-bit host: **x64 or arm64**. 32-bit hosts are not supported, since 64-bit
-  Windows is the default everywhere the tools run.
+  Windows is the default everywhere the tools run. The tools always run
+  **native** — an arm64 machine runs the arm64 build, never the emulated x64 one.
 
 This is a statement about the machine running the tools, **not** about the
 packages they handle. `x86` remains a fully supported *package* architecture:

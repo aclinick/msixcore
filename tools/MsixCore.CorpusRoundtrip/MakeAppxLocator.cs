@@ -59,17 +59,15 @@ public sealed class MakeAppxLocator
         return null;
     }
 
-    /// <summary>The SDK bin architectures this host can execute, best first.</summary>
+    /// <summary>The SDK bin architecture this host runs, or empty on an unsupported host.</summary>
     /// <remarks>
-    /// Only arm64 and x64 are supported hosts. An unsupported host reports nothing runnable, so
-    /// callers treat the tool as absent rather than starting a binary that cannot run. Windows on
-    /// ARM64 gains x64 emulation in Windows 11 (build 22000); before that it has only x86
-    /// emulation, which is not a host architecture we support.
+    /// The tools always run native. arm64 and x64 are the supported hosts, and neither falls back
+    /// to the other: an arm64 host runs arm64 binaries even though Windows 11 could emulate x64.
+    /// Emulation is deliberately not used, so there is no version gate here. An unsupported host
+    /// runs nothing, which callers read as "tool absent".
     /// </remarks>
     internal static string[] ExecutableArchitectures() => RuntimeInformation.OSArchitecture switch
     {
-        Architecture.Arm64 when OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) =>
-            ["arm64", "x64"],
         Architecture.Arm64 => ["arm64"],
         Architecture.X64 => ["x64"],
         _ => [],
