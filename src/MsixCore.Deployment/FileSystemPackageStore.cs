@@ -268,22 +268,26 @@ public sealed class FileSystemPackageStore : IPackageStore
         {
             using FileStream journal = File.OpenRead(journalPath);
             CommitJournal envelope = JsonSerializer.Deserialize<CommitJournal>(journal)
-                ?? throw new InvalidDataException("The commit journal is empty.");
+                ?? throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal is empty.");
             transaction = ReadCommitJournal(envelope);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException)
         {
-            throw new InvalidOperationException(
-                $"The package store commit journal '{journalPath}' cannot be recovered.",
-                ex);
+            throw MsixError.Tag(
+                new InvalidOperationException(
+                    $"The package store commit journal '{journalPath}' cannot be recovered.",
+                    ex),
+                MsixErrorCode.PackageStore);
         }
 
         ResolvedCommitTransaction resolved = ResolveTransaction(transaction);
         if (transaction.RecoveryMode is not (
             CommitRecoveryMode.RollForward or CommitRecoveryMode.RollBack))
         {
-            throw new InvalidOperationException(
-                $"The commit journal has unsupported recovery mode '{transaction.RecoveryMode}'.");
+            throw MsixError.Tag(
+                new InvalidOperationException(
+                    $"The commit journal has unsupported recovery mode '{transaction.RecoveryMode}'."),
+                MsixErrorCode.PackageStore);
         }
 
         return ConvergeCommitTransaction(transaction, resolved);
@@ -314,9 +318,11 @@ public sealed class FileSystemPackageStore : IPackageStore
             _fileSystem.FlushDirectory(_root);
             if (!_fileSystem.DirectoryExists(resolved.StagingLocation))
             {
-                throw new InvalidOperationException(
-                    $"Staging disappeared while moving backups: '{resolved.StagingLocation}'. Backups: "
-                    + string.Join(", ", resolved.Backups.Select(static backup => backup.Original)));
+                throw MsixError.Tag(
+                    new InvalidOperationException(
+                        $"Staging disappeared while moving backups: '{resolved.StagingLocation}'. Backups: "
+                        + string.Join(", ", resolved.Backups.Select(static backup => backup.Original))),
+                    MsixErrorCode.PackageStore);
             }
 
             _fileSystem.MoveDirectory(resolved.StagingLocation, resolved.Destination);
@@ -357,8 +363,10 @@ public sealed class FileSystemPackageStore : IPackageStore
         string journalPath = Path.Combine(_root, CommitJournalFileName);
         if (_fileSystem.FileExists(journalPath))
         {
-            throw new InvalidOperationException(
-                $"The package store contains an unrecovered commit journal at '{journalPath}'.");
+            throw MsixError.Tag(
+                new InvalidOperationException(
+                    $"The package store contains an unrecovered commit journal at '{journalPath}'."),
+                MsixErrorCode.PackageStore);
         }
 
         string temporary = Path.Combine(_root, ".commit-transaction-" + Guid.NewGuid().ToString("N") + ".tmp");
@@ -435,7 +443,7 @@ public sealed class FileSystemPackageStore : IPackageStore
                 FileAttributes attributes = _fileSystem.GetAttributes(entry);
                 if (attributes.HasFlag(FileAttributes.ReparsePoint))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.PackageStore,
                         $"Staging path '{entry}' is a symbolic link or junction; refusing to commit.");
                 }
 
@@ -466,13 +474,13 @@ public sealed class FileSystemPackageStore : IPackageStore
     {
         if (journal.FormatVersion != 1)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.PackageStore,
                 $"The commit journal has unsupported format version '{journal.FormatVersion}'.");
         }
 
         if (string.IsNullOrEmpty(journal.Payload) || string.IsNullOrEmpty(journal.Sha256))
         {
-            throw new InvalidDataException("The commit journal is missing integrity data.");
+            throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal is missing integrity data.");
         }
 
         try
@@ -482,15 +490,15 @@ public sealed class FileSystemPackageStore : IPackageStore
             byte[] actualHash = SHA256.HashData(payload);
             if (!CryptographicOperations.FixedTimeEquals(expectedHash, actualHash))
             {
-                throw new InvalidDataException("The commit journal failed its integrity check.");
+                throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal failed its integrity check.");
             }
 
             return JsonSerializer.Deserialize<CommitTransaction>(payload)
-                ?? throw new InvalidDataException("The commit journal transaction is empty.");
+                ?? throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal transaction is empty.");
         }
         catch (Exception ex) when (ex is FormatException or JsonException)
         {
-            throw new InvalidDataException("The commit journal is malformed.", ex);
+            throw MsixError.Format(MsixErrorCode.PackageStore, "The commit journal is malformed.", ex);
         }
     }
 
@@ -513,8 +521,10 @@ public sealed class FileSystemPackageStore : IPackageStore
             }
             else if (originalExists == backupExists)
             {
-                throw new InvalidOperationException(
-                    $"Cannot continue package-store commit: expected exactly one of '{original}' or '{backup}' to exist.");
+                throw MsixError.Tag(
+                    new InvalidOperationException(
+                        $"Cannot continue package-store commit: expected exactly one of '{original}' or '{backup}' to exist."),
+                    MsixErrorCode.PackageStore);
             }
         }
     }
@@ -570,7 +580,7 @@ public sealed class FileSystemPackageStore : IPackageStore
         string stagingRoot = Path.GetFullPath(Path.Combine(_root, StagingFolderName));
         if (!IsDescendant(stagingRoot, staging))
         {
-            throw new InvalidOperationException("The commit journal contains an invalid staging location.");
+            throw MsixError.Tag(new InvalidOperationException("The commit journal contains an invalid staging location."), MsixErrorCode.PackageStore);
         }
 
         var backups = new List<(string Original, string Backup)>(transaction.Backups.Count);
@@ -580,7 +590,7 @@ public sealed class FileSystemPackageStore : IPackageStore
             ValidateTransactionName(item.BackupName, nameof(item.BackupName));
             if (!item.BackupName.StartsWith('.'))
             {
-                throw new InvalidOperationException("The commit journal contains an invalid backup name.");
+                throw MsixError.Tag(new InvalidOperationException("The commit journal contains an invalid backup name."), MsixErrorCode.PackageStore);
             }
 
             backups.Add((
@@ -602,7 +612,7 @@ public sealed class FileSystemPackageStore : IPackageStore
             || name is "." or ".."
             || !string.Equals(Path.GetFileName(name), name, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"The commit journal contains an invalid {propertyName}.");
+            throw MsixError.Tag(new InvalidOperationException($"The commit journal contains an invalid {propertyName}."), MsixErrorCode.PackageStore);
         }
     }
 

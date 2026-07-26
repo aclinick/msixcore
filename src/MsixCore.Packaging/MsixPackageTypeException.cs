@@ -7,5 +7,8 @@ public sealed class MsixPackageTypeException : InvalidOperationException
     public MsixPackageTypeException(string message)
         : base(message)
     {
+        // A package/container kind mismatch is a bundle-semantics failure. The category is attached
+        // here rather than at the throw sites so every instance carries it, whoever constructs it.
+        Data[MsixError.ErrorCodeDataKey] = MsixErrorCode.BundleSemantics;
     }
 }

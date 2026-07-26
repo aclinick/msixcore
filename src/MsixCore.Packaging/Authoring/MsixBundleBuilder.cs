@@ -137,13 +137,13 @@ public sealed class MsixBundleBuilder
             if (!string.Equals(input.Identity.Name, first.Identity.Name, StringComparison.Ordinal)
                 || !string.Equals(input.Identity.Publisher, first.Identity.Publisher, StringComparison.Ordinal))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     "All child packages in a bundle must have the same Name and Publisher.");
             }
 
             if (!input.Identity.Version.Equals(first.Identity.Version))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     "All child packages in a bundle must have the same Version. "
                     + $"'{input.FileName}' declares version '{input.Identity.Version}' but "
                     + $"'{first.FileName}' declares '{first.Identity.Version}'.");
@@ -151,13 +151,13 @@ public sealed class MsixBundleBuilder
 
             if (!identities.Add(input.Identity.PackageFullName))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     $"The child package identity '{input.Identity.PackageFullName}' is duplicated.");
             }
 
             if (!fileNames.Add(input.FileName))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     $"The child package file name '{input.FileName}' is duplicated.");
             }
 
@@ -165,7 +165,7 @@ public sealed class MsixBundleBuilder
             {
                 if (string.IsNullOrEmpty(input.Identity.ResourceId))
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.BundleSemantics,
                         $"Resource package '{input.FileName}' must declare a ResourceId.");
                 }
             }
@@ -174,13 +174,13 @@ public sealed class MsixBundleBuilder
                 || (input.Identity.Architecture != ProcessorArchitecture.Neutral
                     && applicationArchitectures.Contains(ProcessorArchitecture.Neutral)))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     "An architecture-neutral application package cannot be combined with "
                     + "architecture-specific application packages.");
             }
             else if (!applicationArchitectures.Add(input.Identity.Architecture))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.BundleSemantics,
                     $"The bundle contains more than one application package for architecture "
                     + $"'{PackageIdentity.ArchitectureMoniker(input.Identity.Architecture)}'.");
             }

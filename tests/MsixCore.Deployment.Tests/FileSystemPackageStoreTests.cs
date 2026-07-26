@@ -675,6 +675,24 @@ public class FileSystemPackageStoreTests : IDisposable
     }
 
     [Fact]
+    public void CorruptCommitJournal_HasPackageStoreCode()
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(
+            Path.Combine(_root, FileSystemPackageStore.CommitJournalFileName),
+            """{"FormatVersion":1,"Payload":"e30=","Sha256":"00"}""");
+        var store = new FileSystemPackageStore(_root);
+
+        InvalidOperationException exception =
+            Assert.Throws<InvalidOperationException>(() => store.EnumeratePackages());
+        // The category must survive on the exception the caller actually receives. Asserting only on
+        // InnerException would pass even if the outer, public-facing exception carried nothing.
+        Assert.Equal(MsixErrorCode.PackageStore, MsixError.GetCode(exception));
+        InvalidDataException inner = Assert.IsType<InvalidDataException>(exception.InnerException);
+        Assert.Equal(MsixErrorCode.PackageStore, MsixError.GetCode(inner));
+    }
+
+    [Fact]
     public void Commit_UnreadableInstalledManifest_FailsClosed()
     {
         var store = new FileSystemPackageStore(_root);

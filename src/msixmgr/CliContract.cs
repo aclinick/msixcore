@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MsixCore.Packaging;
 
 namespace MsixMgr;
 
@@ -38,15 +39,41 @@ internal static class CliContract
         }
     }
 
-    public static string ErrorCode(Exception ex) => ex switch
+    public static string ErrorCode(Exception ex)
     {
-        FileNotFoundException or DirectoryNotFoundException => "not_found",
-        UnauthorizedAccessException => "unauthorized",
-        NotSupportedException => "not_supported",
-        InvalidDataException or ArgumentException or InvalidOperationException => "invalid_data",
-        IOException => "io_error",
-        _ => "operational_error",
-    };
+        if (MsixError.TryGetCode(ex, out MsixErrorCode code))
+        {
+            return ToSnakeCase(code);
+        }
+
+        return ex switch
+        {
+            FileNotFoundException or DirectoryNotFoundException => "not_found",
+            UnauthorizedAccessException => "unauthorized",
+            NotSupportedException => "not_supported",
+            InvalidDataException or ArgumentException or InvalidOperationException => "invalid_data",
+            IOException => "io_error",
+            _ => "operational_error",
+        };
+    }
+
+    internal static string ToSnakeCase(MsixErrorCode code)
+    {
+        string value = code.ToString();
+        var result = new System.Text.StringBuilder(value.Length + 4);
+        for (int index = 0; index < value.Length; index++)
+        {
+            char character = value[index];
+            if (index > 0 && char.IsUpper(character))
+            {
+                result.Append('_');
+            }
+
+            result.Append(char.ToLowerInvariant(character));
+        }
+
+        return result.ToString();
+    }
 
     public static bool IsOperationalException(Exception ex) =>
         ex is IOException

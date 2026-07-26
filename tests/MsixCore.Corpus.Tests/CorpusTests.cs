@@ -70,6 +70,7 @@ public sealed class CorpusTests
         Assert.True(MsixPackage.IsBundle(file));
         MsixPackageTypeException error = Assert.Throws<MsixPackageTypeException>(() => MsixPackage.Open(file));
         Assert.Contains("MsixBundle.Open", error.Message, StringComparison.Ordinal);
+        Assert.Equal(MsixErrorCode.BundleSemantics, MsixError.GetCode(error));
 
         using MsixBundle bundle = MsixBundle.Open(file);
         Assert.Equal("MsixCoreCorpus.Bundle", bundle.Identity.Name);

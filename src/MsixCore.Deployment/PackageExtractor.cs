@@ -1,5 +1,6 @@
 using MsixCore.Packaging.Opc;
 using MsixCore.Packaging.Integrity;
+using MsixCore.Packaging;
 
 namespace MsixCore.Deployment;
 
@@ -41,7 +42,7 @@ public static class PackageExtractor
         // root has to be validated explicitly here, before any extraction begins.
         if (IsReparsePoint(root))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.UnsafeDestination,
                 $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
         }
 
@@ -61,7 +62,7 @@ public static class PackageExtractor
             // A malicious/malformed package must never write outside the destination.
             if (!target.StartsWith(rootWithSeparator, StringComparison.Ordinal))
             {
-                throw new InvalidDataException($"Package part '{part}' resolves outside the destination directory.");
+                throw MsixError.Format(MsixErrorCode.PartName, $"Package part '{part}' resolves outside the destination directory.");
             }
 
             // Defense against symlink/junction escape: a link anywhere between the root and the target
@@ -191,7 +192,7 @@ public static class PackageExtractor
         Directory.CreateDirectory(root);
         if (IsReparsePoint(root))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.UnsafeDestination,
                 $"Destination directory '{root}' is a symbolic link or junction; refusing to extract.");
         }
 
@@ -204,7 +205,7 @@ public static class PackageExtractor
         string target = Path.GetFullPath(Path.Combine(root, relative));
         if (!target.StartsWith(rootWithSeparator, StringComparison.Ordinal))
         {
-            throw new InvalidDataException($"Package part '{part}' resolves outside the destination directory.");
+            throw MsixError.Format(MsixErrorCode.PartName, $"Package part '{part}' resolves outside the destination directory.");
         }
 
         return target;
@@ -229,7 +230,7 @@ public static class PackageExtractor
             current = Path.Combine(current, segment);
             if (IsReparsePoint(current))
             {
-                throw new InvalidDataException(
+                throw MsixError.Format(MsixErrorCode.UnsafeDestination,
                     $"Destination path '{current}' contains a symbolic link or junction; refusing to extract.");
             }
         }

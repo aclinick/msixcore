@@ -37,7 +37,7 @@ public static class AppxManifestParser
         }
         catch (XmlException ex)
         {
-            throw new InvalidDataException("The manifest is not well-formed XML.", ex);
+            throw MsixError.Format(MsixErrorCode.Xml, "The manifest is not well-formed XML.", ex);
         }
 
         return Parse(document);
@@ -53,11 +53,11 @@ public static class AppxManifestParser
         ArgumentNullException.ThrowIfNull(document);
 
         XElement root = document.Root
-            ?? throw new InvalidDataException("The manifest has no root element.");
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "The manifest has no root element.");
 
         if (root.Name.LocalName != "Package")
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
                 $"Expected a 'Package' root element but found '{root.Name.LocalName}'.");
         }
 
@@ -83,18 +83,18 @@ public static class AppxManifestParser
     private static PackageIdentity ParseIdentity(XElement root)
     {
         XElement identity = root.ElementByLocalName("Identity")
-            ?? throw new InvalidDataException("The manifest is missing the required 'Identity' element.");
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "The manifest is missing the required 'Identity' element.");
 
         string name = identity.AttributeValue("Name")
-            ?? throw new InvalidDataException("Identity is missing the required 'Name' attribute.");
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "Identity is missing the required 'Name' attribute.");
         string publisher = identity.AttributeValue("Publisher")
-            ?? throw new InvalidDataException("Identity is missing the required 'Publisher' attribute.");
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "Identity is missing the required 'Publisher' attribute.");
         string versionText = identity.AttributeValue("Version")
-            ?? throw new InvalidDataException("Identity is missing the required 'Version' attribute.");
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "Identity is missing the required 'Version' attribute.");
 
         if (!ManifestVersion.TryParse(versionText, out Version version))
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
                 $"Identity has an invalid MSIX version '{versionText}'. Expected four components, each 0-65535.");
         }
 
@@ -171,7 +171,7 @@ public static class AppxManifestParser
         foreach (XElement app in applications.ElementsByLocalName("Application"))
         {
             string id = app.AttributeValue("Id")
-                ?? throw new InvalidDataException("An 'Application' element is missing the required 'Id' attribute.");
+                ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "An 'Application' element is missing the required 'Id' attribute.");
 
             result.Add(new ManifestApplication
             {
@@ -215,11 +215,15 @@ public static class AppxManifestParser
         foreach (XElement tdf in dependencies.ElementsByLocalName("TargetDeviceFamily"))
         {
             string name = tdf.AttributeValue("Name")
-                ?? throw new InvalidDataException("A 'TargetDeviceFamily' is missing the required 'Name' attribute.");
+                ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics, "A 'TargetDeviceFamily' is missing the required 'Name' attribute.");
             Version minVersion = ManifestVersion.Parse(
-                tdf.AttributeValue("MinVersion"), $"TargetDeviceFamily '{name}' MinVersion");
+                tdf.AttributeValue("MinVersion"),
+                $"TargetDeviceFamily '{name}' MinVersion",
+                MsixErrorCode.ManifestSemantics);
             Version maxTested = ManifestVersion.Parse(
-                tdf.AttributeValue("MaxVersionTested"), $"TargetDeviceFamily '{name}' MaxVersionTested");
+                tdf.AttributeValue("MaxVersionTested"),
+                $"TargetDeviceFamily '{name}' MaxVersionTested",
+                MsixErrorCode.ManifestSemantics);
 
             result.Add(new TargetDeviceFamily
             {
@@ -246,7 +250,7 @@ public static class AppxManifestParser
         }
         catch (FormatException ex)
         {
-            throw new InvalidDataException($"Properties/Framework has an invalid boolean value '{value}'.", ex);
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics, $"Properties/Framework has an invalid boolean value '{value}'.", ex);
         }
     }
 

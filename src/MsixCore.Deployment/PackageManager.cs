@@ -74,7 +74,7 @@ public sealed class PackageManager : IPackageManager
                     response.Token);
                 if (!verification.IsValid)
                 {
-                    throw new InvalidDataException(
+                    throw MsixError.Format(MsixErrorCode.BlockMapSemantics,
                         "Package integrity check failed: the extracted payload does not match its block map.");
                 }
             }

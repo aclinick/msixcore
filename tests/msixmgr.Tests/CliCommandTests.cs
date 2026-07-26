@@ -621,7 +621,7 @@ public class CliCommandTests : IDisposable
     [InlineData("inspect", "not_found")]
     [InlineData("validate", "not_found")]
     [InlineData("unpack", "not_found")]
-    [InlineData("pack", "invalid_data")]
+    [InlineData("pack", "footprint_missing")]
     [InlineData("bundle", "invalid_data")]
     public void JsonOperationalErrors_EmitErrorReportOnStdout(string verb, string expectedCode)
     {
@@ -644,6 +644,70 @@ public class CliCommandTests : IDisposable
         Assert.Equal(3, code);
         Assert.Empty(error);
         AssertJsonError(output, expectedCode);
+    }
+
+    [Theory]
+    [InlineData("malformed-xml", "xml")]
+    [InlineData("missing-manifest", "footprint_missing")]
+    public void Inspect_Json_ReportsSpecificMsixErrorCode(string scenario, string expectedCode)
+    {
+        string directory = LooseCliPackage.Create(_root, "coded-" + scenario);
+        string manifest = Path.Combine(directory, LooseCliPackage.ManifestName);
+        if (scenario == "malformed-xml")
+        {
+            File.WriteAllText(manifest, "<Package>");
+        }
+        else
+        {
+            File.Delete(manifest);
+        }
+
+        (int code, string output, string error) = RunInspect(directory, "--json");
+
+        Assert.Equal(3, code);
+        Assert.Empty(error);
+        AssertJsonError(output, expectedCode);
+    }
+
+    [Fact]
+    public void ErrorCode_SnakeCaseRoundTripsEveryEnumMember()
+    {
+        foreach (MsixErrorCode code in Enum.GetValues<MsixErrorCode>())
+        {
+            string snakeCase = CliContract.ToSnakeCase(code);
+            string roundTripped = string.Concat(
+                snakeCase.Split('_').Select(static segment =>
+                    char.ToUpperInvariant(segment[0]) + segment[1..]));
+
+            Assert.Equal(code.ToString(), roundTripped);
+            Assert.All(
+                snakeCase,
+                static character => Assert.True(char.IsAsciiLetterLower(character) || character == '_'));
+
+            // Unknown is a read-side fallback and MsixError.Format rejects it, so only the
+            // assignable members can be round-tripped through a real exception.
+            if (code != MsixErrorCode.Unknown)
+            {
+                Assert.Equal(snakeCase, CliContract.ErrorCode(MsixError.Format(code, "test")));
+            }
+        }
+    }
+
+    [Fact]
+    public void ErrorCode_UndefinedEnumValueCannotEscapeTheRegistry()
+    {
+        // An undefined value would otherwise serialize as its number (e.g. "9999"), escaping both the
+        // documented registry and the [a-z_] shape callers are told to expect.
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MsixError.Format((MsixErrorCode)9999, "test"));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MsixError.Format(MsixErrorCode.Unknown, "test"));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MsixError.Tag(new InvalidOperationException("test"), (MsixErrorCode)9999));
+
+        var smuggled = new InvalidDataException("test");
+        smuggled.Data[MsixError.ErrorCodeDataKey] = (MsixErrorCode)9999;
+        Assert.Equal("invalid_data", CliContract.ErrorCode(smuggled));
     }
 
     [Fact]

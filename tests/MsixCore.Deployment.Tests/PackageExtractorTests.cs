@@ -118,7 +118,10 @@ public class PackageExtractorTests : IDisposable
 
         using OpcPackage package = OpcFrom(("AppxManifest.xml", "<manifest/>"));
 
-        Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, link));
+        InvalidDataException error =
+            Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, link));
+        // An unsafe destination is a property of the caller's directory, not of any package part name.
+        Assert.Equal(MsixErrorCode.UnsafeDestination, MsixError.GetCode(error));
     }
 
     [Fact]
@@ -141,7 +144,35 @@ public class PackageExtractorTests : IDisposable
 
         using OpcPackage package = OpcFrom(("AppxManifest.xml", "<manifest/>"), ("Assets/Logo.png", "PNG"));
 
-        Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, dest));
+        InvalidDataException error =
+            Assert.Throws<InvalidDataException>(() => PackageExtractor.Extract(package, dest));
+        Assert.Equal(MsixErrorCode.UnsafeDestination, MsixError.GetCode(error));
+    }
+
+    [Fact]
+    public void ExtractAndVerify_RootIsReparsePoint_ThrowsUnsafeDestination()
+    {
+        // ExtractAndVerify guards its destination through PrepareDestination rather than the inline
+        // check used by Extract, so that second guard needs its own coverage — it sits on the trusted
+        // verification path.
+        string realTarget = Path.Combine(_root, "verify-real");
+        Directory.CreateDirectory(realTarget);
+        string link = Path.Combine(_root, "verify-link");
+        try
+        {
+            Directory.CreateSymbolicLink(link, realTarget);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return; // Environment cannot create symlinks (no privilege / Developer Mode); skip.
+        }
+
+        string packagePath = PackedMsixBuilder.Create(_root, "verify-unsafe-dest.msix");
+        using MsixPackage package = MsixPackage.Open(packagePath);
+
+        InvalidDataException error = Assert.Throws<InvalidDataException>(
+            () => PackageExtractor.ExtractAndVerify(package.Opc, package.BlockMap, link));
+        Assert.Equal(MsixErrorCode.UnsafeDestination, MsixError.GetCode(error));
     }
 
     [Fact]

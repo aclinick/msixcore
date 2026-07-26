@@ -360,7 +360,7 @@ public sealed class MsixPackage : IPackage
         byte[]? raw = GetSecurityPartBytes(OpcPartNames.AppxManifest);
         if (raw is null)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.FootprintMissing,
                 $"The package does not contain '{OpcPartNames.AppxManifest}'.");
         }
 
@@ -375,7 +375,7 @@ public sealed class MsixPackage : IPackage
         byte[]? raw = GetSecurityPartBytes(OpcPartNames.AppxBlockMap);
         if (raw is null)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.FootprintMissing,
                 $"The package does not contain '{OpcPartNames.AppxBlockMap}'.");
         }
 

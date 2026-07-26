@@ -55,7 +55,7 @@ internal sealed class StoredZipWriter : IDisposable
         int localHeaderSize = 30 + nameBytes.Length;
         if (nameBytes.Length > ushort.MaxValue || localHeaderSize > ushort.MaxValue)
         {
-            throw new InvalidDataException($"The ZIP entry name '{entryName}' is too long.");
+            throw MsixError.Format(MsixErrorCode.PartName, $"The ZIP entry name '{entryName}' is too long.");
         }
 
         long localHeaderOffset = _output.Position;
@@ -127,7 +127,7 @@ internal sealed class StoredZipWriter : IDisposable
         int localHeaderSize = 30 + nameBytes.Length;
         if (nameBytes.Length > ushort.MaxValue || localHeaderSize > ushort.MaxValue)
         {
-            throw new InvalidDataException($"The ZIP entry name '{entryName}' is too long.");
+            throw MsixError.Format(MsixErrorCode.PartName, $"The ZIP entry name '{entryName}' is too long.");
         }
 
         long localHeaderOffset = _output.Position;
@@ -149,7 +149,7 @@ internal sealed class StoredZipWriter : IDisposable
         long actualCompressedSize = _output.Position - contentOffset;
         if (actualCompressedSize != content.CompressedSize)
         {
-            throw new InvalidDataException(
+            throw MsixError.Format(MsixErrorCode.ZipStructure,
                 $"ZIP entry '{entryName}' wrote {actualCompressedSize} compressed bytes but reported {content.CompressedSize}.");
         }
 
