@@ -25,7 +25,11 @@ public static class BlockMapVerifier
         OpcPartNames.CodeIntegrityCatalog,
     };
 
-    /// <summary>Verifies a package's payload against a parsed block map.</summary>
+    /// <summary>
+    /// Verifies a package's payload against a parsed block map. The package's required
+    /// <see cref="IOpcPackage.DetectSnapshotDrift"/> contract also invalidates the result when its
+    /// backing part set no longer matches the open-time snapshot.
+    /// </summary>
     /// <param name="package">The OPC package to read content from.</param>
     /// <param name="blockMap">The parsed block map to verify against.</param>
     /// <returns>A result describing per-file and coverage outcomes.</returns>
@@ -36,8 +40,14 @@ public static class BlockMapVerifier
         ArgumentNullException.ThrowIfNull(blockMap);
 
         var fileResults = new List<BlockMapFileResult>(blockMap.Files.Count);
-        var mappedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        bool allValid = true;
+        var mappedNames = new HashSet<string>(
+            blockMap.Files.Select(static file => file.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Check snapshot consistency before opening any payload streams. This narrows, but cannot
+        // eliminate, the race window for mutable backing stores.
+        List<string> coverageErrors = CheckCoverage(package, mappedNames);
+        bool allValid = coverageErrors.Count == 0;
 
         // Rent a single block buffer and reuse it across every verified file. The pool may return an
         // array larger than BlockMap.BlockSize, so all reads are capped at exactly BlockMap.BlockSize.
@@ -46,7 +56,6 @@ public static class BlockMapVerifier
         {
             foreach (BlockMapFile file in blockMap.Files)
             {
-                mappedNames.Add(file.Name);
                 BlockMapFileResult result = VerifyFile(package, blockMap.HashMethod, file, buffer);
                 fileResults.Add(result);
                 allValid &= result.IsValid;
@@ -56,9 +65,6 @@ public static class BlockMapVerifier
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-
-        List<string> coverageErrors = CheckCoverage(package, mappedNames);
-        allValid &= coverageErrors.Count == 0;
 
         return new BlockMapVerificationResult
         {
@@ -150,7 +156,10 @@ public static class BlockMapVerifier
         return new BlockMapFileResult { Name = file.Name, IsValid = true };
     }
 
-    /// <summary>Checks that the block map and package contain the same payload files.</summary>
+    /// <summary>
+    /// Checks that the block map and package contain the same payload files. Snapshot drift
+    /// reported through <see cref="IOpcPackage.DetectSnapshotDrift"/> is returned as a coverage error.
+    /// </summary>
     public static IReadOnlyList<string> VerifyCoverage(IOpcPackage package, BlockMap blockMap)
     {
         ArgumentNullException.ThrowIfNull(package);
@@ -211,6 +220,11 @@ public static class BlockMapVerifier
     private static List<string> CheckCoverage(IOpcPackage package, HashSet<string> mappedNames)
     {
         var errors = new List<string>();
+        if (package.DetectSnapshotDrift() is string driftError)
+        {
+            errors.Add($"Package snapshot drift detected: {driftError}");
+        }
+
         var payloadParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (string part in package.PartNames)

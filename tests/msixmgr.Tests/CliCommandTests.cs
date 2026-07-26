@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using MsixCore.Deployment;
 using MsixCore.Packaging;
 
 namespace MsixMgr.Tests;
@@ -143,6 +144,131 @@ public class CliCommandTests : IDisposable
         Assert.Contains("\"IsValid\": true", output);
         Assert.Contains("\"BlockMapValid\": true", output);
     }
+
+    #region Real-signed fixture validation (exit codes + attack signature)
+
+    private static string RealSignedFixture(string name) =>
+        Path.Combine(AppContext.BaseDirectory, "Fixtures", "RealSigned", name);
+
+    [Fact]
+    public void Validate_RealSignedPackage_ExitsZero()
+    {
+        (int code, string output, _) = RunValidate(RealSignedFixture("SignTest.msix"));
+
+        Assert.Equal(0, code);
+        Assert.Contains("INTEGRITY OK", output);
+    }
+
+    [Fact]
+    public void Validate_StapledPackage_ExitsNonZero()
+    {
+        (int code, string output, _) = RunValidate(RealSignedFixture("Stapled.msix"));
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("INTEGRITY FAILED", output);
+    }
+
+    [Fact]
+    public void Validate_StapledPackage_Json_ShowsAttackSignature()
+    {
+        // The pairing "CMS valid + binding invalid" is precisely the attack signature
+        // for a stolen-signature stapling attack. This must never regress.
+        (int code, string output, _) = RunValidate(RealSignedFixture("Stapled.msix"), "--json");
+
+        Assert.NotEqual(0, code);
+
+        using JsonDocument doc = JsonDocument.Parse(output);
+        JsonElement root = doc.RootElement;
+
+        Assert.False(root.GetProperty("IsValid").GetBoolean());
+        Assert.True(root.GetProperty("CmsIntegrityValid").GetBoolean());
+        Assert.False(root.GetProperty("SignatureBindingVerified").GetBoolean());
+    }
+
+    [Fact]
+    public void Validate_SignedDirectoryMutatedAfterOpen_ReportsDriftCauseWithoutAxci()
+    {
+        string directory = Path.Combine(_root, "signed-directory-drift");
+        using (MsixPackage packed = MsixPackage.Open(RealSignedFixture("SignTest.msix")))
+        {
+            PackageExtractor.Extract(packed.Opc, directory);
+        }
+
+        using MsixPackage loose = MsixPackage.OpenDirectory(directory);
+        Assert.True(loose.IsSigned);
+        File.WriteAllText(Path.Combine(directory, "evil.dll"), "attacker");
+
+        ValidationReport report = ValidateCommand.Validate(loose);
+
+        Assert.False(report.IsValid);
+        string bindingError = Assert.Single(
+            report.Errors,
+            error => error.StartsWith("signature: APPX indirect-data binding FAILED", StringComparison.Ordinal));
+        Assert.Contains("snapshot drift detected", bindingError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            report.Errors,
+            error => error.Contains("AXCI", StringComparison.OrdinalIgnoreCase));
+    }
+
+    #endregion
+
+    #region Directory payload-set integrity (extra/missing files fail validate)
+
+    [Fact]
+    public void Validate_DirectoryWithExtraFile_ExitsNonZero()
+    {
+        // A file not covered by the block map must cause validation failure.
+        var extra = new Dictionary<string, byte[]>
+        {
+            ["Assets/data.bin"] = Encoding.UTF8.GetBytes("legit payload"),
+        };
+        string dir = LooseCliPackage.Create(_root, "pkgExtra", extra);
+
+        // Add a file not in the block map.
+        File.WriteAllBytes(Path.Combine(dir, "evil.dll"), new byte[] { 0x4D, 0x5A });
+
+        (int code, string output, _) = RunValidate(dir);
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("INTEGRITY FAILED", output);
+    }
+
+    [Fact]
+    public void Validate_DirectoryWithMissingPayload_ExitsNonZero()
+    {
+        var extra = new Dictionary<string, byte[]>
+        {
+            ["Assets/data.bin"] = Encoding.UTF8.GetBytes("legit payload"),
+        };
+        string dir = LooseCliPackage.Create(_root, "pkgMissing", extra);
+
+        // Remove a payload file that the block map expects.
+        File.Delete(Path.Combine(dir, "Assets", "data.bin"));
+
+        (int code, string output, _) = RunValidate(dir);
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("INTEGRITY FAILED", output);
+    }
+
+    [Fact]
+    public void Validate_DirectoryMutatedAfterOpen_ReportsDriftOnce()
+    {
+        string dir = LooseCliPackage.Create(_root, "pkgPostOpenMutation");
+        using MsixPackage package = MsixPackage.OpenDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "evil.dll"), "attacker");
+
+        ValidationReport report = ValidateCommand.Validate(package);
+
+        Assert.False(report.IsValid);
+        string driftError = Assert.Single(
+            report.Errors,
+            error => error.Contains("evil.dll", StringComparison.Ordinal));
+        Assert.Contains("Package snapshot drift detected", driftError);
+        Assert.Contains("evil.dll", driftError);
+    }
+
+    #endregion
 
     private static (int Code, string Out, string Err) RunUnpack(params string[] args)
     {

@@ -13,6 +13,11 @@ public static class PackageExtractor
     /// Extracts every part of <paramref name="package"/> into <paramref name="destination"/>,
     /// preserving the part path hierarchy.
     /// </summary>
+    /// <remarks>
+    /// This method performs no integrity verification. Do not use it after a separate validation
+    /// pass to extract a directory-backed package: its files can change between validation and
+    /// extraction. Use <see cref="ExtractAndVerify"/> when the extracted bytes must be trusted.
+    /// </remarks>
     /// <param name="package">The package to read parts from.</param>
     /// <param name="destination">The target directory (created if missing).</param>
     /// <param name="progress">Optional progress reporter (0–100).</param>
@@ -78,6 +83,8 @@ public static class PackageExtractor
 
     /// <summary>
     /// Extracts a package while verifying each payload file against its block map in the same read.
+    /// This is the correct extraction path when the output is intended to be trusted; callers must
+    /// check <see cref="BlockMapVerificationResult.IsValid"/> before using the output.
     /// </summary>
     public static BlockMapVerificationResult ExtractAndVerify(
         IOpcPackage package,

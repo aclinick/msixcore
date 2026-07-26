@@ -1,4 +1,7 @@
+using System.Buffers;
+using System.Buffers.Binary;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace MsixCore.Packaging.Opc;
@@ -19,10 +22,14 @@ public sealed class OpcPackage : IOpcPackage
     private readonly ZipArchive _archive;
     private readonly Dictionary<string, ZipArchiveEntry> _entriesByPart;
     private readonly List<string> _partNames;
+    private readonly Stream? _callerStream;
+    private readonly CentralDirectorySnapshot? _centralDirectorySnapshot;
+    private readonly string? _snapshotUnavailableReason;
 
-    private OpcPackage(ZipArchive archive)
+    private OpcPackage(ZipArchive archive, Stream? callerStream)
     {
         _archive = archive;
+        _callerStream = callerStream;
         _entriesByPart = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
         _partNames = new List<string>(archive.Entries.Count);
 
@@ -60,10 +67,57 @@ public sealed class OpcPackage : IOpcPackage
 
             _partNames.Add(partName);
         }
+
+        if (callerStream is not null)
+        {
+            if (TryCaptureCentralDirectory(callerStream, out CentralDirectorySnapshot? snapshot, out string? error))
+            {
+                _centralDirectorySnapshot = snapshot;
+            }
+            else
+            {
+                _snapshotUnavailableReason = error;
+            }
+        }
     }
 
     /// <inheritdoc/>
     public IReadOnlyCollection<string> PartNames => _partNames;
+
+    /// <inheritdoc/>
+    public string? DetectSnapshotDrift()
+    {
+        if (_callerStream is null)
+        {
+            // File-path opens own the read-only handle used by the one ZipArchive instance, so its
+            // immutable central-directory snapshot has no separately supplied backing stream.
+            return null;
+        }
+
+        if (_centralDirectorySnapshot is null)
+        {
+            return $"Caller-supplied stream consistency cannot be established: {_snapshotUnavailableReason}";
+        }
+
+        if (!TryCaptureCentralDirectory(
+                _callerStream,
+                out CentralDirectorySnapshot? current,
+                out string? error))
+        {
+            return $"Caller-supplied stream consistency cannot be established: {error}";
+        }
+
+        CentralDirectorySnapshot original = _centralDirectorySnapshot;
+        if (current!.ContainerLength != original.ContainerLength
+            || current.CentralDirectoryOffset != original.CentralDirectoryOffset
+            || current.CentralDirectorySize != original.CentralDirectorySize
+            || !CryptographicOperations.FixedTimeEquals(current.Digest, original.Digest))
+        {
+            return "The caller-supplied stream's ZIP central directory or container length changed since the package was opened.";
+        }
+
+        return null;
+    }
 
     /// <summary>Opens an OPC package from a file path.</summary>
     /// <param name="path">Path to the <c>.msix</c>/<c>.appx</c>/bundle file.</param>
@@ -83,7 +137,7 @@ public sealed class OpcPackage : IOpcPackage
         FileStream fileStream = File.OpenRead(path);
         try
         {
-            return Open(fileStream, leaveOpen: false);
+            return OpenCore(fileStream, leaveOpen: false, callerSupplied: false);
         }
         catch
         {
@@ -92,8 +146,8 @@ public sealed class OpcPackage : IOpcPackage
         }
     }
 
-    /// <summary>Opens an OPC package from a seekable stream.</summary>
-    /// <param name="stream">A readable, seekable stream positioned at the start of the package.</param>
+    /// <summary>Opens an OPC package from a readable stream.</summary>
+    /// <param name="stream">A readable stream positioned at the start of the package.</param>
     /// <param name="leaveOpen">Whether to leave <paramref name="stream"/> open when this package is disposed.</param>
     /// <returns>An open <see cref="OpcPackage"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
@@ -101,12 +155,16 @@ public sealed class OpcPackage : IOpcPackage
     public static OpcPackage Open(Stream stream, bool leaveOpen = false)
     {
         ArgumentNullException.ThrowIfNull(stream);
+        return OpenCore(stream, leaveOpen, callerSupplied: true);
+    }
 
+    private static OpcPackage OpenCore(Stream stream, bool leaveOpen, bool callerSupplied)
+    {
         var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen);
         try
         {
             // The central directory is read lazily, so validation failures can surface here.
-            return new OpcPackage(archive);
+            return new OpcPackage(archive, callerSupplied ? stream : null);
         }
         catch
         {
@@ -115,6 +173,239 @@ public sealed class OpcPackage : IOpcPackage
             throw;
         }
     }
+
+    private static bool TryCaptureCentralDirectory(
+        Stream stream,
+        out CentralDirectorySnapshot? snapshot,
+        out string? error)
+    {
+        snapshot = null;
+        error = null;
+        if (!stream.CanRead || !stream.CanSeek)
+        {
+            error = "the stream is not both readable and seekable.";
+            return false;
+        }
+
+        long originalPosition;
+        try
+        {
+            originalPosition = stream.Position;
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or ObjectDisposedException)
+        {
+            error = $"the stream position is unavailable: {ex.Message}";
+            return false;
+        }
+
+        bool positionRestored = false;
+        try
+        {
+            long length = stream.Length;
+            if (!TryReadCentralDirectoryLocation(
+                    stream,
+                    length,
+                    out long centralOffset,
+                    out long centralSize,
+                    out error))
+            {
+                return false;
+            }
+
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
+            try
+            {
+                stream.Position = centralOffset;
+                long remaining = centralSize;
+                while (remaining > 0)
+                {
+                    int read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                    if (read == 0)
+                    {
+                        error = "the ZIP central directory ended unexpectedly.";
+                        return false;
+                    }
+
+                    hash.AppendData(buffer, 0, read);
+                    remaining -= read;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
+            var captured = new CentralDirectorySnapshot(
+                length,
+                centralOffset,
+                centralSize,
+                hash.GetHashAndReset());
+            stream.Position = originalPosition;
+            positionRestored = true;
+            snapshot = captured;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or ObjectDisposedException)
+        {
+            error = $"the stream could not be re-read: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (!positionRestored)
+                {
+                    stream.Position = originalPosition;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or NotSupportedException or ObjectDisposedException)
+            {
+                error ??= $"the stream position could not be restored: {ex.Message}";
+                snapshot = null;
+            }
+        }
+    }
+
+    private static bool TryReadCentralDirectoryLocation(
+        Stream stream,
+        long length,
+        out long centralOffset,
+        out long centralSize,
+        out string? error)
+    {
+        const uint eocdSignature = 0x06054B50;
+        const uint zip64LocatorSignature = 0x07064B50;
+        const uint zip64EocdSignature = 0x06064B50;
+        const int minimumEocdSize = 22;
+        const int maximumCommentLength = ushort.MaxValue;
+
+        centralOffset = 0;
+        centralSize = 0;
+        error = null;
+        if (length < minimumEocdSize)
+        {
+            error = "the stream is too short to contain a ZIP end-of-central-directory record.";
+            return false;
+        }
+
+        int tailLength = (int)Math.Min(length, minimumEocdSize + maximumCommentLength);
+        byte[] tail = new byte[tailLength];
+        stream.Position = length - tailLength;
+        if (!ReadExactly(stream, tail))
+        {
+            error = "the ZIP end-of-central-directory record could not be read.";
+            return false;
+        }
+
+        int eocdIndex = -1;
+        for (int i = tail.Length - minimumEocdSize; i >= 0; i--)
+        {
+            if (BinaryPrimitives.ReadUInt32LittleEndian(tail.AsSpan(i, 4)) != eocdSignature)
+            {
+                continue;
+            }
+
+            int commentLength = BinaryPrimitives.ReadUInt16LittleEndian(tail.AsSpan(i + 20, 2));
+            if (i + minimumEocdSize + commentLength == tail.Length)
+            {
+                eocdIndex = i;
+                break;
+            }
+        }
+
+        if (eocdIndex < 0)
+        {
+            error = "a terminal ZIP end-of-central-directory record was not found.";
+            return false;
+        }
+
+        ReadOnlySpan<byte> eocd = tail.AsSpan(eocdIndex, minimumEocdSize);
+        uint size32 = BinaryPrimitives.ReadUInt32LittleEndian(eocd[12..16]);
+        uint offset32 = BinaryPrimitives.ReadUInt32LittleEndian(eocd[16..20]);
+        if (size32 != uint.MaxValue && offset32 != uint.MaxValue)
+        {
+            centralSize = size32;
+            centralOffset = offset32;
+        }
+        else
+        {
+            long eocdOffset = length - tailLength + eocdIndex;
+            if (eocdOffset < 20)
+            {
+                error = "the ZIP64 end-of-central-directory locator is missing.";
+                return false;
+            }
+
+            Span<byte> locator = stackalloc byte[20];
+            stream.Position = eocdOffset - locator.Length;
+            if (!ReadExactly(stream, locator)
+                || BinaryPrimitives.ReadUInt32LittleEndian(locator[..4]) != zip64LocatorSignature)
+            {
+                error = "the ZIP64 end-of-central-directory locator is invalid.";
+                return false;
+            }
+
+            ulong zip64Offset = BinaryPrimitives.ReadUInt64LittleEndian(locator[8..16]);
+            if (zip64Offset > long.MaxValue)
+            {
+                error = "the ZIP64 end-of-central-directory offset is out of range.";
+                return false;
+            }
+
+            Span<byte> zip64 = stackalloc byte[56];
+            stream.Position = (long)zip64Offset;
+            if (!ReadExactly(stream, zip64)
+                || BinaryPrimitives.ReadUInt32LittleEndian(zip64[..4]) != zip64EocdSignature)
+            {
+                error = "the ZIP64 end-of-central-directory record is invalid.";
+                return false;
+            }
+
+            ulong size64 = BinaryPrimitives.ReadUInt64LittleEndian(zip64[40..48]);
+            ulong offset64 = BinaryPrimitives.ReadUInt64LittleEndian(zip64[48..56]);
+            if (size64 > long.MaxValue || offset64 > long.MaxValue)
+            {
+                error = "the ZIP64 central-directory range is out of range.";
+                return false;
+            }
+
+            centralSize = (long)size64;
+            centralOffset = (long)offset64;
+        }
+
+        if (centralOffset < 0 || centralSize < 0 || centralOffset > length - centralSize)
+        {
+            error = "the ZIP central-directory range lies outside the stream.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ReadExactly(Stream stream, Span<byte> buffer)
+    {
+        int total = 0;
+        while (total < buffer.Length)
+        {
+            int read = stream.Read(buffer[total..]);
+            if (read == 0)
+            {
+                return false;
+            }
+
+            total += read;
+        }
+
+        return true;
+    }
+
+    private sealed record CentralDirectorySnapshot(
+        long ContainerLength,
+        long CentralDirectoryOffset,
+        long CentralDirectorySize,
+        byte[] Digest);
 
     /// <inheritdoc/>
     public bool ContainsPart(string partName)

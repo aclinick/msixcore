@@ -46,49 +46,20 @@ public sealed class DirectoryOpcPackage : IOpcPackage
             throw new DirectoryNotFoundException($"The package directory '{directory}' does not exist.");
         }
 
-        var partToFullPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var partNames = new List<string>();
-
-        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-
-        foreach (string fullPath in EnumeratePayloadFiles(root))
+        DirectoryPartEnumeration enumeration = EnumerateValidatedParts(root);
+        if (enumeration.Error is not null)
         {
-            string relative = Path.GetRelativePath(root, fullPath).Replace(Path.DirectorySeparatorChar, '/');
-            if (Path.AltDirectorySeparatorChar != '/')
-            {
-                relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
-            }
-
-            if (!OpcPackage.IsValidPartName(relative))
-            {
-                throw new InvalidDataException($"The package directory contains an invalid part name: '{relative}'.");
-            }
-
-            // Defense in depth: the canonical path must stay within the package root, so a crafted
-            // layout cannot expose files outside it.
-            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
-            {
-                throw new InvalidDataException($"The package directory contains a part that escapes the root: '{relative}'.");
-            }
-
-            if (!partToFullPath.TryAdd(relative, fullPath))
-            {
-                throw new InvalidDataException($"The package directory contains a duplicate part name: '{relative}'.");
-            }
-
-            partNames.Add(relative);
+            throw new InvalidDataException(enumeration.Error);
         }
 
-        return new DirectoryOpcPackage(root, partToFullPath, partNames);
+        return new DirectoryOpcPackage(root, enumeration.PartToFullPath, enumeration.PartNames);
     }
 
     /// <summary>
     /// Recursively enumerates payload files under <paramref name="root"/>, skipping symlinks/reparse
     /// points (both files and directories) so a loose package cannot follow a link outside its root.
     /// </summary>
-    private static IEnumerable<string> EnumeratePayloadFiles(string root)
+    internal static IEnumerable<string> EnumeratePayloadFiles(string root)
     {
         var pending = new Stack<string>();
         pending.Push(root);
@@ -121,6 +92,109 @@ public sealed class DirectoryOpcPackage : IOpcPackage
     {
         ArgumentException.ThrowIfNullOrEmpty(partName);
         return _partToFullPath.ContainsKey(OpcPackage.NormalizeLookup(partName));
+    }
+
+    /// <summary>
+    /// Enumerates and validates every part under <paramref name="root"/>. Both opening and drift
+    /// detection consume this result, so traversal, normalization, part-name validation,
+    /// root-containment validation, and case-insensitive duplicate detection cannot diverge.
+    /// </summary>
+    /// <remarks>
+    /// Reparse points remain deliberately skipped by <see cref="EnumeratePayloadFiles"/>. Any other
+    /// validation violation stops enumeration and is returned as an error; callers must fail closed.
+    /// </remarks>
+    internal static DirectoryPartEnumeration EnumerateValidatedParts(
+        string root,
+        IEnumerable<string>? payloadFiles = null)
+    {
+        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        var partToFullPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var partNames = new List<string>();
+        foreach (string fullPath in payloadFiles ?? EnumeratePayloadFiles(root))
+        {
+            string relative = Path.GetRelativePath(root, fullPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            if (Path.AltDirectorySeparatorChar != '/')
+            {
+                relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
+            }
+
+            if (!OpcPackage.IsValidPartName(relative))
+            {
+                return DirectoryPartEnumeration.Invalid(
+                    $"The package directory contains an invalid part name: '{relative}'.");
+            }
+
+            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
+            {
+                return DirectoryPartEnumeration.Invalid(
+                    $"The package directory contains a part that escapes the root: '{relative}'.");
+            }
+
+            if (!partToFullPath.TryAdd(relative, fullPath))
+            {
+                return DirectoryPartEnumeration.Invalid(
+                    $"The package directory contains a duplicate part name: '{relative}'.");
+            }
+
+            partNames.Add(relative);
+        }
+
+        return new DirectoryPartEnumeration(partToFullPath, partNames, null);
+    }
+
+    internal sealed record DirectoryPartEnumeration(
+        Dictionary<string, string> PartToFullPath,
+        List<string> PartNames,
+        string? Error)
+    {
+        public static DirectoryPartEnumeration Invalid(string error) =>
+            new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), [], error);
+    }
+
+    /// <inheritdoc/>
+    public string? DetectSnapshotDrift()
+    {
+        DirectoryPartEnumeration liveEnumeration;
+        try
+        {
+            liveEnumeration = EnumerateValidatedParts(_root);
+        }
+        catch (IOException ex)
+        {
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
+        }
+
+        if (liveEnumeration.Error is not null)
+        {
+            return $"{liveEnumeration.Error} The directory has been modified since the package was opened.";
+        }
+
+        var liveParts = new HashSet<string>(liveEnumeration.PartNames, StringComparer.OrdinalIgnoreCase);
+        foreach (string live in liveParts)
+        {
+            if (!_partToFullPath.ContainsKey(live))
+            {
+                return $"Part '{live}' now exists on disk but was absent when the package was opened — the directory has been modified.";
+            }
+        }
+
+        foreach (string original in _partNames)
+        {
+            if (!liveParts.Contains(original))
+            {
+                return $"Part '{original}' was present when the package was opened but is now missing from disk — the directory has been modified.";
+            }
+        }
+
+        return null;
     }
 
     /// <inheritdoc/>

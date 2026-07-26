@@ -43,10 +43,25 @@ public sealed record PackageSignature
     /// This asserts CMS-envelope integrity only. It does <em>not</em> assert that the signature is
     /// bound to this package's contents, nor that the signer is trusted. Callers gating a package must
     /// additionally verify the block map (<see cref="MsixPackage.VerifyBlockMap"/>), confirm the
-    /// publisher via <see cref="MatchesPublisher(string)"/>, and (once implemented) verify the APPX
-    /// indirect-data digests and trust chain.
+    /// publisher via <see cref="MatchesPublisher(string)"/>, verify the APPX indirect-data digests
+    /// via <see cref="DigestTable"/>, and (once implemented) verify the trust chain.
     /// </remarks>
     public required bool IsCmsIntegrityValid { get; init; }
+
+    /// <summary>
+    /// The parsed APPX digest table from the CMS <c>SpcIndirectDataContent</c>, or <see langword="null"/>
+    /// if the CMS envelope was invalid (content cannot be trusted) or the table could not be parsed.
+    /// When <see langword="null"/> and <see cref="IsCmsIntegrityValid"/> is <see langword="true"/>,
+    /// check <see cref="DigestTableError"/> for the parse failure reason.
+    /// </summary>
+    public AppxDigestTable? DigestTable { get; init; }
+
+    /// <summary>
+    /// When <see cref="DigestTable"/> is <see langword="null"/> despite a valid CMS envelope,
+    /// this contains the parse error message. <see langword="null"/> when the table parsed successfully
+    /// or when the CMS envelope was invalid.
+    /// </summary>
+    public string? DigestTableError { get; init; }
 
     /// <summary>
     /// Returns <see langword="true"/> if the signer subject DN matches the given manifest

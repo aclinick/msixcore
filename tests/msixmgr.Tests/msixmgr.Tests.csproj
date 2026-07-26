@@ -22,4 +22,9 @@
     <ProjectReference Include="..\..\src\msixmgr\msixmgr.csproj" />
   </ItemGroup>
 
+  <!-- Link to real-signed fixtures from the Packaging test project (single source of truth). -->
+  <ItemGroup>
+    <None Include="..\MsixCore.Packaging.Tests\Fixtures\RealSigned\*.msix" Link="Fixtures\RealSigned\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

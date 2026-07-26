@@ -5,8 +5,9 @@ using System.Security.Cryptography.X509Certificates;
 namespace MsixCore.Packaging.Integrity;
 
 /// <summary>
-/// Reads an <c>AppxSignature.p7x</c> and extracts the primary signer identity and CMS integrity
-/// status. Cross-platform: uses <see cref="SignedCms"/>, which is backed by OpenSSL on Linux.
+/// Reads an <c>AppxSignature.p7x</c> and extracts the primary signer identity, CMS integrity
+/// status, and APPX indirect-data digest table. Cross-platform: uses <see cref="SignedCms"/>,
+/// which is backed by OpenSSL on Linux.
 /// </summary>
 public static class PackageSignatureReader
 {
@@ -69,6 +70,22 @@ public static class PackageSignatureReader
             signatureValid = false;
         }
 
+        // Parse the APPX indirect-data digest table from the CMS content — but only if the CMS
+        // envelope itself is valid. An unverified envelope's content is attacker-controlled.
+        AppxDigestTable? digestTable = null;
+        string? digestTableError = null;
+        if (signatureValid)
+        {
+            try
+            {
+                digestTable = AppxDigestTable.Parse(cms);
+            }
+            catch (InvalidDataException ex)
+            {
+                digestTableError = ex.Message;
+            }
+        }
+
         return new PackageSignature
         {
             SubjectName = certificate.SubjectName.Name,
@@ -78,6 +95,8 @@ public static class PackageSignatureReader
             NotBefore = certificate.NotBefore,
             NotAfter = certificate.NotAfter,
             IsCmsIntegrityValid = signatureValid,
+            DigestTable = digestTable,
+            DigestTableError = digestTableError,
         };
     }
 

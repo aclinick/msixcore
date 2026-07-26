@@ -111,7 +111,7 @@ publisher hash used in family/full names.
 
 | Type | Kind | Key members |
 |------|------|-------------|
-| `IOpcPackage` | interface, `IDisposable` | `PartNames`, `ContainsPart(name)`, `OpenPart(name)`. |
+| `IOpcPackage` | interface, `IDisposable` | `PartNames`, required snapshot-consistency check `DetectSnapshotDrift()`, `ContainsPart(name)`, `OpenPart(name)`. Decorators must delegate the drift check rather than silently assume stability. |
 | `OpcPackage` | sealed class | `static Open(string)`, `static Open(Stream, bool)`; ZIP-backed reader. |
 | `DirectoryOpcPackage` | sealed class | `static Open(string directory)`, `RootDirectory`; loose-layout reader. |
 | `OpcPartNames` | static class | Constants: `AppxManifest`, `AppxBundleManifest`, `AppxBlockMap`, `AppxSignature`, `ContentTypes`. |
@@ -172,8 +172,8 @@ Cross-platform extraction of an OPC package to a loose directory. Powers the
 
 | Member | Description |
 |--------|-------------|
-| `static void Extract(IOpcPackage package, string destination, IProgress<float>? progress = null, CancellationToken = default)` | Extract all parts under `destination`, reporting 0–100 progress. Throws `InvalidDataException` if a part escapes the destination or a symlink/junction (incl. dangling, or the root itself) is on the path. |
-| `static BlockMapVerificationResult ExtractAndVerify(IOpcPackage package, BlockMap blockMap, string destination, ...)` | Extract and hash each payload in the same read. |
+| `static void Extract(IOpcPackage package, string destination, IProgress<float>? progress = null, CancellationToken = default)` | Extract all parts under `destination`, reporting 0–100 progress. Throws `InvalidDataException` if a part escapes the destination or a symlink/junction (incl. dangling, or the root itself) is on the path. It performs **no integrity verification**; do not trust later extraction from a loose directory based on an earlier validation. |
+| `static BlockMapVerificationResult ExtractAndVerify(IOpcPackage package, BlockMap blockMap, string destination, ...)` | Preferred path for trusted extraction: extract and hash each payload in the same read, then require `IsValid` before using the output. |
 
 ### `IPackageStore` / `FileSystemPackageStore` (sealed class)
 
