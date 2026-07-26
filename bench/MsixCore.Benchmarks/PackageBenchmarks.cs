@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-using MsixCore.Deployment;
+using MsixCore.PackageStore;
 using MsixCore.Packaging;
 using MsixCore.Packaging.Authoring;
 using MsixCore.Packaging.Integrity;

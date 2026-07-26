@@ -1,19 +1,19 @@
-# `msixmgr` CLI reference
+# `msixkit` CLI reference
 
-`msixmgr` is the MSIX Core (.NET) command-line tool. It reads, validates,
+`msixkit` is the MSIX Core (.NET) command-line tool. It reads, validates,
 extracts, and authors unsigned MSIX packages and bundles cross-platform. Build it once,
 then invoke via `dotnet`:
 
 ```bash
 dotnet build -c Release
-DLL=src/msixmgr/bin/Release/net10.0/msixmgr.dll
+DLL=src/msixkit/bin/Release/net10.0/msixkit.dll
 dotnet $DLL --help
 ```
 
 On Windows PowerShell:
 
 ```powershell
-$DLL = "src\msixmgr\bin\Release\net10.0\msixmgr.dll"
+$DLL = "src\msixkit\bin\Release\net10.0\msixkit.dll"
 dotnet $DLL --help
 ```
 
@@ -24,7 +24,7 @@ source directory.
 ## Synopsis
 
 ```
-msixmgr <verb> [options]
+msixkit <verb> [options]
 ```
 
 | Verb / option                          | Status        | Description |
@@ -32,7 +32,7 @@ msixmgr <verb> [options]
 | `inspect <path> [--json]`              | Implemented   | Show package identity and metadata. |
 | `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
 | `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
-| `pack <sourceDir> -o <file.msix> [--compress] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package (`makemsix` alias). |
+| `pack <sourceDir> -o <file.msix> [--compress] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package. |
 | `bundle <package.msix>... -o <file.msixbundle> [--version <a.b.c.d>] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX bundle. |
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
@@ -56,16 +56,16 @@ msixmgr <verb> [options]
 
 ```console
 $ dotnet $DLL --help
-msixmgr - MSIX Core (.NET) command-line tool
+msixkit - MSIX Core (.NET) command-line tool
 
 Usage:
-  msixmgr <verb> [options]
+  msixkit <verb> [options]
 
 Verbs:
   inspect <path> [--json]                                                Show package identity and metadata.
   validate <path> [--json]                                               Verify integrity (block map + signature); CI exit code.
   unpack <path> -Destination <dir> [--json]                              Extract a package to a loose layout without installing.
-  pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]  Build an unsigned MSIX package (alias: makemsix).
+  pack <sourceDir> -o|--output <file.msix> [--compress] [--overwrite] [--json]  Build an unsigned MSIX package.
   bundle <package.msix>... -o|--output <file.msixbundle> [--version <a.b.c.d>] [--overwrite] [--json]  Build an unsigned MSIX bundle.
 
 For inspect, validate, and unpack, <path> may be a package file
@@ -92,7 +92,7 @@ Prints package identity and metadata. A missing/invalid block map is tolerated
 (reported as `(none)`); use `validate` to check integrity.
 
 ```
-msixmgr inspect <package-file-or-directory> [--json]
+msixkit inspect <package-file-or-directory> [--json]
 ```
 
 ### Text output
@@ -147,7 +147,7 @@ Verifies package integrity and returns a CI-friendly exit code: `0` = OK,
   and signer-subject/manifest-`Publisher` agreement.
 
 ```
-msixmgr validate <package-file-or-directory> [--json]
+msixkit validate <package-file-or-directory> [--json]
 ```
 
 ### Success (unsigned package)
@@ -210,7 +210,7 @@ Linux CI the same as on Windows. The destination is created if missing; part
 paths are reproduced under it.
 
 ```
-msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]
+msixkit unpack <package-file-or-directory> -Destination <dir> [--json]
 ```
 
 The destination flag is accepted as `-Destination`, `-destination`,
@@ -254,20 +254,20 @@ A missing destination (exit `2`):
 
 ```console
 $ dotnet $DLL unpack ./Contoso.MyApp.msix
-msixmgr unpack: a destination directory is required (-Destination <dir>).
-Usage: msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]
+msixkit unpack: a destination directory is required (-Destination <dir>).
+Usage: msixkit unpack <package-file-or-directory> -Destination <dir> [--json]
 
 $ dotnet $DLL unpack ./Contoso.MyApp.msix -Destination
-msixmgr unpack: option '-Destination' requires a directory argument.
-Usage: msixmgr unpack <package-file-or-directory> -Destination <dir> [--json]
+msixkit unpack: option '-Destination' requires a directory argument.
+Usage: msixkit unpack <package-file-or-directory> -Destination <dir> [--json]
 ```
 
 Extraction is hardened against traversal: a part that would resolve outside the
 destination, or a symlink/junction anywhere on the destination path (including a
 dangling link, or the destination root itself), aborts extraction with exit code
-`1`. See [architecture.md](architecture.md#layer-5--deployment-engine-msixcoredeployment).
+`1`. See [architecture.md](architecture.md#layer-5--package-store-msixcorepackagestore).
 
-## `pack` (`makemsix`)
+## `pack`
 
 Builds an unsigned `.msix` from a directory containing `AppxManifest.xml` at
 its root plus payload files:
@@ -278,7 +278,7 @@ Packed 4 files (70231 bytes) to /abs/path/Contoso.MyApp.msix
 Identity: Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 ```
 
-`makemsix` is an alias for `pack`. Existing output is rejected unless
+Existing output is rejected unless
 `--overwrite` is supplied. Input `AppxBlockMap.xml`, `AppxSignature.p7x`, and
 `[Content_Types].xml` files are ignored; the builder generates fresh block-map
 and content-types parts and intentionally does not sign the package. Sign with
@@ -335,23 +335,23 @@ Unknown option (usage error, exit `2`):
 
 ```console
 $ dotnet $DLL inspect ./Contoso.MyApp --bogus
-msixmgr inspect: unknown option '--bogus'.
-Usage: msixmgr inspect <package-file-or-directory> [--json]
+msixkit inspect: unknown option '--bogus'.
+Usage: msixkit inspect <package-file-or-directory> [--json]
 ```
 
 Missing package (runtime error, exit `1`):
 
 ```console
 $ dotnet $DLL inspect ./NoSuch
-msixmgr inspect: No package file or directory found at './NoSuch'.
+msixkit inspect: No package file or directory found at './NoSuch'.
 ```
 
 Unknown verb (exit `2`):
 
 ```console
 $ dotnet $DLL -AddPackage ./Contoso.MyApp.msix
-msixmgr: unknown verb '-AddPackage'.
-Run 'msixmgr --help' for usage.
+msixkit: unknown verb '-AddPackage'.
+Run 'msixkit --help' for usage.
 ```
 
 ## Working on container files
@@ -368,5 +368,5 @@ INTEGRITY OK      Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
 ```
 
 > All example output above was produced by running the built
-> `msixmgr.dll` against a synthesized loose package (a manifest, a `hello.txt`
+> `msixkit.dll` against a synthesized loose package (a manifest, a `hello.txt`
 > payload, and a matching `AppxBlockMap.xml`) and its zipped `.msix` equivalent.

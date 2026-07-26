@@ -8,7 +8,7 @@ The AX* digest table format assumptions were validated end-to-end against a real
 
 ## Procedure
 
-1. `msixmgr pack` built a package from a loose layout.
+1. `msixkit pack` built a package from a loose layout.
 2. `winapp cert generate --publisher "CN=MsixCoreTest"` created a self-signed dev cert.
 3. `winapp sign` (SignTool) signed the package — exit 0.
 4. `AppxSignature.p7x` was dumped and compared against implementation assumptions.

@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Compares msixmgr pack/unpack performance with the Windows SDK MakeAppx tool.
+    Compares msixkit pack/unpack performance with the Windows SDK MakeAppx tool.
 
 .DESCRIPTION
-    Generates deterministic MSIX source layouts, builds msixmgr in Release, performs
+    Generates deterministic MSIX source layouts, builds msixkit in Release, performs
     one discarded warmup plus repeated measured runs, validates cross-tool
     interoperability, and writes Markdown and JSON result files under bench.
     Both tools are launched as external processes. Peak working set is read from the
@@ -37,8 +37,8 @@ $corpusRoot = Join-Path $workRoot 'corpora'
 $packageRoot = Join-Path $workRoot 'packages'
 $extractRoot = Join-Path $workRoot 'extract'
 $jsonPath = [IO.Path]::ChangeExtension($OutputPath, '.json')
-$project = Join-Path $repoRoot 'src\msixmgr\msixmgr.csproj'
-$cli = Join-Path $repoRoot "src\msixmgr\bin\$Configuration\net10.0\msixmgr.exe"
+$project = Join-Path $repoRoot 'src\msixkit\msixkit.csproj'
+$cli = Join-Path $repoRoot "src\msixkit\bin\$Configuration\net10.0\msixkit.exe"
 
 function Format-Size([double]$bytes) {
     if ($bytes -ge 1GB) { return ('{0:N2} GB' -f ($bytes / 1GB)) }
@@ -321,7 +321,7 @@ if ($hostArchitecture -eq 'Arm64' -and $selectedMakeAppxPath -match '\\x64\\make
 
 if (-not $SkipBuild) {
     & dotnet build $project -c $Configuration --nologo
-    if ($LASTEXITCODE -ne 0) { throw 'Release build of msixmgr failed.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Release build of msixkit failed.' }
 }
 if (-not (Test-Path $cli -PathType Leaf)) {
     throw "Cannot find the built CLI at '$cli'. Run without -SkipBuild."
@@ -347,11 +347,11 @@ foreach ($corpus in $corpora) {
     [void](Invoke-MeasuredProcess -FilePath $selectedMakeAppxPath `
         -ArgumentList @('pack', '/d', $corpus.Root, '/p', $canonical, '/o', '/nc') `
         -Label "MakeAppx canonical pack $($corpus.Name)")
-    $ourPack = Join-Path $packageRoot "$($corpus.Name)-msixmgr.msix"
+    $ourPack = Join-Path $packageRoot "$($corpus.Name)-msixkit.msix"
     $sdkPack = Join-Path $packageRoot "$($corpus.Name)-makeappx.msix"
 
     Write-Host "Benchmarking pack: $($corpus.Name)" -ForegroundColor Cyan
-    $rawResults += Invoke-OperationRuns -Operation 'Pack' -Corpus $corpus -Tool 'msixmgr' `
+    $rawResults += Invoke-OperationRuns -Operation 'Pack' -Corpus $corpus -Tool 'msixkit' `
         -Prepare { param($run) Remove-Output $ourPack } -FilePath $cli `
         -Arguments { param($run) @('pack', $corpus.Root, '-o', $ourPack, '--overwrite') }
     $rawResults += Invoke-OperationRuns -Operation 'Pack' -Corpus $corpus -Tool 'MakeAppx' `
@@ -362,22 +362,22 @@ foreach ($corpus in $corpora) {
     Remove-Output $ourPack
     [void](Invoke-MeasuredProcess -FilePath $cli `
         -ArgumentList @('pack', $corpus.Root, '-o', $ourPack, '--overwrite') `
-        -Label "msixmgr interoperability pack $($corpus.Name)")
+        -Label "msixkit interoperability pack $($corpus.Name)")
     $ourExtract = Join-Path $extractRoot "$($corpus.Name)-our-by-sdk"
     Remove-Output $ourExtract
     [void](Invoke-MeasuredProcess -FilePath $selectedMakeAppxPath `
         -ArgumentList @('unpack', '/p', $ourPack, '/d', $ourExtract, '/o') `
-        -Label "MakeAppx unpack of msixmgr package $($corpus.Name)")
+        -Label "MakeAppx unpack of msixkit package $($corpus.Name)")
     Assert-SourceFilesMatch -Source $corpus.Root -Extracted $ourExtract
 
     [void](Invoke-MeasuredProcess -FilePath $cli `
         -ArgumentList @('inspect', $sdkPack, '--json') `
-        -Label "msixmgr inspect of MakeAppx package $($corpus.Name)")
+        -Label "msixkit inspect of MakeAppx package $($corpus.Name)")
 
     Write-Host "Benchmarking unpack: $($corpus.Name)" -ForegroundColor Cyan
-    $ourUnpack = Join-Path $extractRoot "$($corpus.Name)-msixmgr-timed"
+    $ourUnpack = Join-Path $extractRoot "$($corpus.Name)-msixkit-timed"
     $sdkUnpack = Join-Path $extractRoot "$($corpus.Name)-makeappx-timed"
-    $rawResults += Invoke-OperationRuns -Operation 'Unpack' -Corpus $corpus -Tool 'msixmgr' `
+    $rawResults += Invoke-OperationRuns -Operation 'Unpack' -Corpus $corpus -Tool 'msixkit' `
         -Prepare { param($run) Remove-Output $ourUnpack } -FilePath $cli `
         -Arguments { param($run) @('unpack', $canonical, '-Destination', $ourUnpack) }
     $rawResults += Invoke-OperationRuns -Operation 'Unpack' -Corpus $corpus -Tool 'MakeAppx' `
@@ -387,8 +387,8 @@ foreach ($corpus in $corpora) {
     Assert-SourceFilesMatch -Source $corpus.Root -Extracted $ourUnpack
     Assert-SourceFilesMatch -Source $corpus.Root -Extracted $sdkUnpack
 
-    Write-Host "Benchmarking validate (msixmgr only): $($corpus.Name)" -ForegroundColor Cyan
-    $rawResults += Invoke-OperationRuns -Operation 'Validate' -Corpus $corpus -Tool 'msixmgr' `
+    Write-Host "Benchmarking validate (msixkit only): $($corpus.Name)" -ForegroundColor Cyan
+    $rawResults += Invoke-OperationRuns -Operation 'Validate' -Corpus $corpus -Tool 'msixkit' `
         -Prepare { param($run) } -FilePath $cli `
         -Arguments { param($run) @('validate', $canonical) }
 }
@@ -456,16 +456,16 @@ $sb = [Text.StringBuilder]::new()
 [void]$sb.AppendLine("- .NET SDK: ``$($metadata.DotNetSdk)``")
 [void]$sb.AppendLine("- MakeAppx: ``$(Quote-Markdown $selectedMakeAppxPath)`` ($($metadata.MakeAppxVersion))")
 [void]$sb.AppendLine("- Repetitions: $Iterations measured after one discarded warmup")
-[void]$sb.AppendLine("- Packages are unsigned and stored/uncompressed (MakeAppx ``/nc``), matching msixmgr's current authoring mode.")
+[void]$sb.AppendLine("- Packages are unsigned and stored/uncompressed (MakeAppx ``/nc``), matching msixkit's current authoring mode.")
 [void]$sb.AppendLine("- Timed MakeAppx pack/unpack runs use ``/nv`` to exclude its extra semantic validation; untimed correctness checks keep validation enabled.")
-[void]$sb.AppendLine("- Headline multipliers are **MakeAppx / msixmgr**; **greater than 1.00× means msixmgr is faster or uses less memory**.")
+[void]$sb.AppendLine("- Headline multipliers are **MakeAppx / msixkit**; **greater than 1.00× means msixkit is faster or uses less memory**.")
 [void]$sb.AppendLine()
 
 foreach ($operation in @('Pack', 'Unpack')) {
     [void]$sb.AppendLine("## $operation")
     [void]$sb.AppendLine()
     $operationRows = foreach ($corpus in $corpora) {
-        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixkit' }
         $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
         [pscustomobject]@{
             Speedup = $sdk.MedianMs / $our.MedianMs
@@ -477,7 +477,7 @@ foreach ($operation in @('Pack', 'Unpack')) {
     $minWorkingSetReduction = ($operationRows.WorkingSetReduction | Measure-Object -Minimum).Minimum
     $maxWorkingSetReduction = ($operationRows.WorkingSetReduction | Measure-Object -Maximum).Maximum
     if ($minSpeedup -ge 1 -and $minWorkingSetReduction -ge 1) {
-        [void]$sb.AppendLine(("**Summary:** msixmgr is {0:N2}–{1:N2}× faster and uses {2:N2}–{3:N2}× less peak working set." -f
+        [void]$sb.AppendLine(("**Summary:** msixkit is {0:N2}–{1:N2}× faster and uses {2:N2}–{3:N2}× less peak working set." -f
             $minSpeedup, $maxSpeedup, $minWorkingSetReduction, $maxWorkingSetReduction))
     }
     else {
@@ -485,10 +485,10 @@ foreach ($operation in @('Pack', 'Unpack')) {
             $minSpeedup, $maxSpeedup, $minWorkingSetReduction, $maxWorkingSetReduction))
     }
     [void]$sb.AppendLine()
-    [void]$sb.AppendLine('| Corpus | Speedup (MakeAppx / msixmgr) | msixmgr time median [min–max] ms | MakeAppx time median [min–max] ms | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |')
+    [void]$sb.AppendLine('| Corpus | Speedup (MakeAppx / msixkit) | msixkit time median [min–max] ms | MakeAppx time median [min–max] ms | Peak-WS reduction | msixkit peak WS | MakeAppx peak WS |')
     [void]$sb.AppendLine('| --- | ---: | ---: | ---: | ---: | ---: | ---: |')
     foreach ($corpus in $corpora) {
-        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixkit' }
         $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
         [void]$sb.AppendLine(('| {0} ({1}) | **{2}** | {3:N2} [{4:N2}–{5:N2}] | {6:N2} [{7:N2}–{8:N2}] | **{9}** | {10} | {11} |' -f
             $corpus.Name, (Format-Size $corpus.PayloadBytes),
@@ -504,12 +504,12 @@ foreach ($operation in @('Pack', 'Unpack')) {
 
 [void]$sb.AppendLine('## Validate (no MakeAppx equivalent)')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('MakeAppx has no standalone block-map verification verb, so these msixmgr results are reported without a ratio rather than forcing a misleading comparison.')
+[void]$sb.AppendLine('MakeAppx has no standalone block-map verification verb, so these msixkit results are reported without a ratio rather than forcing a misleading comparison.')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('| Corpus | msixmgr time median [min–max] ms | Peak working set |')
+[void]$sb.AppendLine('| Corpus | msixkit time median [min–max] ms | Peak working set |')
 [void]$sb.AppendLine('| --- | ---: | ---: |')
 foreach ($corpus in $corpora) {
-    $our = $summaries | Where-Object { $_.Operation -eq 'Validate' -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+    $our = $summaries | Where-Object { $_.Operation -eq 'Validate' -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixkit' }
     [void]$sb.AppendLine(('| {0} ({1}) | {2:N2} [{3:N2}–{4:N2}] | {5} |' -f
         $corpus.Name, (Format-Size $corpus.PayloadBytes),
         $our.MedianMs, $our.MinMs, $our.MaxMs,
@@ -525,7 +525,7 @@ $privateReductions = @{}
 foreach ($operation in @('Pack', 'Unpack')) {
     $privateReductions[$operation] = @(
         foreach ($corpus in $corpora) {
-            $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+            $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixkit' }
             $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
             $sdk.MedianSampledPeakPrivateBytes / $our.MedianSampledPeakPrivateBytes
         }
@@ -536,7 +536,7 @@ $packPrivateMax = ($privateReductions.Pack | Measure-Object -Maximum).Maximum
 $unpackPrivateMin = ($privateReductions.Unpack | Measure-Object -Minimum).Minimum
 $unpackPrivateMax = ($privateReductions.Unpack | Measure-Object -Maximum).Maximum
 if ($packPrivateMin -ge 1 -and $unpackPrivateMin -ge 1) {
-    [void]$sb.AppendLine(("**Summary:** msixmgr uses {0:N2}–{1:N2}× less sampled private memory for pack and {2:N2}–{3:N2}× less for unpack." -f
+    [void]$sb.AppendLine(("**Summary:** msixkit uses {0:N2}–{1:N2}× less sampled private memory for pack and {2:N2}–{3:N2}× less for unpack." -f
         $packPrivateMin, $packPrivateMax, $unpackPrivateMin, $unpackPrivateMax))
 }
 else {
@@ -544,11 +544,11 @@ else {
         $packPrivateMin, $packPrivateMax, $unpackPrivateMin, $unpackPrivateMax))
 }
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('| Operation | Corpus | Memory reduction (MakeAppx / msixmgr) | msixmgr | MakeAppx |')
+[void]$sb.AppendLine('| Operation | Corpus | Memory reduction (MakeAppx / msixkit) | msixkit | MakeAppx |')
 [void]$sb.AppendLine('| --- | --- | ---: | ---: | ---: |')
 foreach ($operation in @('Pack', 'Unpack')) {
     foreach ($corpus in $corpora) {
-        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixmgr' }
+        $our = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'msixkit' }
         $sdk = $summaries | Where-Object { $_.Operation -eq $operation -and $_.Corpus -eq $corpus.Name -and $_.Tool -eq 'MakeAppx' }
         [void]$sb.AppendLine(('| {0} | {1} | **{2}** | {3} | {4} |' -f
             $operation, $corpus.Name,
@@ -564,7 +564,7 @@ foreach ($operation in @('Pack', 'Unpack')) {
 [void]$sb.AppendLine("| ---: | --- |")
 [void]$sb.AppendLine("| $(Format-Size $sdkFootprint) | $(($sdkModules.Name -join ', ')) |")
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('Cross-tool checks passed: every msixmgr package unpacked with MakeAppx and matched its source files; every MakeAppx package opened with `msixmgr inspect`; both tools reproduced every source file from the canonical packages.')
+[void]$sb.AppendLine('Cross-tool checks passed: every msixkit package unpacked with MakeAppx and matched its source files; every MakeAppx package opened with `msixkit inspect`; both tools reproduced every source file from the canonical packages.')
 
 [IO.File]::WriteAllText($OutputPath, $sb.ToString(), [Text.UTF8Encoding]::new($false))
 Write-Host "`nWrote $OutputPath and $jsonPath" -ForegroundColor Green

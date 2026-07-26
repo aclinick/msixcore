@@ -6,8 +6,8 @@ the implementation under `src/` at the current tip of `main` and cross-referenci
 MSIX/APPX format and manifest-schema documentation.
 
 - **Scope of the port** (per `README.md`): a cross-platform reader/validator and unsigned
-  authoring layer (`MsixCore.Packaging`), a deployment/query layer (`MsixCore.Deployment`),
-  and the `msixmgr` CLI. Signature production is an explicit non-goal: packages are packed
+  authoring layer (`MsixCore.Packaging`), a deployment/query layer (`MsixCore.PackageStore`),
+  and the `msixkit` CLI. Signature production is an explicit non-goal: packages are packed
   unsigned, signed by external SignTool/CI signing services, then validated here.
 - **Verification method**: every "Supported" claim below points at the concrete file that implements
   it. Where a feature is only partially present, the gap is called out. Nothing is marked supported
@@ -194,7 +194,7 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 
 ---
 
-## 8. Deployment (`MsixCore.Deployment`)
+## 8. Package store (`MsixCore.PackageStore`)
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
@@ -215,7 +215,7 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 
 ---
 
-## CLI (`msixmgr`) surface, for context
+## CLI (`msixkit`) surface, for context
 
 - `inspect` (`InspectCommand.cs`): identity, family/full name, version, arch, display/publisher name,
   capabilities, signed flag, block-map file count/hash method. Text or `--json`.
@@ -225,4 +225,4 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 - `unpack` (`UnpackCommand.cs`): extracts a package to a loose layout via `PackageExtractor`
   (`unpack <path> -Destination <dir> [--json]`), cross-platform, no install/OS integration.
 - `PackageManager.AddPackage` / `RemovePackage` are now **implemented** (see §8) but not yet wired to
-  dedicated `msixmgr` verbs, so they are not advertised by CLI help.
+  dedicated `msixkit` verbs, so they are not advertised by CLI help.

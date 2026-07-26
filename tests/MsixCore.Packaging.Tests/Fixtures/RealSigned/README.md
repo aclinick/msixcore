@@ -8,7 +8,7 @@ These `.msix` packages were produced by real Microsoft tooling (SignTool via `wi
 
 2. **Pack:**
    ```
-   msixmgr pack --directory C:\Temp\msix-sign-test\src --package C:\Temp\msix-sign-test\SignTest.msix
+   msixkit pack --directory C:\Temp\msix-sign-test\src --package C:\Temp\msix-sign-test\SignTest.msix
    ```
 
 3. **Generate a self-signed dev certificate:**

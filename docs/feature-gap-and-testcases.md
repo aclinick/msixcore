@@ -128,7 +128,7 @@ inflate without bound.
 **Why it does not carry over:** the .NET `ZipArchive` reader stops inflating at the uncompressed size
 declared in the ZIP central directory. Verified empirically: an entry holding 1 MB of compressed
 zeros, patched so its central-directory uncompressed size reads 64, yields exactly **64 bytes** with
-no exception. Expansion is therefore already bounded by the runtime, and `msixmgr unpack` cannot be
+no exception. Expansion is therefore already bounded by the runtime, and `msixkit unpack` cannot be
 made to inflate without limit.
 
 **Why no size check was added:** because the runtime stops exactly at the declared size, the bytes

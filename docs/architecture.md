@@ -2,23 +2,23 @@
 
 MSIX Core (.NET) is organized as a strict, bottom-up stack. Each layer depends
 only on the layers below it and exposes a small, testable surface. The two
-libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.Deployment`
-(store + lifecycle) — sit under the `msixmgr` CLI.
+libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.PackageStore`
+(store + lifecycle) — sit under the `msixkit` CLI.
 
 ## Layering
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  msixmgr CLI            Program → InspectCommand / ValidateCommand │
+│  msixkit CLI            Program → InspectCommand / ValidateCommand │
 │                         PackageOpener, Reports (text + --json)     │
 ├──────────────────────────────────────────────────────────────────┤
 │  Deployment engine      PackageManager : IPackageManager          │
-│  (MsixCore.Deployment)  PackageExtractor, MsixResponse            │
+│  (MsixCore.PackageStore)  PackageExtractor, MsixResponse            │
 │                         IMsixResponse / InstallationStep          │
 │                         IPackageHandler pipeline (add/remove)      │
 ├──────────────────────────────────────────────────────────────────┤
 │  Package store / query  IPackageStore → FileSystemPackageStore    │
-│  (MsixCore.Deployment)  (writable: staging + transactional Commit)│
+│  (MsixCore.PackageStore)  (writable: staging + transactional Commit)│
 │                         InstalledPackage : IInstalledPackage      │
 │                         Wildcard (glob matching)                  │
 ├──────────────────────────────────────────────────────────────────┤
@@ -37,7 +37,7 @@ libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.Deploymen
 
 ```mermaid
 flowchart TD
-    CLI[msixmgr CLI] --> PKG[MsixPackage]
+    CLI[msixkit CLI] --> PKG[MsixPackage]
     CLI --> PM[PackageManager]
     CLI --> EXT[PackageExtractor]
     PM --> STORE[IPackageStore / FileSystemPackageStore]
@@ -132,7 +132,7 @@ part-name rules.
 > trust-chain and revocation evaluation to the platform/signing environment. The
 > `validate` verb states this explicitly.
 
-## Layer 4 — Package store & query (`MsixCore.Deployment`)
+## Layer 4 — Package store & query (`MsixCore.PackageStore`)
 
 - **`IPackageStore`** abstracts where installed packages are recorded and where
   their unpacked payloads live. **`FileSystemPackageStore`** is a self-contained,
@@ -161,7 +161,7 @@ part-name rules.
 - **`Wildcard`** implements case-insensitive, whole-string glob matching (`*` and
   `?`) used by `FindPackages`, with a regex timeout guard.
 
-## Layer 5 — Deployment engine (`MsixCore.Deployment`)
+## Layer 5 — Package store (`MsixCore.PackageStore`)
 
 - **`PackageManager : IPackageManager`** implements the full lifecycle.
   `AddPackage`/`RemovePackage` return an `IMsixResponse` **immediately** and run
@@ -220,7 +220,7 @@ CRC/sizes directly in deterministic local headers. The resulting payload offsets
 differ by those descriptor bytes but have the same meaning; MakeAppx successfully
 unbundles the authored container and reproduces every child byte-for-byte.
 
-## Layer 6 — CLI (`msixmgr`)
+## Layer 6 — CLI (`msixkit`)
 
 `Program.Main` dispatches verbs. `PackageOpener` transparently opens a `.msix`
 file **or** a loose directory (`MsixPackage.Open` vs `MsixPackage.OpenDirectory`),

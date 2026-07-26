@@ -18,8 +18,8 @@ dotnet test --configuration Release
 
 - `dotnet build -c Release` builds all `src/` and `tests/` projects.
 - `dotnet test --configuration Release` runs the full suite (currently
-  **207 tests** across `MsixCore.Packaging.Tests`, `MsixCore.Deployment.Tests`,
-  and `msixmgr.Tests`).
+  **207 tests** across `MsixCore.Packaging.Tests`, `MsixCore.PackageStore.Tests`,
+  and `msixkit.Tests`).
 
 To run a single project's tests:
 

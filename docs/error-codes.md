@@ -1,6 +1,6 @@
 # Error codes
 
-`msixmgr --json` reports stable, machine-readable error categories in its `code` field.
+`msixkit --json` reports stable, machine-readable error categories in its `code` field.
 
 | Code | Meaning | Typical trigger |
 | --- | --- | --- |

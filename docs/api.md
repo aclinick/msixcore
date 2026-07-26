@@ -1,7 +1,7 @@
 # Public API reference
 
 A concise map of the public surface of `MsixCore.Packaging` and
-`MsixCore.Deployment`. Signatures are abbreviated; see the XML doc comments in
+`MsixCore.PackageStore`. Signatures are abbreviated; see the XML doc comments in
 source for full details. Types are immutable `record`s unless noted.
 
 ## `MsixCore.Packaging`
@@ -146,7 +146,7 @@ publisher hash used in family/full names.
 | `PackageSignatureReader` | static class | `Read(Stream)` / `Read(byte[])` → `PackageSignature`. |
 | `PackageSignature` | record | `SubjectName`, `SubjectNameRawData` (raw DER subject bytes), `IssuerName`, `Thumbprint`, `NotBefore/NotAfter`, `IsCmsIntegrityValid`; `bool MatchesPublisher(string)` compares by decoded RDN sequence. |
 
-## `MsixCore.Deployment`
+## `MsixCore.PackageStore`
 
 ### `IPackageManager` / `PackageManager` (sealed class)
 
@@ -223,7 +223,7 @@ inline `SynchronousProgress<T>` reporter are `internal` implementation details.
 `None = 0`, `ForceApplicationShutdown = 1`, `ExtractOnly = 2`,
 `ForceReinstall = 4`, `AllowDowngrade = 8`.
 
-### Handlers — `MsixCore.Deployment.Handlers`
+### Handlers — `MsixCore.PackageStore.Handlers`
 
 | Type | Kind | Description |
 |------|------|-------------|

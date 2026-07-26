@@ -1,12 +1,12 @@
-# msixmgr vs. Windows SDK MakeAppx
+# msixkit vs. Windows SDK MakeAppx
 
-This is a measured, reproducible head-to-head comparison of the .NET 10 `msixmgr`
+This is a measured, reproducible head-to-head comparison of the .NET 10 `msixkit`
 port and Windows SDK `makeappx.exe`. Raw run summaries are in
 [`comparison-results.md`](comparison-results.md); per-run data is regenerated as
 `comparison-results.json` by the harness.
 
 > **Primary comparison: native Arm64 vs. native Arm64.** The .NET runtime,
-> `msixmgr`, and Windows SDK MakeAppx are all native Arm64 binaries on this
+> `msixkit`, and Windows SDK MakeAppx are all native Arm64 binaries on this
 > Snapdragon X host. No emulation is involved in the headline runtime results.
 > The SDK's x64 MakeAppx can be selected explicitly as a secondary emulation
 > curiosity, but those numbers must be kept separate.
@@ -17,7 +17,7 @@ port and Windows SDK `makeappx.exe`. Raw run summaries are in
 | --- | --- |
 | Host | Windows 10.0.26300, Snapdragon X, Arm64 |
 | .NET | SDK 10.0.300; .NET 10 Arm64 runtime |
-| msixmgr | Release `net10.0` apphost, native Arm64 |
+| msixkit | Release `net10.0` apphost, native Arm64 |
 | MakeAppx | Windows SDK 10.0.26100.8249, native Arm64 |
 | Repetitions | 1 discarded warmup + 21 measured processes |
 | Package mode | Unsigned, uncompressed/stored (`makeappx /nc`) |
@@ -45,7 +45,7 @@ pwsh bench\Compare-Tools.ps1 -Iterations 7 `
   -OutputPath bench\comparison-results-x64-emulated.md
 ```
 
-`Compare-Tools.ps1` builds `src\msixmgr` in Release and deterministically generates
+`Compare-Tools.ps1` builds `src\msixkit` in Release and deterministically generates
 three valid loose package layouts: 1 MiB/8 payload files, 10 MiB/64 files, and
 64 MiB/128 files. The same layouts and canonical packages are used by both tools.
 Compression is disabled because this port currently writes stored entries
@@ -65,13 +65,13 @@ warmed by one discarded operation per tool/corpus.
 
 Correctness is part of the harness:
 
-- each msixmgr-authored package is unpacked by MakeAppx, then every source file is
+- each msixkit-authored package is unpacked by MakeAppx, then every source file is
   checked by SHA-256;
-- each MakeAppx-authored package is opened by `msixmgr inspect`;
+- each MakeAppx-authored package is opened by `msixkit inspect`;
 - timed unpack results from both tools are checked against the source layout.
 
-Headline multipliers below are **MakeAppx / msixmgr**. **Greater than 1.00× means
-msixmgr is faster or uses less memory**; below 1.00× would honestly show a MakeAppx
+Headline multipliers below are **MakeAppx / msixkit**. **Greater than 1.00× means
+msixkit is faster or uses less memory**; below 1.00× would honestly show a MakeAppx
 win. Min/max are included because filesystem and security-scanner interference is
 visible on this workstation; medians are the comparison statistic.
 
@@ -202,12 +202,12 @@ variation while catching regressions like the original 52 MB pattern.
 
 ## Pack results
 
-**Summary:** msixmgr wins the two throughput-dominated rows (10 MiB **1.87×**,
+**Summary:** msixkit wins the two throughput-dominated rows (10 MiB **1.87×**,
 64 MiB **1.77×**) and is within noise on the startup-dominated 1 MiB row
 (0.92×). This run was captured on an idle machine; see the environmental note
 below.
 
-| Corpus | Speedup (MakeAppx / msixmgr) | msixmgr median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
+| Corpus | Speedup (MakeAppx / msixkit) | msixkit median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixkit peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 MiB / 8 files | **0.92× (MakeAppx faster)** | 93.56 [84.72–172.39] ms | 86.22 [77.51–177.60] ms | **0.95× (MakeAppx uses less)** | 28.86 MB | 27.35 MB |
 | 10 MiB / 64 files | **1.87× faster** | 151.50 [146.60–168.95] ms | 283.47 [209.57–2,703.44] ms | **0.92× (MakeAppx uses less)** | 32.70 MB | 29.94 MB |
@@ -215,10 +215,10 @@ below.
 
 > **Environmental sensitivity.** The managed .NET tool is more sensitive to CPU
 > contention than native MakeAppx. An earlier 7-iteration run captured while
-> other CPU-heavy processes were active inflated msixmgr's medians enough to
-> flip the 1 MiB and 10 MiB rows to losses (e.g. 10 MiB msixmgr pack measured
+> other CPU-heavy processes were active inflated msixkit's medians enough to
+> flip the 1 MiB and 10 MiB rows to losses (e.g. 10 MiB msixkit pack measured
 > 244 ms then vs. 151 ms here). Always run this comparison on an otherwise idle
-> machine; the tight msixmgr min–max ranges above (for example 10 MiB pack
+> machine; the tight msixkit min–max ranges above (for example 10 MiB pack
 > spanning only 146.6–168.9 ms) are the signal that the host was quiet, whereas
 > MakeAppx still shows multi-second outlier maxima from filesystem/scanner
 > interference.
@@ -227,10 +227,10 @@ below.
 
 Both tools unpack the same uncompressed package authored by MakeAppx.
 
-**Summary:** msixmgr unpacks 1.12–1.67× faster and uses 1.15–1.18× less peak
+**Summary:** msixkit unpacks 1.12–1.67× faster and uses 1.15–1.18× less peak
 working set.
 
-| Corpus | Speedup (MakeAppx / msixmgr) | msixmgr median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixmgr peak WS | MakeAppx peak WS |
+| Corpus | Speedup (MakeAppx / msixkit) | msixkit median [min–max] | MakeAppx median [min–max] | Peak-WS reduction | msixkit peak WS | MakeAppx peak WS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 MiB / 8 files | **1.12× faster** | 71.43 [61.24–147.78] ms | 79.66 [77.19–94.45] ms | **1.16× less** | 23.44 MB | 27.23 MB |
 | 10 MiB / 64 files | **1.36× faster** | 78.10 [72.07–92.62] ms | 106.22 [98.71–129.38] ms | **1.15× less** | 23.86 MB | 27.55 MB |
@@ -241,10 +241,10 @@ working set.
 Private bytes are sampled every 5 ms and can miss short-lived peaks; peak working
 set above remains the primary memory metric.
 
-**Summary:** msixmgr uses 1.29–4.87× less sampled private memory for pack and
+**Summary:** msixkit uses 1.29–4.87× less sampled private memory for pack and
 1.91–1.94× less for unpack.
 
-| Operation | Corpus | Memory reduction (MakeAppx / msixmgr) | msixmgr | MakeAppx |
+| Operation | Corpus | Memory reduction (MakeAppx / msixkit) | msixkit | MakeAppx |
 | --- | --- | ---: | ---: | ---: |
 | Pack | 1 MiB / 8 files | **1.60× less** | 7.45 MB | 11.94 MB |
 | Pack | 10 MiB / 64 files | **1.29× less** | 11.04 MB | 14.29 MB |
@@ -257,9 +257,9 @@ set above remains the primary memory metric.
 
 MakeAppx can perform semantic validation as part of its default pack/unpack path, but
 the timed runs above disable it with `/nv`. It has no standalone verb equivalent to
-`msixmgr validate`, so a synthetic validation ratio would be misleading.
+`msixkit validate`, so a synthetic validation ratio would be misleading.
 
-| Corpus | msixmgr median [min–max] | Peak working set |
+| Corpus | msixkit median [min–max] | Peak working set |
 | --- | ---: | ---: |
 | 1 MiB / 8 files | 74.56 [68.65–116.92] ms | 26.49 MB |
 | 10 MiB / 64 files | 81.20 [77.43–93.40] ms | 26.73 MB |
@@ -279,12 +279,12 @@ shared Windows DLLs are excluded.
 
 | Configuration | Total | SDK-reference ratio |
 | --- | ---: | ---: |
-| msixmgr self-contained win-arm64 | 86.81 MB | 13.59x vs Arm64 MakeAppx |
-| msixmgr self-contained trimmed win-arm64 | 24.00 MB | 3.76x vs Arm64 MakeAppx |
+| msixkit self-contained win-arm64 | 86.81 MB | 13.59x vs Arm64 MakeAppx |
+| msixkit self-contained trimmed win-arm64 | 24.00 MB | 3.76x vs Arm64 MakeAppx |
 | MakeAppx SDK tool, native Arm64 | 6.39 MB | 1.00x |
-| msixmgr framework-dependent (host Arm64) | 1.10 MB | 0.17x vs Arm64 MakeAppx |
-| msixmgr self-contained win-x64 (secondary) | 77.20 MB | 16.98x vs x64 MakeAppx |
-| msixmgr self-contained trimmed win-x64 (secondary) | 22.62 MB | 4.97x vs x64 MakeAppx |
+| msixkit framework-dependent (host Arm64) | 1.10 MB | 0.17x vs Arm64 MakeAppx |
+| msixkit self-contained win-x64 (secondary) | 77.20 MB | 16.98x vs x64 MakeAppx |
+| msixkit self-contained trimmed win-x64 (secondary) | 22.62 MB | 4.97x vs x64 MakeAppx |
 | MakeAppx SDK tool, x64 binary (secondary; emulated here) | 4.55 MB | 1.00x |
 
 Trimmed publishing now **succeeds** for both RIDs. Trimming reduces x64 from
@@ -295,15 +295,15 @@ than MakeAppx's SDK-local files, but that comparison excludes the shared .NET ru
 
 ## Interpretation
 
-- With validation removed from timed MakeAppx work, msixmgr now wins both
+- With validation removed from timed MakeAppx work, msixkit now wins both
   throughput-dominated pack rows on a quiet machine: 1.87× faster at 10 MiB and
   1.77× faster at 64 MiB. The 1 MiB row is a statistical tie (0.92×), dominated
-  by managed startup/JIT rather than throughput. msixmgr wins every unpack row
+  by managed startup/JIT rather than throughput. msixkit wins every unpack row
   (1.12–1.67×).
 - The earlier report showed a 10 MiB pack *loss* (0.81×). That was an
   environmental artifact: the run coincided with other CPU-heavy activity, which
   penalizes the managed runtime more than native MakeAppx. Re-running on an idle
-  machine with 21 iterations moved msixmgr's 10 MiB pack median from 244 ms to
+  machine with 21 iterations moved msixkit's 10 MiB pack median from 244 ms to
   151 ms with a tight 146.6–168.9 ms range, flipping the row to a clear win. The
   non-monotonic win/lose/win pattern in the old data was the tell.
 - The primary result is a fair native-Arm64 fight and is **not explained by
@@ -314,9 +314,9 @@ than MakeAppx's SDK-local files, but that comparison excludes the shared .NET ru
   where time and working set are close. Throughput dominates as payload size grows.
 - MakeAppx variance remains substantial and asymmetric: its 10 MiB and 64 MiB
   pack maxima reached 2.70 s and 2.52 s respectively even on this quiet run,
-  while msixmgr stayed tightly clustered. Medians are the comparison statistic;
+  while msixkit stayed tightly clustered. Medians are the comparison statistic;
   keep the min/max visible.
-- MakeAppx can compress supported content; msixmgr cannot yet. Compression-enabled
+- MakeAppx can compress supported content; msixkit cannot yet. Compression-enabled
   MakeAppx is a different workload that may produce much smaller packages and should
   be measured separately once both tools expose equivalent compression behavior.
 - Variance is non-trivial, especially around filesystem writes. Use the medians, keep
