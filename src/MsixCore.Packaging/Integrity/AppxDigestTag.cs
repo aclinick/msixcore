@@ -22,3 +22,24 @@ public enum AppxDigestTag : uint
     /// <summary><c>AXCI</c> — <c>AppxMetadata/CodeIntegrity.cat</c> (uncompressed, optional) digest.</summary>
     Axci = 0x49435841, // bytes: 41 58 43 49
 }
+
+/// <summary>
+/// Extension methods for <see cref="AppxDigestTag"/>.
+/// </summary>
+public static class AppxDigestTagExtensions
+{
+    /// <summary>
+    /// Returns the canonical uppercase spec name for a tag (e.g. <c>"AXBM"</c>).
+    /// This is the only method that should be used for rendering tags in output (text, JSON,
+    /// error messages). Do not use <see cref="Enum.ToString()"/> or <c>nameof</c>.
+    /// </summary>
+    public static string ToSpecName(this AppxDigestTag tag) => tag switch
+    {
+        AppxDigestTag.Axpc => "AXPC",
+        AppxDigestTag.Axcd => "AXCD",
+        AppxDigestTag.Axct => "AXCT",
+        AppxDigestTag.Axbm => "AXBM",
+        AppxDigestTag.Axci => "AXCI",
+        _ => $"0x{(uint)tag:X8}",
+    };
+}

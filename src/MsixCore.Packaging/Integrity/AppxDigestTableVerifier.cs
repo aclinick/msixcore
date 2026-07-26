@@ -74,7 +74,7 @@ public static class AppxDigestTableVerifier
                 {
                     Tag = entry.Tag,
                     Status = DigestVerificationStatus.NotVerified,
-                    Detail = $"{entry.Tag} verification is not supported — exact ZIP byte ranges are not recoverable from the public specification.",
+                    Detail = $"{entry.Tag.ToSpecName()} verification is not supported — exact ZIP byte ranges are not recoverable from the public specification.",
                 },
                 AppxDigestTag.Axct => VerifySnapshot(entry, OpcPartNames.ContentTypes, partSnapshots, ref allVerifiableOk),
                 AppxDigestTag.Axbm => VerifySnapshot(entry, OpcPartNames.AppxBlockMap, partSnapshots, ref allVerifiableOk),
@@ -83,7 +83,7 @@ public static class AppxDigestTableVerifier
                 {
                     Tag = entry.Tag,
                     Status = DigestVerificationStatus.Mismatch,
-                    Detail = $"Unknown tag {entry.Tag}.",
+                    Detail = $"Unknown tag {entry.Tag.ToSpecName()}.",
                 },
             };
 

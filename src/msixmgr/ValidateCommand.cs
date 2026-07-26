@@ -142,15 +142,15 @@ internal static class ValidateCommand
                     {
                         if (dr.Status == DigestVerificationStatus.Mismatch)
                         {
-                            errors.Add($"signature binding: {dr.Tag} digest mismatch{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
+                            errors.Add($"signature binding: {dr.Tag.ToSpecName()} digest mismatch{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
                         }
                         else if (dr.Status == DigestVerificationStatus.PartMissing)
                         {
-                            errors.Add($"signature binding: {dr.Tag} part missing{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
+                            errors.Add($"signature binding: {dr.Tag.ToSpecName()} part missing{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
                         }
                         else if (dr.Status == DigestVerificationStatus.DigestMissing)
                         {
-                            errors.Add($"signature binding: {dr.Tag} unsigned part present{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
+                            errors.Add($"signature binding: {dr.Tag.ToSpecName()} unsigned part present{(dr.Detail is not null ? $" — {dr.Detail}" : "")}.");
                         }
                     }
                 }
@@ -179,7 +179,7 @@ internal static class ValidateCommand
             {
                 bindingDigests.Add(new BindingDigestReport
                 {
-                    Tag = dr.Tag.ToString(),
+                    Tag = dr.Tag.ToSpecName(),
                     Status = dr.Status.ToString(),
                     Detail = dr.Detail,
                 });
