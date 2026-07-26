@@ -107,6 +107,14 @@ internal static class InspectCommand
             DisplayName = package.DisplayName,
             PublisherDisplayName = package.PublisherDisplayName,
             Capabilities = package.Capabilities,
+            DeclaredCapabilities = package.Manifest.DeclaredCapabilities
+                .Select(static capability => new CapabilityReport
+                {
+                    Name = capability.Name,
+                    Kind = CapabilityKindMoniker(capability.Kind),
+                    Namespace = string.IsNullOrEmpty(capability.Namespace) ? null : capability.Namespace,
+                })
+                .ToList(),
             Dependencies = package.Manifest.PackageDependencies
                 .Select(static dependency => new DependencyReport
                 {
@@ -130,6 +138,16 @@ internal static class InspectCommand
             BlockMapHashMethod = hashMethod,
         };
     }
+
+    private static string CapabilityKindMoniker(CapabilityKind kind) => kind switch
+    {
+        CapabilityKind.General => "general",
+        CapabilityKind.Device => "device",
+        CapabilityKind.Restricted => "restricted",
+        CapabilityKind.Windows => "windows",
+        CapabilityKind.Custom => "custom",
+        _ => "unknown",
+    };
 
     /// <summary>
     /// Flattens the package-level and per-application extension containers into one reported list,
@@ -197,7 +215,12 @@ internal static class InspectCommand
         o.WriteLine($"Display name    : {r.DisplayName}");
         o.WriteLine($"Publisher       : {r.PublisherDisplayName}");
         o.WriteLine($"Signed          : {r.IsSigned}");
-        string capabilities = r.Capabilities.Count == 0 ? "(none)" : string.Join(", ", r.Capabilities);
+        // Rendered from the categorized list so that a gated capability is visibly gated; falls back
+        // to the flat names when the manifest predates categorization (never, in practice).
+        string capabilities = r.DeclaredCapabilities.Count > 0
+            ? string.Join(", ", r.DeclaredCapabilities.Select(static c =>
+                c.Kind == "general" ? c.Name : $"{c.Name} ({c.Kind})"))
+            : r.Capabilities.Count == 0 ? "(none)" : string.Join(", ", r.Capabilities);
         o.WriteLine($"Capabilities    : {capabilities}");
         if (r.Dependencies.Count > 0)
         {

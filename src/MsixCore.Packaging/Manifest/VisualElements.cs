@@ -23,4 +23,29 @@ public sealed record VisualElements
 
     /// <summary>Whether the app is shown in the app list (<c>AppListEntry</c> not set to <c>none</c>).</summary>
     public bool AppListEntry { get; init; } = true;
+
+    /// <summary>
+    /// The <c>uap3:VisualElements/@VisualGroup</c> value, if declared: the group this app's tile is
+    /// filed under in the app list.
+    /// </summary>
+    public string? VisualGroup { get; init; }
+
+    /// <summary>
+    /// The <c>uap:DefaultTile</c> declaration, if present. This carries the wide, large, and small
+    /// tile logos, which are <em>not</em> attributes of <c>VisualElements</c> itself.
+    /// </summary>
+    public DefaultTile? DefaultTile { get; init; }
+
+    /// <summary>The <c>uap:SplashScreen</c> declaration, if present.</summary>
+    public SplashScreen? SplashScreen { get; init; }
+
+    /// <summary>The <c>uap:LockScreen</c> declaration, if present.</summary>
+    public LockScreen? LockScreen { get; init; }
+
+    /// <summary>
+    /// The declared initial rotation preferences, in document order, as the raw <c>Preference</c>
+    /// values of <c>uap:InitialRotationPreference</c>/<c>uap:Rotation</c> (<c>portrait</c>,
+    /// <c>landscape</c>, <c>portraitFlipped</c>, <c>landscapeFlipped</c>). Empty when unstated.
+    /// </summary>
+    public IReadOnlyList<string> InitialRotationPreferences { get; init; } = [];
 }

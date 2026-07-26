@@ -25,14 +25,14 @@ the public read path; **no** = not implemented.
 | Area | yes | partial | no | rows |
 | --- | --- | --- | --- | --- |
 | Container / OPC | 5 | 2 | 1 | 8 |
-| Manifest (AppxManifest.xml) | 11 | 2 | 4 | 17 |
+| Manifest (AppxManifest.xml) | 12 | 1 | 4 | 17 |
 | Extensions | 0 | 6 | 5 | 11 |
 | Block map | 6 | 0 | 1 | 7 |
 | Signature | 9 | 1 | 4 | 14 |
 | Bundles | 4 | 0 | 2 | 6 |
 | Package kinds | 1 | 5 | 1 | 7 |
 | Deployment | 10 | 1 | 3 | 14 |
-| **Total** | **46** | **17** | **21** | **84** |
+| **Total** | **47** | **16** | **21** | **84** |
 
 **Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
@@ -80,9 +80,9 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 | `PackageFamilyName` / `PackageFullName` + publisher hash | [Package identity](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/package-identity) | yes | `PackageIdentity.cs`, `PublisherHash.cs` | Base32 publisher hash verified against the canonical `8wekyb3d8bbwe` case. |
 | `Properties`: DisplayName, PublisherDisplayName, Description, Logo, Framework | [Properties element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-properties) | yes | `AppxManifestParser.Parse`, `AppxManifest.cs` | Framework flag parsed with XML boolean semantics. |
 | `Properties`: other (SupportedUsers, ModificationPackage, AutoUpdate, etc.) | [Properties element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-properties) | no | — | Not read; matters for optional/modification/self-updating packages. |
-| `Capabilities` (capability names) | [Capabilities element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-capabilities) | partial | `AppxManifestParser.ParseCapabilities` | Collects `Name` of every capability-like child but does **not** distinguish `Capability` / `DeviceCapability` / `rescap:Capability` / `uap:Capability` / `CustomCapability`, nor validate them. |
+| `Capabilities` (capability names) | [Capabilities element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-capabilities) | partial | `AppxManifestParser.ParseCapabilities`, `ManifestCapability.cs` | Each declaration is categorized by declaring namespace (`General` / `Device` / `Restricted` / `Windows` / `Custom` / `Unknown`) and `DeviceCapability` devices/functions are read. Names are **not** validated against the per-namespace enumerations — that belongs to the (unbuilt) schema validator. |
 | `Applications/Application` (Id, Executable, EntryPoint) | [Application element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-application) | yes | `AppxManifestParser.ParseApplications`, `ManifestApplication.cs` | Id required; Executable/EntryPoint optional. |
-| `uap:VisualElements` (DisplayName, Description, 150/44 logos, BackgroundColor, AppListEntry) | [VisualElements](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-visualelements) | partial | `AppxManifestParser.ParseVisualElements`, `VisualElements.cs` | Missing: wide/large/small logos, `DefaultTile`, `SplashScreen`, `LockScreen`, `InitialRotationPreference`, `ShowNameOnTiles`, etc. |
+| `uap:VisualElements` (all attributes, `DefaultTile`, `SplashScreen`, `LockScreen`, `InitialRotationPreference`) | [VisualElements](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-visualelements) | yes | `AppxManifestParser.ParseVisualElements`, `VisualElements.cs` | Includes the wide/large/small tile logos and `ShowNameOnTiles` (which live on `DefaultTile`, not on `VisualElements`), `uap3:VisualGroup`, and `uap5:Optional` on the splash screen. `uap:TileUpdate` and the holographic/mixed-reality tile content are not modelled. |
 | `Application` modern attrs (uap10:TrustLevel, uap10:RuntimeBehavior, HostId/HostRuntime) | [uap10 hostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | no | — | Needed for containerized / host-runtime apps. |
 | `Dependencies/TargetDeviceFamily` (Name, MinVersion, MaxVersionTested) | [TargetDeviceFamily](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-targetdevicefamily) | yes | `AppxManifestParser.ParseTargetDeviceFamilies`, `TargetDeviceFamily.cs` | All three attributes parsed. |
 | `Dependencies/PackageDependency` (framework refs: Name, MinVersion, Publisher, MaxMajorVersionTested, uap6:Optional) | [PackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-packagedependency) | yes | `AppxManifestParser.ParsePackageDependencies`, `PackageDependency.cs`, `DependencyResolver.cs` | Parsed and resolved at install time; `uap6:Optional` honoured. `MaxMajorVersionTested` is surfaced but not yet used to reject a newer major version. |
