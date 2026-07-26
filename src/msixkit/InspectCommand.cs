@@ -124,10 +124,67 @@ internal static class InspectCommand
                     IsOptional = dependency.IsOptional,
                 })
                 .ToList(),
+            Extensions = CollectExtensions(package.Manifest),
             IsSigned = package.IsSigned,
             BlockMapFileCount = blockMapFiles,
             BlockMapHashMethod = hashMethod,
         };
+    }
+
+    /// <summary>
+    /// Flattens the package-level and per-application extension containers into one reported list,
+    /// tagging each entry with the declaring application so the two remain distinguishable.
+    /// </summary>
+    private static List<ExtensionReport> CollectExtensions(AppxManifest manifest)
+    {
+        var result = new List<ExtensionReport>();
+        foreach (AppExtension extension in manifest.Extensions)
+        {
+            result.Add(ToReport(extension, applicationId: null));
+        }
+
+        foreach (ManifestApplication application in manifest.Applications)
+        {
+            foreach (AppExtension extension in application.Extensions)
+            {
+                result.Add(ToReport(extension, application.Id));
+            }
+        }
+
+        return result;
+    }
+
+    private static ExtensionReport ToReport(AppExtension extension, string? applicationId) =>
+        new()
+        {
+            ApplicationId = applicationId,
+            Category = extension.Category,
+            Executable = extension.Executable,
+            Details = Describe(extension.Payload),
+        };
+
+    private static string? Describe(ExtensionPayload? payload) => payload switch
+    {
+        FileTypeAssociationExtension fta =>
+            $"{fta.Name}: {string.Join(" ", fta.FileTypes.Select(static t => t.Extension))}".TrimEnd(),
+        ProtocolExtension protocol => $"{protocol.Name}:",
+        AppExecutionAliasExtension alias => string.Join(" ", alias.Aliases),
+        StartupTaskExtension task =>
+            task.IsEnabled is bool enabled ? $"{task.TaskId} (enabled={enabled})" : task.TaskId,
+        FullTrustProcessExtension process =>
+            string.Join(" ", process.ParameterGroups.Select(static g => g.GroupId)),
+        ComServerExtension com => DescribeComServer(com),
+        ShortcutExtension shortcut => shortcut.File,
+        _ => null,
+    };
+
+    private static string DescribeComServer(ComServerExtension com)
+    {
+        IEnumerable<ComClass> classes = com.ExeServers
+            .SelectMany(static server => server.Classes)
+            .Concat(com.SurrogateServers.SelectMany(static server => server.Classes));
+
+        return string.Join(" ", classes.Select(static c => c.Id));
     }
 
     private static void WriteText(InspectionReport r, TextWriter o)
@@ -150,6 +207,17 @@ internal static class InspectCommand
                 string version = dependency.MinVersion is null ? "" : $" >= {dependency.MinVersion}";
                 string optional = dependency.IsOptional ? " (optional)" : "";
                 o.WriteLine($"  {dependency.Kind,-11} {dependency.Name}{version}{optional}");
+            }
+        }
+
+        if (r.Extensions.Count > 0)
+        {
+            o.WriteLine("Extensions      :");
+            foreach (ExtensionReport extension in r.Extensions)
+            {
+                string owner = extension.ApplicationId is null ? "package" : extension.ApplicationId;
+                string details = extension.Details is null ? "" : $" {extension.Details}";
+                o.WriteLine($"  [{owner}] {extension.Category}{details}");
             }
         }
 

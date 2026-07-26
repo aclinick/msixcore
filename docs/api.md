@@ -121,12 +121,24 @@ publisher hash used in family/full names.
 | Type | Kind | Description |
 |------|------|-------------|
 | `AppxManifestParser` | static class | `Parse(Stream)` / `Parse(XDocument)` → `AppxManifest`. |
-| `AppxManifest` | record | Identity, display/publisher names, description, logo, `IsFramework`, capabilities, applications, target device families, package dependencies. |
-| `ManifestApplication` | record | `Id`, `Executable`, `EntryPoint`, `VisualElements`. |
+| `AppxManifest` | record | Identity, display/publisher names, description, logo, `IsFramework`, capabilities, applications, target device families, package dependencies, package-level extensions. |
+| `ManifestApplication` | record | `Id`, `Executable`, `EntryPoint`, `VisualElements`, `Extensions`. |
 | `VisualElements` | record | `DisplayName`, `Description`, logos, `BackgroundColor`, `AppListEntry`. |
 | `TargetDeviceFamily` | record | `Name`, `MinVersion`, `MaxVersionTested`. |
 | `PackageDependency` | record | `Kind`, `Name`, `Publisher`, `MinVersion`, `MaxMajorVersionTested`, `IsOptional`. See [manifest dependencies](manifest-dependencies.md). |
 | `PackageDependencyKind` | enum | `Framework`, `MainPackage`, `HostRuntime`. |
+| `AppExtension` | record | `Category`, `Executable`, `EntryPoint`, `StartPage`, `ResourceGroup`, `RuntimeType`, `Payload`. See [manifest extensions](manifest-extensions.md). |
+| `ExtensionPayload` | abstract record | Base of the typed extension payloads below; `AppExtension.Payload` is `null` for an unrecognised category. |
+| `FileTypeAssociationExtension` | record | `Name`, `DisplayName`, `Logo`, `InfoTip`, `FileTypes`. |
+| `SupportedFileType` | record | `Extension` (leading dot preserved), `ContentType`. |
+| `ProtocolExtension` | record | `Name`, `DisplayName`, `Logo`, `DesiredView`, `ReturnResults`, `Parameters`. |
+| `AppExecutionAliasExtension` | record | `Aliases`. |
+| `StartupTaskExtension` | record | `TaskId`, `IsEnabled` (nullable), `DisplayName`. |
+| `FullTrustProcessExtension` | record | `ParameterGroups`. |
+| `ParameterGroup` | record | `GroupId`, `Parameters`. |
+| `ComServerExtension` | record | `ExeServers`, `SurrogateServers`, `ProgIds`. |
+| `ComExeServer` / `ComSurrogateServer` / `ComClass` / `ComProgId` | records | COM registration detail. |
+| `ShortcutExtension` | record | `File`, `Icon`, `Arguments`, `Description`, `PinToStartMenu` (nullable). |
 | `BundleManifestParser` | static class | `Parse(...)` → `BundleManifest`. |
 | `BundleManifest` | record | `Identity`, `Packages`. |
 | `BundlePackageEntry` | record | `FileName`, `Type`, `Version`, `Architecture`, `ResourceId`, `Resources`. |

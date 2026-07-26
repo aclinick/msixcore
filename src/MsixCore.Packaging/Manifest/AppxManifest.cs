@@ -43,4 +43,12 @@ public sealed record AppxManifest
     /// and the host runtime.
     /// </summary>
     public IReadOnlyList<PackageDependency> PackageDependencies { get; init; } = [];
+
+    /// <summary>
+    /// The extensions declared by the package itself, i.e. <c>&lt;Package&gt;&lt;Extensions&gt;</c>.
+    /// Extensions declared by an application are on
+    /// <see cref="ManifestApplication.Extensions"/> instead; the two containers are separate in the
+    /// schema and are kept separate here because a package-level extension has no owning app.
+    /// </summary>
+    public IReadOnlyList<AppExtension> Extensions { get; init; } = [];
 }

@@ -30,11 +30,40 @@ internal sealed record InspectionReport
     /// </summary>
     public IReadOnlyList<DependencyReport> Dependencies { get; init; } = [];
 
+    /// <summary>
+    /// The declared OS integration points, from both the package-level and the per-application
+    /// <c>Extensions</c> containers. Additive to schema version 1.
+    /// </summary>
+    public IReadOnlyList<ExtensionReport> Extensions { get; init; } = [];
+
     public required bool IsSigned { get; init; }
 
     public int? BlockMapFileCount { get; init; }
 
     public string? BlockMapHashMethod { get; init; }
+}
+
+/// <summary>One declared <c>Extension</c>, as reported by <c>inspect</c>.</summary>
+internal sealed record ExtensionReport
+{
+    /// <summary>
+    /// The id of the declaring application, or <see langword="null"/> for a package-level
+    /// extension. Package-level extensions have no owning application, so the property is nullable
+    /// rather than defaulted to an empty string.
+    /// </summary>
+    public string? ApplicationId { get; init; }
+
+    /// <summary>The category string, e.g. <c>windows.fileTypeAssociation</c>.</summary>
+    public required string Category { get; init; }
+
+    public string? Executable { get; init; }
+
+    /// <summary>
+    /// A one-line summary of the category's payload — the associated extensions, the protocol
+    /// name, the aliases, and so on. <see langword="null"/> for a category msixcore does not model
+    /// or for an extension that declares no child element.
+    /// </summary>
+    public string? Details { get; init; }
 }
 
 /// <summary>One declared <c>Dependencies</c> entry, as reported by <c>inspect</c>.</summary>

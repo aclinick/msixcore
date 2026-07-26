@@ -16,4 +16,10 @@ public sealed record ManifestApplication
 
     /// <summary>The application protocol/URI scheme handled, if declared via the startup extension.</summary>
     public VisualElements VisualElements { get; init; } = new();
+
+    /// <summary>
+    /// The OS integration points this application declares, e.g. file type associations and
+    /// protocol handlers. Empty when the application declares no <c>&lt;Extensions&gt;</c>.
+    /// </summary>
+    public IReadOnlyList<AppExtension> Extensions { get; init; } = [];
 }

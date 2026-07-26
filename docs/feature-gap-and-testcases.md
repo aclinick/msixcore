@@ -193,12 +193,18 @@ See [`docs/manifest-dependencies.md`](manifest-dependencies.md).
 - **TC-P1-3c:** Host-runtime-dependent app; assert `HostRuntimeDependency` parsed.
 - **TC-P1-3d (unsatisfied):** Install-time resolution reports a missing framework dependency.
 
-### P1-4. Manifest extensions (declarations only)
-**Gap:** No extension category is parsed (§3 of coverage). First step: parse declarations so tooling
-can report them, before OS registration. Ref:
+### P1-4. Manifest extensions (declarations only) — IMPLEMENTED
+**Done:** Both the per-application and package-level `<Extensions>` containers are parsed into
+`AppExtension`, with strongly-typed payloads for `windows.fileTypeAssociation`, `windows.protocol`,
+`windows.appExecutionAlias`, `windows.startupTask`, `windows.fullTrustProcess`,
+`windows.comServer` and `windows.shortcut`. Unrecognised categories are reported by category string
+with a null payload. `msixkit inspect` lists them in both text and JSON. See
+[manifest extensions](manifest-extensions.md). OS **registration** of these declarations remains
+future Windows-integration work, as do the app-service, background-task, share-target, context-menu
+and app-extension (add-in) categories. Ref:
 [Desktop extensions](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-extensions).
 
-**Test cases (parse + surface, one fixture each):**
+**Test cases (parse + surface, one fixture each) — all implemented:**
 - **TC-P1-4a:** `uap:FileTypeAssociation` (name + `.ext` list) → assert associations parsed.
 - **TC-P1-4b:** `uap:Protocol Name="myscheme"` → assert protocol parsed.
 - **TC-P1-4c:** `uap5:AppExecutionAlias` with an executable alias → assert alias parsed.

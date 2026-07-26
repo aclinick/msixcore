@@ -110,11 +110,15 @@ Signed          : False
 Capabilities    : internetClient, runFullTrust
 Dependencies    :
   framework   Microsoft.VCLibs.140.00 >= 14.0.30704.0
+Extensions      :
+  [App] windows.fileTypeAssociation contoso-doc: .cdoc
 Block map       : 2 files (Sha256)
 ```
 
-The `Dependencies` section is printed only when the package declares any. See
-[manifest dependencies](manifest-dependencies.md).
+The `Dependencies` and `Extensions` sections are printed only when the package declares any. An
+extension is tagged with the id of the declaring application, or `package` for a package-level
+extension. See [manifest dependencies](manifest-dependencies.md) and
+[manifest extensions](manifest-extensions.md).
 
 ### JSON output
 
@@ -139,6 +143,13 @@ $ dotnet $DLL inspect ./Contoso.MyApp --json
       "Publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
       "MinVersion": "14.0.30704.0",
       "IsOptional": false
+    }
+  ],
+  "Extensions": [
+    {
+      "ApplicationId": "App",
+      "Category": "windows.fileTypeAssociation",
+      "Details": "contoso-doc: .cdoc"
     }
   ],
   "IsSigned": false,

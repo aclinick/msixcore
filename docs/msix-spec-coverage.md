@@ -26,19 +26,19 @@ the public read path; **no** = not implemented.
 | --- | --- | --- | --- | --- |
 | Container / OPC | 5 | 2 | 1 | 8 |
 | Manifest (AppxManifest.xml) | 11 | 2 | 4 | 17 |
-| Extensions | 0 | 0 | 11 | 11 |
+| Extensions | 0 | 6 | 5 | 11 |
 | Block map | 6 | 0 | 1 | 7 |
 | Signature | 9 | 1 | 4 | 14 |
 | Bundles | 4 | 0 | 2 | 6 |
 | Package kinds | 1 | 5 | 1 | 7 |
 | Deployment | 10 | 1 | 3 | 14 |
-| **Total** | **46** | **11** | **27** | **84** |
+| **Total** | **46** | **17** | **21** | **84** |
 
 **Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
 CMS signature reading with footprint-digest binding + faithful publisher-DN matching, plus a transactional
 extract/stage/commit/rollback install/uninstall engine and loose-layout extraction. It still does
-**not** cover: manifest extensions, most manifest namespaces beyond identity/properties,
+**not** cover: OS registration of the manifest extensions it now parses, most manifest namespaces beyond identity/properties,
 AXPC/AXCD verification, certificate trust, or OS-integration handlers (shortcuts, ARP,
 file-type/protocol registration). Bundle applicability (architecture/language/scale/DXFL selection)
 and manifest dependency parsing + install-time resolution are now implemented.
@@ -96,20 +96,20 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 
 ## 3. Extensions (`Application/Extensions` and package-level `Extensions`)
 
-None of the modern MSIX extension categories are parsed. Extension category overview:
+Extension **declarations** are parsed and surfaced for tooling; msixcore does not yet **register** any of them with the OS. Seven categories have a strongly-typed model (the `windows.shortcut` and `windows.fullTrustProcess` pair share one row below), and any other category is reported by its `Category` string with no payload. Extension category overview:
 <https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-extensions>.
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
-| File type associations (`uap:FileTypeAssociation`) | [FileTypeAssociation](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-filetypeassociation) | no | — | Required for shell file registration. |
-| Protocols / URI schemes (`uap:Protocol`, `windows.protocol`) | [uap:Protocol](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-protocol) | no | — | The `ManifestApplication` XML doc even mentions protocol but no parsing exists. |
-| App execution aliases (`uap5:AppExecutionAlias`) | [AppExecutionAlias](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap5-appexecutionalias) | no | — | PATH alias registration. |
-| Startup tasks (`desktop:Extension` `windows.startupTask`) | [startupTask extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-extension) | no | — | — |
+| File type associations (`uap:FileTypeAssociation`) | [FileTypeAssociation](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-filetypeassociation) | partial | `Manifest/FileTypeAssociationExtension.cs` | Parsed and surfaced; shell registration not implemented. |
+| Protocols / URI schemes (`uap:Protocol`, `windows.protocol`) | [uap:Protocol](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-protocol) | partial | `Manifest/ProtocolExtension.cs` | Parsed, including the `uap3` `Parameters` attribute; not registered. |
+| App execution aliases (`uap5:AppExecutionAlias`) | [AppExecutionAlias](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap5-appexecutionalias) | partial | `Manifest/AppExecutionAliasExtension.cs` | Both the `uap3` and `uap5` forms parsed; PATH alias registration not implemented. |
+| Startup tasks (`desktop:Extension` `windows.startupTask`) | [startupTask extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-extension) | partial | `Manifest/StartupTaskExtension.cs` | Both the `desktop` and `uap5` forms parsed; not registered. |
 | App services (`uap:Extension` `windows.appService`) | [appService](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-appservice) | no | — | — |
 | Background tasks (`windows.backgroundTasks`) | [BackgroundTasks](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-backgroundtasks) | no | — | — |
 | Share target (`uap:ShareTarget`) | [ShareTarget](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-sharetarget) | no | — | — |
-| COM/OLE servers (`com:Extension`, `windows.comServer`) | [com:Extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-com-extension) | no | — | Out-of-process / in-process COM registration. |
-| Full-trust process & shortcuts (`desktop:Extension`) | [desktop:Extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-extension) | no | — | `windows.fullTrustProcess`, shortcut extensions. |
+| COM/OLE servers (`com:Extension`, `windows.comServer`) | [com:Extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-com-extension) | partial | `Manifest/ComServerExtension.cs` | `ExeServer`/`SurrogateServer`/`Class`/`ProgId` parsed; `TreatAsClass`, interfaces and per-class OLE detail not modelled; no registration. |
+| Full-trust process & shortcuts (`desktop:Extension`) | [desktop:Extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop-extension) | partial | `Manifest/FullTrustProcessExtension.cs`, `Manifest/ShortcutExtension.cs` | `windows.fullTrustProcess` and `desktop7` `windows.shortcut` parsed; not registered. |
 | File Explorer context menus (`desktop4/5:Extension`) | [desktop4:Extension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-desktop4-extension) | no | — | Sparse/modern context menu handlers. |
 | App extension host/guest (`uap3:AppExtension`, `uap3:AppExtensionHost`) | [AppExtension](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap3-appextension) | no | — | Add-in model. |
 
