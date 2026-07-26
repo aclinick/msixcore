@@ -106,7 +106,7 @@ public class DependencyResolutionTests : IDisposable
     [Fact]
     public async Task AddPackage_WithAnInstalledFrameworkDependency_Succeeds()
     {
-        GivenInstalled("Contoso.Framework", "1.2.0.0");
+        GivenInstalled("Contoso.Framework", "1.2.0.0", isFramework: true);
         string path = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
@@ -117,9 +117,25 @@ public class DependencyResolutionTests : IDisposable
     }
 
     [Fact]
+    public async Task AddPackage_WithANonFrameworkOfTheSameName_Fails()
+    {
+        // A PackageDependency references a framework. An ordinary app package sharing the family
+        // name is not loadable as one, so it must not satisfy the dependency.
+        GivenInstalled("Contoso.Framework", "1.2.0.0", isFramework: false);
+        string path = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
+
+        Exception? error = await InstallAsync(path);
+
+        Assert.NotNull(error);
+        Assert.Equal(MsixErrorCode.DependencyNotSatisfied, MsixError.GetCode(error));
+        Assert.Contains("is not a framework package", error!.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AddPackage_WithAFrameworkOlderThanMinVersion_Fails()
     {
-        GivenInstalled("Contoso.Framework", "1.0.0.0");
+        GivenInstalled("Contoso.Framework", "1.0.0.0", isFramework: true);
         string path = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="2.0.0.0" Publisher="{Publisher}" />""");
 
@@ -192,7 +208,7 @@ public class DependencyResolutionTests : IDisposable
     public void Resolve_DependencyFromADifferentPublisher_IsNotSatisfied()
     {
         // Same package name, different publisher, therefore a different family: it must not match.
-        GivenInstalled("Contoso.Framework", publisher: OtherPublisher);
+        GivenInstalled("Contoso.Framework", publisher: OtherPublisher, isFramework: true);
         AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />"""));
 
@@ -206,7 +222,7 @@ public class DependencyResolutionTests : IDisposable
     public void Resolve_FrameworkForADifferentArchitecture_IsNotSatisfied()
     {
         // An x86 framework cannot load into an x64 app's process.
-        GivenInstalled("Contoso.Framework", architecture: "x86");
+        GivenInstalled("Contoso.Framework", architecture: "x86", isFramework: true);
         AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />"""));
 
@@ -219,7 +235,7 @@ public class DependencyResolutionTests : IDisposable
     [Fact]
     public void Resolve_NeutralFramework_SatisfiesAnyArchitecture()
     {
-        GivenInstalled("Contoso.Framework", architecture: "neutral");
+        GivenInstalled("Contoso.Framework", architecture: "neutral", isFramework: true);
         AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />"""));
 
@@ -282,6 +298,30 @@ public class DependencyResolutionTests : IDisposable
 
         InstalledPackageInfo installed = Assert.Single(_store.EnumeratePackages());
         Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
+    }
+
+    [Fact]
+    public void Store_ReplacesAnAppOfADifferentArchitecture()
+    {
+        // An app family is a single slot: installing the x64 build replaces the x86 build.
+        // Architecture-based coexistence applies to frameworks, not to main packages.
+        GivenInstalled("Contoso.App", "1.0.0.0", architecture: "x86");
+        GivenInstalled("Contoso.App", "2.0.0.0", architecture: "x64");
+
+        InstalledPackageInfo installed = Assert.Single(_store.EnumeratePackages());
+        Assert.Equal(ProcessorArchitecture.X64, installed.Identity.Architecture);
+    }
+
+    [Fact]
+    public void Store_AppliesTheDowngradeGuardAcrossArchitectures()
+    {
+        // The cross-architecture case must not be an escape hatch from the downgrade policy.
+        GivenInstalled("Contoso.App", "2.0.0.0", architecture: "x86");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => GivenInstalled("Contoso.App", "1.0.0.0", architecture: "x64"));
+
+        Assert.Contains("AllowDowngrade", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

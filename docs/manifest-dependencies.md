@@ -52,7 +52,10 @@ Three consequences follow:
   other version attribute in the manifest. It is modelled as `ushort?`. Parsing it as a quad would
   reject every real manifest that declares it.
 - `uap6:Optional="true"` marks a framework the package can run without. Such a dependency is still
-  resolved and reported, but its absence does not block deployment.
+  resolved and reported, but its absence does not block deployment. The attribute is **rejected**
+  on `MainPackageDependency` and `HostRuntimeDependency`, whose schemas do not declare it: a
+  modification package without its main package cannot run at all, so silently honouring the
+  attribute there would let a malformed manifest opt out of a mandatory dependency.
 
 ## Install-time resolution
 
@@ -71,6 +74,11 @@ Resolution rules:
 - Candidates are filtered by **architecture** before the version comparison. An installed x86
   framework does not satisfy an x64 app, because it cannot load into that app's process. A `neutral`
   package on either side matches anything, since neutral packages carry no architecture-specific code.
+- A foundation `PackageDependency` is satisfied only by a package whose manifest declares
+  `<Properties><Framework>true</Framework>`. An ordinary app package that happens to share the family
+  name reports `NotAFramework`, not `Resolved` — it is not loadable as a framework. The other two
+  kinds carry no such role constraint: the package a modification package modifies, and a host
+  runtime, are both ordinary packages.
 - Among the surviving candidates the **highest version** decides, since a store legitimately holds
   several versions of a framework family.
 - A dependency marked `uap6:Optional="true"` is reported in `Unsatisfied` when absent but is excluded
@@ -82,16 +90,19 @@ Resolution rules:
 
 Resolution assumes a family can hold several installed packages at once, and the store honours that:
 [`FileSystemPackageStore`](../src/MsixCore.PackageStore/FileSystemPackageStore.cs) replaces only the
-packages a commit genuinely **supersedes** — same architecture and resource id, and for frameworks the
-same version too. Consequently:
+packages a commit genuinely **supersedes** — same resource id, and for frameworks the same
+architecture and version too. Consequently:
 
-- **Architecture variants coexist.** An x86 app and an x64 app on one machine each need their own
-  build of a framework, so installing the x64 build must not evict the x86 one.
+- **Framework architecture variants coexist.** An x86 app and an x64 app on one machine each need
+  their own build of a framework, so installing the x64 build must not evict the x86 one.
 - **Framework versions coexist.** Each app binds to the specific `MinVersion` it declared, so a newer
   framework must not evict the older one an already-installed app resolved against.
 - **Resource packages coexist** with the main package, since they differ by resource id.
-- **App packages keep single-slot upgrade semantics**: installing a new version of a non-framework
-  package still replaces the old one, subject to `ForceReinstall`/`AllowDowngrade`.
+- **App packages keep single-slot upgrade semantics**: installing a non-framework package replaces
+  the installed one in that family, subject to `ForceReinstall`/`AllowDowngrade`. Architecture is
+  deliberately *not* part of the test here — a family holds one main package, so the x64 build
+  replaces the x86 build and remains subject to the downgrade guard. Excluding cross-architecture
+  installs would let them silently bypass both replacement and downgrade policy.
 
 ### Known race: removal is not dependency-aware
 

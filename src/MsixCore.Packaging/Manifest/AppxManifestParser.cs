@@ -321,19 +321,35 @@ public static class AppxManifestParser
             Publisher = publisher,
             MinVersion = minVersion,
             MaxMajorVersionTested = ParseMaxMajorVersionTested(element, elementName, name),
-            IsOptional = ParseOptionalFlag(element, elementName, name),
+            IsOptional = ParseOptionalFlag(element, kind, elementName, name),
         };
     }
 
     /// <summary>
     /// Parses <c>uap6:Optional</c>, which marks a framework dependency the package can run without.
     /// </summary>
-    private static bool ParseOptionalFlag(XElement element, string elementName, string name)
+    /// <remarks>
+    /// Only foundation <c>PackageDependency</c> declares this attribute. It is rejected on the other
+    /// kinds rather than ignored: a modification package without its main package, or a hosted app
+    /// without its host runtime, cannot run at all, so silently accepting <c>Optional="true"</c>
+    /// there would let a malformed manifest opt out of a genuinely mandatory dependency.
+    /// </remarks>
+    private static bool ParseOptionalFlag(
+        XElement element,
+        PackageDependencyKind kind,
+        string elementName,
+        string name)
     {
         string? value = NullIfEmpty(element.AttributeValue("Optional")?.Trim());
         if (value is null)
         {
             return false;
+        }
+
+        if (kind != PackageDependencyKind.Framework)
+        {
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                $"'{elementName}' '{name}' declares an 'Optional' attribute, which only 'PackageDependency' supports.");
         }
 
         try

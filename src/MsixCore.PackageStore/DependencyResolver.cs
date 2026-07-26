@@ -13,6 +13,12 @@ public enum DependencyResolutionStatus
     NotInstalled,
 
     /// <summary>
+    /// A package in the family is installed, and new enough, but it is not a framework package —
+    /// so it cannot satisfy a <c>PackageDependency</c>, which references a framework.
+    /// </summary>
+    NotAFramework,
+
+    /// <summary>
     /// A package in the family is installed but its version is older than the declared
     /// <see cref="PackageDependency.MinVersion"/>.
     /// </summary>
@@ -53,6 +59,9 @@ public sealed record DependencyResolution(
             DependencyResolutionStatus.VersionTooLow =>
                 $"{kind} '{Dependency.Name}' requires version {Dependency.MinVersion} or later, "
                 + $"but only {ResolvedPackage?.Identity.Version} is installed.",
+            DependencyResolutionStatus.NotAFramework =>
+                $"{kind} '{Dependency.Name}' is installed but is not a framework package, "
+                + "so it cannot satisfy a framework dependency.",
             _ => $"{kind} '{Dependency.Name}' is not installed.",
         };
     }
@@ -147,6 +156,26 @@ public static class DependencyResolver
         if (candidates.Count == 0)
         {
             return new DependencyResolution(dependency, DependencyResolutionStatus.NotInstalled, null);
+        }
+
+        // A PackageDependency references a framework package. An ordinary app package that happens
+        // to share the family name must not satisfy it. The other two kinds intentionally have no
+        // role constraint: the package a modification package modifies, and a host runtime, are both
+        // ordinary packages.
+        if (dependency.Kind == PackageDependencyKind.Framework)
+        {
+            List<InstalledPackageInfo> frameworks = candidates
+                .Where(static installed => installed.IsFramework)
+                .ToList();
+            if (frameworks.Count == 0)
+            {
+                return new DependencyResolution(
+                    dependency,
+                    DependencyResolutionStatus.NotAFramework,
+                    candidates[0]);
+            }
+
+            candidates = frameworks;
         }
 
         InstalledPackageInfo best = candidates[0];

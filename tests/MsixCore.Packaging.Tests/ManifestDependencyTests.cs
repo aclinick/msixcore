@@ -137,6 +137,21 @@ public class ManifestDependencyTests
         Assert.Equal(MsixErrorCode.ManifestSemantics, MsixError.GetCode(error));
     }
 
+    [Theory]
+    [InlineData("""<uap4:MainPackageDependency Name="Main" uap6:Optional="true" />""")]
+    [InlineData("""<uap10:HostRuntimeDependency Name="Host" Publisher="PUB" MinVersion="1.0.0.0" uap6:Optional="true" />""")]
+    public void Parse_RejectsTheOptionalFlagOnAMandatoryDependency(string element)
+    {
+        // Only foundation PackageDependency declares uap6:Optional. A modification package cannot
+        // run without its main package, nor a hosted app without its host runtime, so a manifest
+        // must not be able to opt out of those.
+        InvalidDataException error = Assert.Throws<InvalidDataException>(
+            () => Parse($"    {element.Replace("PUB", Publisher, StringComparison.Ordinal)}"));
+
+        Assert.Equal(MsixErrorCode.ManifestSemantics, MsixError.GetCode(error));
+        Assert.Contains("'Optional'", error.Message, StringComparison.Ordinal);
+    }
+
     // TC-P1-3b
     [Fact]
     public void Parse_MainPackageDependency_CapturesTheModificationRelationship()

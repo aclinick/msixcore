@@ -770,20 +770,24 @@ public sealed class FileSystemPackageStore : IPackageStore
     /// <paramref name="installed"/> package from the same family.
     /// </summary>
     /// <remarks>
-    /// A package family is not a single slot. Windows keeps architecture variants of a framework
-    /// side by side (an x86 app and an x64 app on one machine each need their own build of
-    /// <c>Microsoft.VCLibs</c>), keeps resource packages alongside the main package, and keeps
-    /// multiple framework versions installed at once because each app binds to the specific
-    /// <c>MinVersion</c> it declared. Only a package with the same architecture and resource id —
-    /// and, for frameworks, the same version — is genuinely superseded.
+    /// <para>
+    /// A package family is not always a single slot. Resource packages sit alongside the main
+    /// package, and frameworks are kept side by side across <em>both</em> architecture and version:
+    /// an x86 app and an x64 app on one machine each need their own build of
+    /// <c>Microsoft.VCLibs</c>, and each app binds to the specific <c>MinVersion</c> it declared, so
+    /// a newer framework must not evict the older one an installed app resolved against.
+    /// </para>
+    /// <para>
+    /// An ordinary app family <em>is</em> a single slot. Architecture is deliberately not part of the
+    /// test for non-frameworks: installing the x64 build of an app replaces the x86 build already
+    /// installed, and remains subject to the downgrade guard. Treating those as coexisting would let
+    /// a cross-architecture install silently bypass both replacement and the downgrade policy.
+    /// </para>
     /// </remarks>
     private static bool IsSupersededBy(InstalledPackageInfo installed, InstalledPackageInfo incoming)
     {
-        if (installed.Identity.Architecture != incoming.Identity.Architecture)
-        {
-            return false;
-        }
-
+        // Resource packages are distinguished from the main package by resource id alone, so they
+        // never supersede one another regardless of role.
         if (!string.Equals(
                 installed.Identity.ResourceId,
                 incoming.Identity.ResourceId,
@@ -794,7 +798,8 @@ public sealed class FileSystemPackageStore : IPackageStore
 
         if (installed.IsFramework || incoming.IsFramework)
         {
-            return installed.Identity.Version == incoming.Identity.Version;
+            return installed.Identity.Architecture == incoming.Identity.Architecture
+                && installed.Identity.Version == incoming.Identity.Version;
         }
 
         return true;
