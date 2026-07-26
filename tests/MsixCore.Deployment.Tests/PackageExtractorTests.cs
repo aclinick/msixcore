@@ -211,6 +211,8 @@ public class PackageExtractorTests : IDisposable
         // This hostile test double has a fixed in-memory part set and no mutable backing namespace.
         public string? DetectSnapshotDrift() => null;
 
+        public OpcPartZipInfo? GetZipInfo(string partName) => null;
+
         public bool ContainsPart(string partName) => true;
 
         public Stream OpenPart(string partName) => new MemoryStream(Encoding.UTF8.GetBytes("x"));
@@ -227,6 +229,8 @@ public class PackageExtractorTests : IDisposable
         public IReadOnlyCollection<string> PartNames => inner.PartNames;
 
         public string? DetectSnapshotDrift() => inner.DetectSnapshotDrift();
+
+        public OpcPartZipInfo? GetZipInfo(string partName) => inner.GetZipInfo(partName);
 
         public bool ContainsPart(string partName) => inner.ContainsPart(partName);
 

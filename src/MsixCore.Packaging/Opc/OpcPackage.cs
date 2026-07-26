@@ -21,20 +21,28 @@ public sealed class OpcPackage : IOpcPackage
 
     private readonly ZipArchive _archive;
     private readonly Dictionary<string, ZipArchiveEntry> _entriesByPart;
+    private readonly Dictionary<string, OpcPartZipInfo> _zipInfoByPart;
     private readonly List<string> _partNames;
     private readonly Stream? _callerStream;
     private readonly CentralDirectorySnapshot? _centralDirectorySnapshot;
     private readonly string? _snapshotUnavailableReason;
 
-    private OpcPackage(ZipArchive archive, Stream? callerStream)
+    private OpcPackage(ZipArchive archive, Stream? callerStream, IReadOnlyList<ushort>? compressionMethods)
     {
         _archive = archive;
         _callerStream = callerStream;
         _entriesByPart = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+        _zipInfoByPart = new Dictionary<string, OpcPartZipInfo>(StringComparer.OrdinalIgnoreCase);
         _partNames = new List<string>(archive.Entries.Count);
 
-        foreach (ZipArchiveEntry entry in archive.Entries)
+        if (compressionMethods is not null && compressionMethods.Count != archive.Entries.Count)
         {
+            throw new InvalidDataException("The ZIP central-directory entry count is inconsistent.");
+        }
+
+        for (int entryIndex = 0; entryIndex < archive.Entries.Count; entryIndex++)
+        {
+            ZipArchiveEntry entry = archive.Entries[entryIndex];
             // Skip directory entries (zip directory markers end with '/').
             if (entry.FullName.EndsWith('/'))
             {
@@ -65,6 +73,15 @@ public sealed class OpcPackage : IOpcPackage
                     $"The package contains a duplicate OPC part name: '{partName}'.");
             }
 
+            if (compressionMethods is not null)
+            {
+                _zipInfoByPart.Add(
+                    partName,
+                    new OpcPartZipInfo(
+                        entry.Length,
+                        entry.CompressedLength,
+                        compressionMethods[entryIndex] != 0));
+            }
             _partNames.Add(partName);
         }
 
@@ -164,13 +181,59 @@ public sealed class OpcPackage : IOpcPackage
         try
         {
             // The central directory is read lazily, so validation failures can surface here.
-            return new OpcPackage(archive, callerSupplied ? stream : null);
+            List<ushort>? compressionMethods = stream.CanSeek
+                ? ReadCompressionMethods(stream, archive.Entries.Count)
+                : null;
+            return new OpcPackage(archive, callerSupplied ? stream : null, compressionMethods);
         }
         catch
         {
             // Disposing the archive respects leaveOpen: the caller's stream is preserved when requested.
             archive.Dispose();
             throw;
+        }
+    }
+
+    private static List<ushort> ReadCompressionMethods(Stream stream, int entryCount)
+    {
+        const uint centralHeaderSignature = 0x02014B50;
+        long originalPosition = stream.Position;
+        try
+        {
+            if (!TryReadCentralDirectoryLocation(
+                    stream,
+                    stream.Length,
+                    out long centralOffset,
+                    out _,
+                    out string? error))
+            {
+                throw new InvalidDataException($"The ZIP central directory is invalid: {error}");
+            }
+
+            var methods = new List<ushort>(entryCount);
+            stream.Position = centralOffset;
+            Span<byte> header = stackalloc byte[46];
+            for (int i = 0; i < entryCount; i++)
+            {
+                if (!ReadExactly(stream, header)
+                    || BinaryPrimitives.ReadUInt32LittleEndian(header[..4]) != centralHeaderSignature)
+                {
+                    throw new InvalidDataException("The ZIP central directory contains an invalid entry header.");
+                }
+
+                methods.Add(BinaryPrimitives.ReadUInt16LittleEndian(header[10..12]));
+                int variableLength =
+                    BinaryPrimitives.ReadUInt16LittleEndian(header[28..30])
+                    + BinaryPrimitives.ReadUInt16LittleEndian(header[30..32])
+                    + BinaryPrimitives.ReadUInt16LittleEndian(header[32..34]);
+                stream.Position = checked(stream.Position + variableLength);
+            }
+
+            return methods;
+        }
+        finally
+        {
+            stream.Position = originalPosition;
         }
     }
 
@@ -412,6 +475,15 @@ public sealed class OpcPackage : IOpcPackage
     {
         ArgumentException.ThrowIfNullOrEmpty(partName);
         return _entriesByPart.ContainsKey(NormalizeLookup(partName));
+    }
+
+    /// <inheritdoc/>
+    public OpcPartZipInfo? GetZipInfo(string partName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(partName);
+        return _zipInfoByPart.TryGetValue(NormalizeLookup(partName), out OpcPartZipInfo? info)
+            ? info
+            : null;
     }
 
     /// <inheritdoc/>

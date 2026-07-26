@@ -389,6 +389,8 @@ public sealed class MsixPackage : IPackage
 
         public string? DetectSnapshotDrift() => owner._opc.DetectSnapshotDrift();
 
+        public OpcPartZipInfo? GetZipInfo(string partName) => owner._opc.GetZipInfo(partName);
+
         public bool ContainsPart(string partName) => owner._opc.ContainsPart(partName);
 
         public Stream OpenPart(string partName)

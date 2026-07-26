@@ -17,6 +17,18 @@ public interface IOpcPackage : IDisposable
     /// </summary>
     string? DetectSnapshotDrift();
 
+    /// <summary>
+    /// Returns ZIP metadata for a part, or <see langword="null"/> when the package has no ZIP
+    /// container (for example, a loose directory package) or its backing stream cannot expose a
+    /// stable ZIP snapshot. The latter condition must also be reported by
+    /// <see cref="DetectSnapshotDrift"/> so verification fails closed.
+    /// </summary>
+    /// <remarks>
+    /// This is a required capability so integrity verification can enforce block-map compressed
+    /// sizes without depending on a concrete <see cref="IOpcPackage"/> implementation.
+    /// </remarks>
+    OpcPartZipInfo? GetZipInfo(string partName);
+
     /// <summary>Returns <see langword="true"/> if a part with the given name exists (case-insensitive).</summary>
     /// <param name="partName">Package-root-relative part name, e.g. <c>AppxManifest.xml</c>.</param>
     bool ContainsPart(string partName);
@@ -27,3 +39,6 @@ public interface IOpcPackage : IDisposable
     /// <exception cref="System.IO.FileNotFoundException">The part does not exist.</exception>
     Stream OpenPart(string partName);
 }
+
+/// <summary>ZIP sizes and compression mode for one canonical OPC part.</summary>
+public sealed record OpcPartZipInfo(long UncompressedSize, long CompressedSize, bool IsCompressed);

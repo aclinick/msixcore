@@ -104,7 +104,9 @@ public class BlockMapVerifierTests
         BlockMap map = PackageBuilder.BlockMapFor(parts);
 
         // Package content differs from what the block map was computed over.
-        parts["AppxManifest.xml"] = Encoding.UTF8.GetBytes("<Package tampered=\"1\"/>");
+        // Keep the byte length unchanged so this specifically exercises the hash check rather than
+        // the stored-entry size check.
+        parts["AppxManifest.xml"] = Encoding.UTF8.GetBytes("<PackAge/>");
         using OpcPackage opc = PackageBuilder.OpcFrom(parts);
 
         BlockMapVerificationResult result = BlockMapVerifier.Verify(opc, map);
@@ -176,7 +178,8 @@ public class BlockMapVerifierTests
         // The special OPC/footprint parts must never count against coverage.
         parts[OpcPartNames.AppxBlockMap] = Encoding.UTF8.GetBytes("<BlockMap/>");
         parts[OpcPartNames.AppxSignature] = new byte[] { 1, 2, 3 };
-        parts[OpcPartNames.ContentTypes] = Encoding.UTF8.GetBytes("<Types/>");
+        parts[OpcPartNames.ContentTypes] = Encoding.UTF8.GetBytes(
+            """<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="p7x" ContentType="application/octet-stream"/><Default Extension="cat" ContentType="application/octet-stream"/></Types>""");
         parts[OpcPartNames.CodeIntegrityCatalog] = new byte[] { 4, 5, 6 };
         using OpcPackage opc = PackageBuilder.OpcFrom(parts);
 

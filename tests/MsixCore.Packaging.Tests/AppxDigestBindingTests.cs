@@ -841,7 +841,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
 
             // --- Payload sets ---
             byte[] payloadA = "Hello from legitimate app A"u8.ToArray();
@@ -929,7 +929,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
 
             byte[] payloadA = "Hello from legitimate app A"u8.ToArray();
             byte[] payloadB = "EVIL PAYLOAD"u8.ToArray();
@@ -1000,7 +1000,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
 
             byte[] payloadA = "Hello from legitimate app A"u8.ToArray();
             byte[] payloadB = "EVIL PAYLOAD"u8.ToArray();
@@ -1117,7 +1117,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
             byte[] payload = "test payload"u8.ToArray();
             var files = new Dictionary<string, byte[]>
             {
@@ -1190,7 +1190,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
             byte[] payload = "legitimate payload"u8.ToArray();
             var files = new Dictionary<string, byte[]>
             {
@@ -1319,7 +1319,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
             byte[] payload = "drifting payload"u8.ToArray();
             var files = new Dictionary<string, byte[]>
             {
@@ -1388,7 +1388,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
             byte[] payload = "legitimate"u8.ToArray();
             var files = new Dictionary<string, byte[]>
             {
@@ -1429,7 +1429,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
             byte[] payload = "legitimate"u8.ToArray();
             var files = new Dictionary<string, byte[]>
             {
@@ -1468,7 +1468,7 @@ public class AppxDigestBindingTests
             Directory.CreateDirectory(Path.Combine(dir, "Assets"));
 
             byte[] manifest = "<Package><Identity Name='Test' Version='1.0.0.0' Publisher='CN=Test' ProcessorArchitecture='x64'/></Package>"u8.ToArray();
-            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/></Types>"u8.ToArray();
+            byte[] contentTypes = "<Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='txt' ContentType='text/plain'/><Default Extension='xml' ContentType='application/xml'/></Types>"u8.ToArray();
             byte[] payload = "legitimate"u8.ToArray();
 
             File.WriteAllBytes(Path.Combine(dir, "[Content_Types].xml"), contentTypes);
