@@ -25,14 +25,18 @@ internal static class LooseCliPackage
         """;
 
     /// <summary>Creates a loose package directory containing the given payload plus a valid block map.</summary>
-    public static string Create(string root, string folder, IReadOnlyDictionary<string, byte[]>? extra = null)
+    public static string Create(
+        string root,
+        string folder,
+        IReadOnlyDictionary<string, byte[]>? extra = null,
+        string? manifestXml = null)
     {
         string dir = Path.Combine(root, folder);
         Directory.CreateDirectory(dir);
 
         var payload = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
         {
-            [ManifestName] = Encoding.UTF8.GetBytes(ManifestXml()),
+            [ManifestName] = Encoding.UTF8.GetBytes(manifestXml ?? ManifestXml()),
         };
         if (extra is not null)
         {

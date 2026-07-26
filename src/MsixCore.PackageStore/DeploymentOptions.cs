@@ -21,4 +21,11 @@ public enum DeploymentOptions
 
     /// <summary>Allow an older version to replace the currently installed package family.</summary>
     AllowDowngrade = 1 << 3,
+
+    /// <summary>
+    /// Install even when a declared dependency (framework, main package, or host runtime) is not
+    /// present in the store. The resulting installation may not be runnable; this exists for
+    /// staging scenarios where dependencies are added afterwards, and for tests.
+    /// </summary>
+    SkipDependencyCheck = 1 << 4,
 }

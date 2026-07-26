@@ -1,5 +1,6 @@
 using MsixCore.Packaging;
 using MsixCore.Packaging.Integrity;
+using MsixCore.Packaging.Manifest;
 
 namespace MsixCore.PackageStore;
 
@@ -62,6 +63,16 @@ public sealed class PackageManager : IPackageManager
             using (MsixPackage package = MsixPackage.Open(packageFilePath))
             {
                 response.Token.ThrowIfCancellationRequested();
+
+                // Resolved before extraction so an unsatisfiable package fails fast, without having
+                // written a staging tree that would only be thrown away.
+                if (!options.HasFlag(DeploymentOptions.SkipDependencyCheck))
+                {
+                    response.Report(InstallationStep.GetPackageInformation, 8f, "Resolving dependencies.");
+                    EnsureDependenciesSatisfied(package.Manifest);
+                }
+
+                response.Token.ThrowIfCancellationRequested();
                 response.Report(InstallationStep.Extraction, 10f, "Extracting package payload.");
                 staging = _store.CreateStagingLocation();
                 var progress = new SynchronousProgress<float>(p =>
@@ -101,6 +112,19 @@ public sealed class PackageManager : IPackageManager
             CleanupStaging(staging);
             response.Fail(ex);
         }
+    }
+
+    private void EnsureDependenciesSatisfied(AppxManifest manifest)
+    {
+        DependencyResolutionResult resolution = DependencyResolver.Resolve(manifest, _store);
+        if (resolution.IsSatisfied)
+        {
+            return;
+        }
+
+        string detail = string.Join(" ", resolution.Unsatisfied.Select(static item => item.Describe()));
+        throw MsixError.Format(MsixErrorCode.DependencyNotSatisfied,
+            $"Package '{manifest.Identity.PackageFullName}' cannot be installed because its dependencies are not satisfied: {detail}");
     }
 
     private void RunRemove(string packageFullName, MsixResponse response)

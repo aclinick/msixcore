@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -77,6 +78,7 @@ public static class AppxManifestParser
             Capabilities = ParseCapabilities(root),
             Applications = ParseApplications(root),
             TargetDeviceFamilies = ParseTargetDeviceFamilies(root),
+            PackageDependencies = ParsePackageDependencies(root),
         };
     }
 
@@ -234,6 +236,113 @@ public static class AppxManifestParser
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Parses the package-to-package dependencies declared under <c>Dependencies</c>.
+    /// </summary>
+    /// <remarks>
+    /// Elements are matched by local name, so the revisioned forms of each element collapse onto one
+    /// kind: both <c>uap3:MainPackageDependency</c> and <c>uap4:MainPackageDependency</c> yield
+    /// <see cref="PackageDependencyKind.MainPackage"/>, and both <c>uap10:</c> and
+    /// <c>uap13:HostRuntimeDependency</c> yield <see cref="PackageDependencyKind.HostRuntime"/>.
+    /// This is deliberate: the revisions differ in which attributes they permit, not in what the
+    /// relationship means, and a consumer that cared about the revision could read the namespace
+    /// from the DOM instead.
+    /// </remarks>
+    private static List<PackageDependency> ParsePackageDependencies(XElement root)
+    {
+        XElement? dependencies = root.ElementByLocalName("Dependencies");
+        if (dependencies is null)
+        {
+            return [];
+        }
+
+        var result = new List<PackageDependency>();
+        foreach (XElement element in dependencies.Elements())
+        {
+            PackageDependencyKind kind;
+            switch (element.Name.LocalName)
+            {
+                case "PackageDependency":
+                    kind = PackageDependencyKind.Framework;
+                    break;
+                case "MainPackageDependency":
+                    kind = PackageDependencyKind.MainPackage;
+                    break;
+                case "HostRuntimeDependency":
+                    kind = PackageDependencyKind.HostRuntime;
+                    break;
+                default:
+                    // TargetDeviceFamily is parsed separately; DriverDependency and
+                    // OSPackageDependency are not package-to-package relationships and are not
+                    // modelled yet. Unknown children are ignored for forward compatibility.
+                    continue;
+            }
+
+            result.Add(ParsePackageDependency(element, kind));
+        }
+
+        return result;
+    }
+
+    private static PackageDependency ParsePackageDependency(XElement element, PackageDependencyKind kind)
+    {
+        string elementName = element.Name.LocalName;
+        string name = NullIfEmpty(element.AttributeValue("Name"))
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                $"A '{elementName}' is missing the required 'Name' attribute.");
+
+        // Publisher and MinVersion are required by the schema on PackageDependency and
+        // HostRuntimeDependency, but MainPackageDependency has no version attribute at all and its
+        // Publisher is optional.
+        bool requiresPublisherAndVersion = kind != PackageDependencyKind.MainPackage;
+
+        string? publisher = NullIfEmpty(element.AttributeValue("Publisher"));
+        if (publisher is null && requiresPublisherAndVersion)
+        {
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                $"'{elementName}' '{name}' is missing the required 'Publisher' attribute.");
+        }
+
+        Version? minVersion = null;
+        if (requiresPublisherAndVersion)
+        {
+            minVersion = ManifestVersion.Parse(
+                element.AttributeValue("MinVersion"),
+                $"{elementName} '{name}' MinVersion",
+                MsixErrorCode.ManifestSemantics);
+        }
+
+        return new PackageDependency
+        {
+            Kind = kind,
+            Name = name,
+            Publisher = publisher,
+            MinVersion = minVersion,
+            MaxMajorVersionTested = ParseMaxMajorVersionTested(element, elementName, name),
+        };
+    }
+
+    /// <summary>
+    /// Parses <c>MaxMajorVersionTested</c>, which is a single unsigned 16-bit major version rather
+    /// than the four-part quad used by every other version attribute in the manifest.
+    /// </summary>
+    private static ushort? ParseMaxMajorVersionTested(XElement element, string elementName, string name)
+    {
+        string? value = NullIfEmpty(element.AttributeValue("MaxMajorVersionTested"));
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (!ushort.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out ushort major))
+        {
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                $"{elementName} '{name}' has an invalid MaxMajorVersionTested '{value}'. Expected a whole number from 0 to 65535.");
+        }
+
+        return major;
     }
 
     private static bool ParseFrameworkFlag(string? value)

@@ -24,11 +24,32 @@ internal sealed record InspectionReport
 
     public required IReadOnlyList<string> Capabilities { get; init; }
 
+    /// <summary>
+    /// The declared package-to-package dependencies. Additive to schema version 1: consumers that
+    /// predate it simply ignore the property.
+    /// </summary>
+    public IReadOnlyList<DependencyReport> Dependencies { get; init; } = [];
+
     public required bool IsSigned { get; init; }
 
     public int? BlockMapFileCount { get; init; }
 
     public string? BlockMapHashMethod { get; init; }
+}
+
+/// <summary>One declared <c>Dependencies</c> entry, as reported by <c>inspect</c>.</summary>
+internal sealed record DependencyReport
+{
+    /// <summary>One of <c>framework</c>, <c>mainPackage</c>, or <c>hostRuntime</c>.</summary>
+    public required string Kind { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Publisher { get; init; }
+
+    public string? MinVersion { get; init; }
+
+    public int? MaxMajorVersionTested { get; init; }
 }
 
 /// <summary>Machine-readable result of the <c>validate</c> verb.</summary>

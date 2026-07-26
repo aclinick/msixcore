@@ -37,4 +37,10 @@ public sealed record AppxManifest
 
     /// <summary>The declared <c>TargetDeviceFamily</c> dependencies.</summary>
     public IReadOnlyList<TargetDeviceFamily> TargetDeviceFamilies { get; init; } = [];
+
+    /// <summary>
+    /// The declared package-to-package dependencies: framework packages, the modified main package,
+    /// and the host runtime.
+    /// </summary>
+    public IReadOnlyList<PackageDependency> PackageDependencies { get; init; } = [];
 }

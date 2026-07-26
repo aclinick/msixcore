@@ -10,17 +10,20 @@ internal static class LoosePackageBuilder
         string publisher = "CN=Contoso",
         string version = "1.0.0.0",
         string architecture = "x64",
-        string? executable = "App/App.exe") =>
+        string? executable = "App/App.exe",
+        string? dependencies = null) =>
         $"""
         <?xml version="1.0" encoding="utf-8"?>
         <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-                 xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10">
+                 xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+                 xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4"
+                 xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10">
           <Identity Name="{name}" Publisher="{publisher}" Version="{version}" ProcessorArchitecture="{architecture}" />
           <Properties>
             <DisplayName>Contoso My App</DisplayName>
             <PublisherDisplayName>Contoso Ltd</PublisherDisplayName>
             <Logo>Assets\StoreLogo.png</Logo>
-          </Properties>
+          </Properties>{(dependencies is null ? "" : $"\n  <Dependencies>\n    {dependencies}\n  </Dependencies>")}
           <Applications>
             <Application Id="App"{(executable is null ? "" : $" Executable=\"{executable}\"")} EntryPoint="Windows.FullTrustApplication">
               <uap:VisualElements DisplayName="My App" Description="d" BackgroundColor="#000000"

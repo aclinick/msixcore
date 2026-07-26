@@ -58,4 +58,12 @@ public enum MsixErrorCode
 
     /// <summary>Deployment or package-store state is invalid or corrupt.</summary>
     PackageStore,
+
+    /// <summary>
+    /// A package is well formed but one of its declared <c>Dependencies</c> cannot be satisfied by
+    /// the target store — the dependency is not installed, or the installed version is older than
+    /// the declared <c>MinVersion</c>. Distinct from <see cref="ManifestSemantics"/> because the
+    /// manifest is valid; the environment is missing something it asks for.
+    /// </summary>
+    DependencyNotSatisfied,
 }

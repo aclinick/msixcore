@@ -30,7 +30,18 @@ public sealed record PackageIdentity
     /// The package family name: <c>{Name}_{publisherHash}</c>, where the publisher hash is computed
     /// by <see cref="PublisherHash.Compute(string)"/>.
     /// </summary>
-    public string PackageFamilyName => $"{Name}_{PublisherHash.Compute(Publisher)}";
+    public string PackageFamilyName => ComputeFamilyName(Name, Publisher);
+
+    /// <summary>
+    /// Computes a package family name from a package name and publisher, for callers that have those
+    /// two values without a full identity — notably manifest dependencies, which name their target by
+    /// <c>Name</c> and <c>Publisher</c> only.
+    /// </summary>
+    /// <param name="name">The package name.</param>
+    /// <param name="publisher">The publisher distinguished name.</param>
+    /// <returns>The package family name.</returns>
+    public static string ComputeFamilyName(string name, string publisher) =>
+        $"{name}_{PublisherHash.Compute(publisher)}";
 
     /// <summary>
     /// The package full name:

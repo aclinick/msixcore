@@ -121,10 +121,12 @@ publisher hash used in family/full names.
 | Type | Kind | Description |
 |------|------|-------------|
 | `AppxManifestParser` | static class | `Parse(Stream)` / `Parse(XDocument)` → `AppxManifest`. |
-| `AppxManifest` | record | Identity, display/publisher names, description, logo, `IsFramework`, capabilities, applications, target device families. |
+| `AppxManifest` | record | Identity, display/publisher names, description, logo, `IsFramework`, capabilities, applications, target device families, package dependencies. |
 | `ManifestApplication` | record | `Id`, `Executable`, `EntryPoint`, `VisualElements`. |
 | `VisualElements` | record | `DisplayName`, `Description`, logos, `BackgroundColor`, `AppListEntry`. |
 | `TargetDeviceFamily` | record | `Name`, `MinVersion`, `MaxVersionTested`. |
+| `PackageDependency` | record | `Kind`, `Name`, `Publisher`, `MinVersion`, `MaxMajorVersionTested`. See [manifest dependencies](manifest-dependencies.md). |
+| `PackageDependencyKind` | enum | `Framework`, `MainPackage`, `HostRuntime`. |
 | `BundleManifestParser` | static class | `Parse(...)` → `BundleManifest`. |
 | `BundleManifest` | record | `Identity`, `Packages`. |
 | `BundlePackageEntry` | record | `FileName`, `Type`, `Version`, `Architecture`, `ResourceId`, `Resources`. |
@@ -154,7 +156,7 @@ Lifecycle + query over an `IPackageStore`.
 
 | Member | Description | Status |
 |--------|-------------|--------|
-| `IMsixResponse AddPackage(string path, DeploymentOptions = None, CancellationToken = default)` | Install a package: verify block map, extract to staging, transactionally commit. Returns immediately; runs on a background task. | Implemented. |
+| `IMsixResponse AddPackage(string path, DeploymentOptions = None, CancellationToken = default)` | Install a package: resolve declared dependencies, verify block map, extract to staging, transactionally commit. Returns immediately; runs on a background task. | Implemented. |
 | `IMsixResponse RemovePackage(string fullName, CancellationToken = default)` | Uninstall by full name. Returns immediately. | Implemented. |
 | `IInstalledPackage? FindPackage(string fullName)` | Find one by full name. | Implemented. |
 | `IInstalledPackage? FindPackageByFamilyName(string familyName)` | Find one by family name. | Implemented. |
@@ -221,7 +223,21 @@ inline `SynchronousProgress<T>` reporter are `internal` implementation details.
 ### `DeploymentOptions` (flags enum)
 
 `None = 0`, `ForceApplicationShutdown = 1`, `ExtractOnly = 2`,
-`ForceReinstall = 4`, `AllowDowngrade = 8`.
+`ForceReinstall = 4`, `AllowDowngrade = 8`, `SkipDependencyCheck = 16`.
+
+### `DependencyResolver` (static class)
+
+Resolves a manifest's declared `Dependencies` against an `IPackageStore`. `PackageManager.AddPackage`
+runs it before extraction unless `DeploymentOptions.SkipDependencyCheck` is set.
+
+| Member | Description |
+|--------|-------------|
+| `DependencyResolutionResult Resolve(AppxManifest manifest, IPackageStore store)` | One `DependencyResolution` per declared dependency, in manifest order. |
+| `DependencyResolutionResult` | `Resolutions`, `IsSatisfied`, `Unsatisfied`. |
+| `DependencyResolution` | `Dependency`, `Status`, `ResolvedPackage`, `IsSatisfied`, `Describe()`. |
+| `DependencyResolutionStatus` | `Resolved`, `NotInstalled`, `VersionTooLow`. |
+
+See [manifest dependencies](manifest-dependencies.md) for the resolution rules and divergences.
 
 ### Handlers — `MsixCore.PackageStore.Handlers`
 

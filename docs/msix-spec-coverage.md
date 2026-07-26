@@ -25,24 +25,23 @@ the public read path; **no** = not implemented.
 | Area | yes | partial | no | rows |
 | --- | --- | --- | --- | --- |
 | Container / OPC | 5 | 2 | 1 | 8 |
-| Manifest (AppxManifest.xml) | 7 | 2 | 7 | 16 |
+| Manifest (AppxManifest.xml) | 11 | 2 | 4 | 17 |
 | Extensions | 0 | 0 | 11 | 11 |
 | Block map | 6 | 0 | 1 | 7 |
 | Signature | 9 | 1 | 4 | 14 |
 | Bundles | 4 | 0 | 2 | 6 |
-| Package kinds | 1 | 2 | 4 | 7 |
+| Package kinds | 1 | 5 | 1 | 7 |
 | Deployment | 10 | 1 | 3 | 14 |
-| **Total** | **42** | **8** | **33** | **83** |
+| **Total** | **46** | **11** | **27** | **84** |
 
 **Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
 CMS signature reading with footprint-digest binding + faithful publisher-DN matching, plus a transactional
 extract/stage/commit/rollback install/uninstall engine and loose-layout extraction. It still does
-**not** cover: manifest extensions, most manifest namespaces beyond identity/properties, framework/
-dependency resolution, non-main package kinds,
+**not** cover: manifest extensions, most manifest namespaces beyond identity/properties,
 AXPC/AXCD verification, certificate trust, or OS-integration handlers (shortcuts, ARP,
 file-type/protocol registration). Bundle applicability (architecture/language/scale/DXFL selection)
-is now implemented.
+and manifest dependency parsing + install-time resolution are now implemented.
 
 Key doc references (full list per row): MSIX package format overview
 <https://learn.microsoft.com/en-us/windows/msix/overview>; package manifest schema reference
@@ -86,10 +85,11 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 | `uap:VisualElements` (DisplayName, Description, 150/44 logos, BackgroundColor, AppListEntry) | [VisualElements](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-visualelements) | partial | `AppxManifestParser.ParseVisualElements`, `VisualElements.cs` | Missing: wide/large/small logos, `DefaultTile`, `SplashScreen`, `LockScreen`, `InitialRotationPreference`, `ShowNameOnTiles`, etc. |
 | `Application` modern attrs (uap10:TrustLevel, uap10:RuntimeBehavior, HostId/HostRuntime) | [uap10 hostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | no | — | Needed for containerized / host-runtime apps. |
 | `Dependencies/TargetDeviceFamily` (Name, MinVersion, MaxVersionTested) | [TargetDeviceFamily](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-targetdevicefamily) | yes | `AppxManifestParser.ParseTargetDeviceFamilies`, `TargetDeviceFamily.cs` | All three attributes parsed. |
-| `Dependencies/PackageDependency` (framework refs: Name, MinVersion, Publisher) | [PackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-packagedependency) | no | — | Framework dependency graph not modeled; blocks framework resolution at install. |
-| `Dependencies/uap4:MainPackageDependency` (optional/modification) | [MainPackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap4-mainpackagedependency) | no | — | Needed to relate optional/modification packages to their main package. |
-| `Dependencies/uap10:HostRuntimeDependency` | [HostRuntimeDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntimedependency) | no | — | Host-runtime packages not modeled. |
-| `Resources/Resource` (language/scale/DXFL of the package itself) | [Resources element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-resources) | no | — | Package-level resource qualifiers not read (bundle-level qualifiers *are*, see §6). |
+| `Dependencies/PackageDependency` (framework refs: Name, MinVersion, Publisher, MaxMajorVersionTested) | [PackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-packagedependency) | yes | `AppxManifestParser.ParsePackageDependencies`, `PackageDependency.cs`, `DependencyResolver.cs` | Parsed and resolved at install time. `MaxMajorVersionTested` is surfaced but not yet used to reject a newer major version. |
+| `Dependencies/uap3:` and `uap4:MainPackageDependency` (optional/modification) | [MainPackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap4-mainpackagedependency) | yes | `AppxManifestParser.ParsePackageDependencies` | Relationship captured and resolved; related-set install ordering is not implemented. |
+| `Dependencies/uap10:` and `uap13:HostRuntimeDependency` | [HostRuntimeDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntimedependency) | yes | `AppxManifestParser.ParsePackageDependencies` | Parsed and resolved; the host runtime is not actually used to launch anything. |
+| `Dependencies/uap5:DriverDependency`, `uap7:OSPackageDependency` | [Dependencies](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-dependencies) | no | — | Not package-to-package relationships; deliberately ignored. |
+| `Resources/Resource` (language/scale/DXFL of the package itself) | [Resources element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-resources) | yes | `AppxManifestParser.ParseResources`, `AppxManifest.Resources` | Language, scale, and DXFL qualifiers parsed. |
 | Build metadata (`build:Metadata`/`metadata:Item`) | [Package manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/schema-root) | no | — | Toolchain provenance not surfaced. |
 
 ---
@@ -186,11 +186,11 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
 | Main / application package | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixPackage.cs` | The primary supported case. |
-| Framework package | [Framework packages](https://learn.microsoft.com/en-us/windows/msix/framework-packages/framework-packages-overview) | partial | `AppxManifest.IsFramework` | Flag detected, but there is no framework resolution, sharing, or dependency install. |
-| Resource package | [Resource packages](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system) | partial | `PackageIdentity.ResourceId` | Identity `ResourceId` parsed; no resource-package role handling or applicability. |
-| Optional package | [Optional packages](https://learn.microsoft.com/en-us/windows/msix/package/optional-packages) | no | — | No `MainPackageDependency`, no related-set handling. |
-| Modification package | [Modification packages](https://learn.microsoft.com/en-us/windows/msix/modification-package-authoring/modification-package) | no | — | Not modeled. |
-| Host runtime package | [uap10:HostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | no | — | Not modeled. |
+| Framework package | [Framework packages](https://learn.microsoft.com/en-us/windows/msix/framework-packages/framework-packages-overview) | partial | `AppxManifest.IsFramework`, `DependencyResolver.cs` | Flag detected and framework dependencies are resolved against the store at install time; there is no framework sharing or automatic acquisition. |
+| Resource package | [Resource packages](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system) | partial | `PackageIdentity.ResourceId`, `BundleApplicability.cs` | Identity `ResourceId` parsed and bundle-level resource applicability implemented; no resource-package role handling at install. |
+| Optional package | [Optional packages](https://learn.microsoft.com/en-us/windows/msix/package/optional-packages) | partial | `PackageDependency.cs` | `MainPackageDependency` parsed and resolved; no related-set handling or install ordering. |
+| Modification package | [Modification packages](https://learn.microsoft.com/en-us/windows/msix/modification-package-authoring/modification-package) | partial | `PackageDependency.cs` | The main-package relationship is parsed and resolved; nothing applies the modification at runtime. |
+| Host runtime package | [uap10:HostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | partial | `PackageDependency.cs` | `HostRuntimeDependency` parsed and resolved; the `uap10:HostRuntime` *declaration* side and activation are not modeled. |
 | Sparse / external-location package | [Grant identity to non-packaged apps (sparse)](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps) | no | — | `AllowExternalContent` / external location not handled. |
 
 ---
