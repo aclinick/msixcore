@@ -179,12 +179,13 @@ follows documented Windows behaviour rather than porting upstream. The divergenc
 - **TC-P1-2c:** No applicable architecture → assert a clear "no applicable package" error
   (`no_applicable_package`), naming the architectures the bundle does carry.
 
-### P1-3. Manifest dependencies (framework / main / host runtime)
-**Gap:** Only `TargetDeviceFamily` is parsed; `PackageDependency`, `uap4:MainPackageDependency`, and
-`uap10:HostRuntimeDependency` are not. Ref:
+### P1-3. Manifest dependencies (framework / main / host runtime) — **implemented**
+**Was:** Only `TargetDeviceFamily` was parsed; `PackageDependency`, `uap4:MainPackageDependency`, and
+`uap10:HostRuntimeDependency` were not. Ref:
 [PackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-packagedependency).
+See [`docs/manifest-dependencies.md`](manifest-dependencies.md).
 
-**Test cases:**
+**Test cases (regression — passing):**
 - **TC-P1-3a:** Manifest with `PackageDependency Name=Microsoft.VCLibs... MinVersion=... Publisher=...`;
   assert all three fields are parsed into a dependency model.
 - **TC-P1-3b:** Modification package manifest with `uap4:MainPackageDependency`; assert the main-package

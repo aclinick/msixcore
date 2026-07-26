@@ -108,8 +108,13 @@ Display name    : Contoso My App
 Publisher       : Contoso Ltd
 Signed          : False
 Capabilities    : internetClient, runFullTrust
+Dependencies    :
+  framework   Microsoft.VCLibs.140.00 >= 14.0.30704.0
 Block map       : 2 files (Sha256)
 ```
+
+The `Dependencies` section is printed only when the package declares any. See
+[manifest dependencies](manifest-dependencies.md).
 
 ### JSON output
 
@@ -126,6 +131,15 @@ $ dotnet $DLL inspect ./Contoso.MyApp --json
   "Capabilities": [
     "internetClient",
     "runFullTrust"
+  ],
+  "Dependencies": [
+    {
+      "Kind": "framework",
+      "Name": "Microsoft.VCLibs.140.00",
+      "Publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "MinVersion": "14.0.30704.0",
+      "IsOptional": false
+    }
   ],
   "IsSigned": false,
   "BlockMapFileCount": 2,

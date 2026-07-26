@@ -1,5 +1,6 @@
 using MsixCore.Packaging;
 using MsixCore.Packaging.Integrity;
+using MsixCore.Packaging.Manifest;
 
 namespace MsixCore.PackageStore;
 
@@ -58,9 +59,22 @@ public sealed class PackageManager : IPackageManager
             response.Report(InstallationStep.GetPackageInformation, 5f, "Reading package information.");
 
             // The package (and its underlying file handle) is fully released before commit/complete so
-            // callers awaiting Completion never race with the still-open source file.
+            // callers awaiting Completion never race with the still-open source file. The manifest is
+            // an immutable record, so it outlives the package it came from.
+            AppxManifest manifest;
             using (MsixPackage package = MsixPackage.Open(packageFilePath))
             {
+                manifest = package.Manifest;
+                response.Token.ThrowIfCancellationRequested();
+
+                // Resolved before extraction so an unsatisfiable package fails fast, without having
+                // written a staging tree that would only be thrown away.
+                if (!options.HasFlag(DeploymentOptions.SkipDependencyCheck))
+                {
+                    response.Report(InstallationStep.GetPackageInformation, 8f, "Resolving dependencies.");
+                    EnsureDependenciesSatisfied(manifest);
+                }
+
                 response.Token.ThrowIfCancellationRequested();
                 response.Report(InstallationStep.Extraction, 10f, "Extracting package payload.");
                 staging = _store.CreateStagingLocation();
@@ -90,6 +104,17 @@ public sealed class PackageManager : IPackageManager
                     ? "Skipping OS integration (ExtractOnly)."
                     : "Registering package.");
 
+            // Re-checked immediately before commit. Extraction is long, and a concurrent
+            // RemovePackage could have deleted a dependency that resolved a moment ago. This narrows
+            // the window to the gap before Commit takes the store lock rather than closing it: fully
+            // closing it needs dependency-aware removal (a package must not be removable while
+            // something depends on it), which is tracked as future work in
+            // docs/manifest-dependencies.md.
+            if (!options.HasFlag(DeploymentOptions.SkipDependencyCheck))
+            {
+                EnsureDependenciesSatisfied(manifest);
+            }
+
             // OS-integration handlers (shortcuts, associations, etc.) land in a later Windows phase.
             _store.Commit(staging, packageInfo, options);
             staging = null;
@@ -101,6 +126,19 @@ public sealed class PackageManager : IPackageManager
             CleanupStaging(staging);
             response.Fail(ex);
         }
+    }
+
+    private void EnsureDependenciesSatisfied(AppxManifest manifest)
+    {
+        DependencyResolutionResult resolution = DependencyResolver.Resolve(manifest, _store);
+        if (resolution.CanDeploy)
+        {
+            return;
+        }
+
+        string detail = string.Join(" ", resolution.Blocking.Select(static item => item.Describe()));
+        throw MsixError.Format(MsixErrorCode.DependencyNotSatisfied,
+            $"Package '{manifest.Identity.PackageFullName}' cannot be installed because its dependencies are not satisfied: {detail}");
     }
 
     private void RunRemove(string packageFullName, MsixResponse response)

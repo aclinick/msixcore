@@ -180,7 +180,14 @@ public sealed class FileSystemPackageStore : IPackageStore
                 $"Package '{packageFullName}' is already installed. Use ForceReinstall to reinstall it.");
         }
 
-        InstalledPackageInfo? newest = familyPackages
+        // Only the packages this one actually supersedes are replaced. A family legitimately holds
+        // several packages at once — architecture variants, resource packages, and side-by-side
+        // framework versions — and replacing the whole family would evict them.
+        List<InstalledPackageInfo> replaced = familyPackages
+            .Where(installed => IsSupersededBy(installed, package))
+            .ToList();
+
+        InstalledPackageInfo? newest = replaced
             .OrderByDescending(static installed => installed.Identity.Version)
             .ThenBy(static installed => installed.Identity.PackageFullName, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
@@ -199,7 +206,7 @@ public sealed class FileSystemPackageStore : IPackageStore
             RecoveryMode = CommitRecoveryMode.RollForward,
             StagingRelativePath = Path.GetRelativePath(_root, stagingLocation),
             DestinationName = Path.GetFileName(destination),
-            Backups = familyPackages.Select(installed => new CommitBackup
+            Backups = replaced.Select(installed => new CommitBackup
             {
                 OriginalName = Path.GetFileName(installed.InstalledLocation),
                 BackupName = "." + Path.GetFileName(installed.InstalledLocation)
@@ -756,6 +763,46 @@ public sealed class FileSystemPackageStore : IPackageStore
                 yield return info;
             }
         }
+    }
+
+    /// <summary>
+    /// Whether committing <paramref name="incoming"/> replaces the already-installed
+    /// <paramref name="installed"/> package from the same family.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A package family is not always a single slot. Resource packages sit alongside the main
+    /// package, and frameworks are kept side by side across <em>both</em> architecture and version:
+    /// an x86 app and an x64 app on one machine each need their own build of
+    /// <c>Microsoft.VCLibs</c>, and each app binds to the specific <c>MinVersion</c> it declared, so
+    /// a newer framework must not evict the older one an installed app resolved against.
+    /// </para>
+    /// <para>
+    /// An ordinary app family <em>is</em> a single slot. Architecture is deliberately not part of the
+    /// test for non-frameworks: installing the x64 build of an app replaces the x86 build already
+    /// installed, and remains subject to the downgrade guard. Treating those as coexisting would let
+    /// a cross-architecture install silently bypass both replacement and the downgrade policy.
+    /// </para>
+    /// </remarks>
+    private static bool IsSupersededBy(InstalledPackageInfo installed, InstalledPackageInfo incoming)
+    {
+        // Resource packages are distinguished from the main package by resource id alone, so they
+        // never supersede one another regardless of role.
+        if (!string.Equals(
+                installed.Identity.ResourceId,
+                incoming.Identity.ResourceId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (installed.IsFramework || incoming.IsFramework)
+        {
+            return installed.Identity.Architecture == incoming.Identity.Architecture
+                && installed.Identity.Version == incoming.Identity.Version;
+        }
+
+        return true;
     }
 
     private static InstalledPackageInfo? ReadInfoForCommit(string directory)

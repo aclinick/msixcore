@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using MsixCore.Packaging;
+using MsixCore.Packaging.Manifest;
 
 namespace MsixKit;
 
@@ -106,6 +107,23 @@ internal static class InspectCommand
             DisplayName = package.DisplayName,
             PublisherDisplayName = package.PublisherDisplayName,
             Capabilities = package.Capabilities,
+            Dependencies = package.Manifest.PackageDependencies
+                .Select(static dependency => new DependencyReport
+                {
+                    Kind = dependency.Kind switch
+                    {
+                        PackageDependencyKind.Framework => "framework",
+                        PackageDependencyKind.MainPackage => "mainPackage",
+                        PackageDependencyKind.HostRuntime => "hostRuntime",
+                        _ => "unknown",
+                    },
+                    Name = dependency.Name,
+                    Publisher = dependency.Publisher,
+                    MinVersion = dependency.MinVersion?.ToString(),
+                    MaxMajorVersionTested = dependency.MaxMajorVersionTested,
+                    IsOptional = dependency.IsOptional,
+                })
+                .ToList(),
             IsSigned = package.IsSigned,
             BlockMapFileCount = blockMapFiles,
             BlockMapHashMethod = hashMethod,
@@ -124,6 +142,17 @@ internal static class InspectCommand
         o.WriteLine($"Signed          : {r.IsSigned}");
         string capabilities = r.Capabilities.Count == 0 ? "(none)" : string.Join(", ", r.Capabilities);
         o.WriteLine($"Capabilities    : {capabilities}");
+        if (r.Dependencies.Count > 0)
+        {
+            o.WriteLine("Dependencies    :");
+            foreach (DependencyReport dependency in r.Dependencies)
+            {
+                string version = dependency.MinVersion is null ? "" : $" >= {dependency.MinVersion}";
+                string optional = dependency.IsOptional ? " (optional)" : "";
+                o.WriteLine($"  {dependency.Kind,-11} {dependency.Name}{version}{optional}");
+            }
+        }
+
         if (r.BlockMapFileCount is int count)
         {
             string files = count.ToString(CultureInfo.InvariantCulture);
