@@ -36,6 +36,13 @@ public class WindowsSdkToolsTests
         {
             Assert.DoesNotContain("x64", architectures);
         }
+
+        // x64 emulation on ARM64 requires Windows 11.
+        if (RuntimeInformation.OSArchitecture == Architecture.Arm64
+            && !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            Assert.DoesNotContain("x64", architectures);
+        }
     }
 
     [Fact]

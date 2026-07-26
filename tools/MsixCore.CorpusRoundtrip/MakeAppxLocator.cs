@@ -57,10 +57,16 @@ public sealed class MakeAppxLocator
     }
 
     /// <summary>The SDK bin architectures this host can execute, best first.</summary>
+    /// <remarks>
+    /// Windows on ARM64 emulates x86 on every version, but x64 emulation arrived in Windows 11
+    /// (build 22000). Listing x64 on Windows 10 ARM64 would recreate the very failure this ranking
+    /// exists to avoid.
+    /// </remarks>
     internal static string[] ExecutableArchitectures() => RuntimeInformation.OSArchitecture switch
     {
-        // Windows on ARM64 emulates both x64 and x86.
-        Architecture.Arm64 => ["arm64", "x64", "x86"],
+        Architecture.Arm64 when OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000) =>
+            ["arm64", "x64", "x86"],
+        Architecture.Arm64 => ["arm64", "x86"],
         Architecture.X64 => ["x64", "x86"],
         Architecture.X86 => ["x86"],
         Architecture.Arm => ["arm", "x86"],
