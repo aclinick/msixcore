@@ -249,7 +249,9 @@ type/namespace.
 `ShowNameOnTiles`), `SplashScreen`, `LockScreen`, and `InitialRotationPreferences`.
 `AppxManifest.DeclaredCapabilities` categorizes every capability by the namespace it was declared
 with (`ManifestCapability` + `CapabilityKind`), and `msixkit inspect` annotates gated capabilities in
-both text and JSON. `AppxManifest.Capabilities` is unchanged — still the flat, de-duplicated names.
+both text and JSON. `AppxManifest.Capabilities` keeps its shape — the flat, de-duplicated names in
+document order — with one intentional behaviour change: a recognised capability element that declares
+no `Name` is now rejected instead of silently ignored.
 
 **Test cases (all covered by `VisualElementsAndCapabilityTests` / `InspectCapabilityTests`):**
 - **TC-P1-6a:** Manifest with wide/large/small logos, `DefaultTile`, `SplashScreen`; assert each parsed.

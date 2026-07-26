@@ -29,10 +29,11 @@ public static partial class AppxManifestParser
     /// <remarks>
     /// Unlike the rest of the parser, this cannot be namespace-blind: MSIX carries the
     /// general/restricted/Windows distinction purely in the namespace of the declaring element, so
-    /// <c>rescap:Capability</c> and <c>uap:Capability</c> must be told apart. Element <em>names</em>
-    /// are still matched by local name, so a capability from a schema revision this library has not
-    /// seen is still captured — with <see cref="CapabilityKind.Unknown"/> and its namespace intact —
-    /// rather than dropped.
+    /// <c>rescap:Capability</c> and <c>uap:Capability</c> must be told apart. Nothing is dropped for
+    /// being unfamiliar, though: an element this library does not recognise is still reported, with
+    /// <see cref="CapabilityKind.Unknown"/> and its namespace intact, as long as it carries a
+    /// <c>Name</c>. Only the recognised element names are held to the schema's requirement that
+    /// <c>Name</c> be present.
     /// </remarks>
     private static List<ManifestCapability> ParseCapabilities(XElement root)
     {
@@ -45,22 +46,26 @@ public static partial class AppxManifestParser
         var result = new List<ManifestCapability>();
         foreach (XElement child in capabilities.Elements())
         {
-            // Anything that is not a capability declaration is ignored: the container's content is
-            // fixed by the schema, so an unrecognised element name can only come from a newer
-            // revision, and rejecting it would fail packages that are perfectly valid.
-            if (!IsCapabilityElement(child.Name.LocalName))
+            bool recognised = IsCapabilityElement(child.Name.LocalName);
+
+            // An unrecognised element can only come from a schema revision this library has not
+            // seen. It is reported when it looks like a capability (it has a Name) and ignored
+            // otherwise, exactly as the flat name list has always behaved -- rejecting it would fail
+            // packages that are perfectly valid against a newer schema.
+            string? name = recognised
+                ? RequiredAttribute(child, "Name")
+                : NullIfEmpty(child.AttributeValue("Name")?.Trim());
+            if (name is null)
             {
                 continue;
             }
 
-            string name = RequiredAttribute(child, "Name");
-            CapabilityKind kind = ClassifyCapability(child);
             result.Add(new ManifestCapability
             {
                 Name = name,
-                Kind = kind,
+                Kind = ClassifyCapability(child),
                 Namespace = child.Name.NamespaceName,
-                Devices = kind == CapabilityKind.Device ? ParseCapabilityDevices(child) : [],
+                Devices = child.Name.LocalName == "DeviceCapability" ? ParseCapabilityDevices(child) : [],
             });
         }
 
@@ -75,15 +80,22 @@ public static partial class AppxManifestParser
 
     private static CapabilityKind ClassifyCapability(XElement element)
     {
+        string ns = element.Name.NamespaceName;
+
+        // The element name alone is not enough: an element that merely borrows a familiar local name
+        // from a foreign namespace must not inherit its semantics.
         switch (element.Name.LocalName)
         {
             case "DeviceCapability":
-                return CapabilityKind.Device;
+                return ns == FoundationNamespace ? CapabilityKind.Device : CapabilityKind.Unknown;
             case "CustomCapability":
-                return CapabilityKind.Custom;
+                return IsRevisionOf(ns, UapNamespace) ? CapabilityKind.Custom : CapabilityKind.Unknown;
+            case "Capability":
+                break;
+            default:
+                return CapabilityKind.Unknown;
         }
 
-        string ns = element.Name.NamespaceName;
         if (ns == RestrictedCapabilitiesNamespace)
         {
             return CapabilityKind.Restricted;
@@ -140,12 +152,21 @@ public static partial class AppxManifestParser
         var devices = new List<CapabilityDevice>();
         foreach (XElement device in element.ElementsByLocalName("Device"))
         {
+            List<string> functions = device.ElementsByLocalName("Function")
+                .Select(static function => RequiredAttribute(function, "Type"))
+                .ToList();
+
+            // The schema requires 1..100 Function children on every Device.
+            if (functions.Count == 0)
+            {
+                throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                    "A 'Device' element must declare at least one 'Function' child.");
+            }
+
             devices.Add(new CapabilityDevice
             {
                 Id = RequiredAttribute(device, "Id"),
-                Functions = device.ElementsByLocalName("Function")
-                    .Select(static function => RequiredAttribute(function, "Type"))
-                    .ToList(),
+                Functions = functions,
             });
         }
 

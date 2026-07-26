@@ -179,7 +179,10 @@ $ dotnet $DLL inspect ./Contoso.MyApp --json
 has no readable block map (null values are not serialized).
 
 `Capabilities` remains the flat, de-duplicated list of names it has always been; `DeclaredCapabilities`
-is the additive, categorized view, in document order and without de-duplication.
+is the additive, categorized view, in document order and without de-duplication. One behaviour did
+change: a recognised capability element with no `Name` is now a hard error rather than being silently
+ignored. An element the parser does not recognise is still reported when it carries a `Name`, and
+still ignored when it does not.
 
 ## `validate`
 

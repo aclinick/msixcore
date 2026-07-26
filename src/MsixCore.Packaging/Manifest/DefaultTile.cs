@@ -28,8 +28,9 @@ public sealed record DefaultTile
     /// <c>wide310x150Logo</c>, or <c>square310x310Logo</c>).
     /// </summary>
     /// <remarks>
-    /// An empty list means <c>ShowNameOnTiles</c> was absent. The schema requires at least one
-    /// <c>ShowOn</c> when the element is present, so an empty list is never ambiguous.
+    /// An empty list means <c>ShowNameOnTiles</c> was absent: the schema requires at least one
+    /// <c>ShowOn</c> when the element is present, and a container that declares none is rejected, so
+    /// an empty list is never ambiguous.
     /// </remarks>
     public IReadOnlyList<string> ShowNameOnTiles { get; init; } = [];
 }

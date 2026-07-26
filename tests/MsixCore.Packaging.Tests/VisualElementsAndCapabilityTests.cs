@@ -210,6 +210,59 @@ public class VisualElementsAndCapabilityTests
         Assert.Contains("Notification", error.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The schema requires 1..4 <c>ShowOn</c> children, so an empty container is malformed — and
+    /// accepting it would make the empty list mean both "absent" and "declared empty".
+    /// </summary>
+    [Fact]
+    public void Parse_AnEmptyShowNameOnTiles_Fails()
+    {
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => ParseVisuals(
+            """
+            <uap:VisualElements DisplayName="Contoso" Description="An app" BackgroundColor="transparent"
+                                Square150x150Logo="a.png" Square44x44Logo="b.png">
+              <uap:DefaultTile ShortName="Contoso">
+                <uap:ShowNameOnTiles />
+              </uap:DefaultTile>
+            </uap:VisualElements>
+            """));
+
+        Assert.Contains("ShowOn", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The schema likewise requires 1..4 <c>Rotation</c> children.</summary>
+    [Fact]
+    public void Parse_AnEmptyInitialRotationPreference_Fails()
+    {
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => ParseVisuals(
+            """
+            <uap:VisualElements DisplayName="Contoso" Description="An app" BackgroundColor="transparent"
+                                Square150x150Logo="a.png" Square44x44Logo="b.png">
+              <uap:InitialRotationPreference />
+            </uap:VisualElements>
+            """));
+
+        Assert.Contains("Rotation", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A <c>DefaultTile</c> that declares no <c>ShowNameOnTiles</c> is perfectly valid, so the empty
+    /// list must not be conflated with the rejected empty container above.
+    /// </summary>
+    [Fact]
+    public void Parse_ADefaultTileWithoutShowNameOnTiles_YieldsAnEmptyList()
+    {
+        VisualElements visuals = ParseVisuals(
+            """
+            <uap:VisualElements DisplayName="Contoso" Description="An app" BackgroundColor="transparent"
+                                Square150x150Logo="a.png" Square44x44Logo="b.png">
+              <uap:DefaultTile ShortName="Contoso" />
+            </uap:VisualElements>
+            """);
+
+        Assert.Empty(Assert.IsType<DefaultTile>(visuals.DefaultTile).ShowNameOnTiles);
+    }
+
     // TC-P1-6b
     [Fact]
     public void Parse_Capabilities_CategorizesEachDeclarationByNamespace()
@@ -321,7 +374,9 @@ public class VisualElementsAndCapabilityTests
                 <Function Type="classId:ff * *" />
                 <Function Type="name:vendorSpecific" />
               </Device>
-              <Device Id="any" />
+              <Device Id="any">
+                <Function Type="name:vendorSpecific" />
+              </Device>
             </DeviceCapability>
             """));
 
@@ -336,8 +391,35 @@ public class VisualElementsAndCapabilityTests
             device =>
             {
                 Assert.Equal("any", device.Id);
-                Assert.Empty(device.Functions);
+                Assert.Equal(["name:vendorSpecific"], device.Functions);
             });
+    }
+
+    /// <summary>
+    /// A <c>DeviceCapability</c> may constrain no devices at all; only a declared <c>Device</c> must
+    /// name at least one function.
+    /// </summary>
+    [Fact]
+    public void Parse_AnUnconstrainedDeviceCapability_HasNoDevices()
+    {
+        ManifestCapability capability = Assert.Single(
+            ParseCapabilities("""<DeviceCapability Name="location" />"""));
+
+        Assert.Equal(CapabilityKind.Device, capability.Kind);
+        Assert.Empty(capability.Devices);
+    }
+
+    [Fact]
+    public void Parse_ADeviceWithoutAFunction_Fails()
+    {
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => ParseCapabilities(
+            """
+            <DeviceCapability Name="usb">
+              <Device Id="any" />
+            </DeviceCapability>
+            """));
+
+        Assert.Contains("Function", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>Only a device capability carries devices; the others must not fabricate them.</summary>
@@ -350,6 +432,39 @@ public class VisualElementsAndCapabilityTests
         Assert.Empty(capability.Devices);
     }
 
+    /// <summary>
+    /// Namespace matching must not be a naive prefix test: a namespace that merely starts with the
+    /// UAP one, or whose revision segment is not purely numeric, is a different namespace.
+    /// </summary>
+    [Theory]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10x")]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10/7extra")]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10/")]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/uap/windows10/7/8")]
+    [InlineData("http://schemas.microsoft.com/appx/manifest/foundation/windows10/somethingelse")]
+    public void Parse_ACapabilityFromALookalikeNamespace_IsUnknown(string ns)
+    {
+        string manifest =
+            $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                     xmlns:look="{ns}">
+              <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.0.0.0" ProcessorArchitecture="x64" />
+              <Properties>
+                <DisplayName>App</DisplayName>
+                <PublisherDisplayName>Contoso</PublisherDisplayName>
+              </Properties>
+              <Capabilities>
+                <look:Capability Name="somethingNew" />
+              </Capabilities>
+            </Package>
+            """;
+
+        AppxManifest parsed = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(manifest)));
+
+        Assert.Equal(CapabilityKind.Unknown, Assert.Single(parsed.DeclaredCapabilities).Kind);
+    }
+
     [Fact]
     public void Parse_ACapabilityWithoutAName_Fails()
     {
@@ -357,6 +472,85 @@ public class VisualElementsAndCapabilityTests
             () => ParseCapabilities("<Capability />"));
 
         Assert.Contains("Name", error.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A borrowed local name from a foreign namespace must not inherit that name's semantics: only
+    /// the foundation namespace declares <c>DeviceCapability</c>, and only <c>uap</c> declares
+    /// <c>CustomCapability</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("DeviceCapability")]
+    [InlineData("CustomCapability")]
+    public void Parse_AFamiliarLocalNameInAForeignNamespace_IsUnknown(string localName)
+    {
+        string manifest =
+            $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                     xmlns:future="http://schemas.contoso.com/appx/manifest/future/windows10">
+              <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.0.0.0" ProcessorArchitecture="x64" />
+              <Properties>
+                <DisplayName>App</DisplayName>
+                <PublisherDisplayName>Contoso</PublisherDisplayName>
+              </Properties>
+              <Capabilities>
+                <future:{localName} Name="somethingNew" />
+              </Capabilities>
+            </Package>
+            """;
+
+        AppxManifest parsed = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(manifest)));
+
+        Assert.Equal(CapabilityKind.Unknown, Assert.Single(parsed.DeclaredCapabilities).Kind);
+    }
+
+    /// <summary>
+    /// A <c>uap4:CustomCapability</c> is the only custom capability the schema declares today, but a
+    /// later numbered revision must still classify as custom rather than unknown.
+    /// </summary>
+    [Fact]
+    public void Parse_CustomCapability_IsCustomAcrossUapRevisions()
+    {
+        Assert.Equal(
+            CapabilityKind.Custom,
+            Assert.Single(ParseCapabilities(
+                """<uap4:CustomCapability Name="Contoso.myCustomCapability_q4tqhpwrkdchy" />""")).Kind);
+    }
+
+    /// <summary>
+    /// An element name this library does not recognise is still reported when it carries a
+    /// <c>Name</c> — the previous flat-list parser collected it, and a newer schema revision is not
+    /// a reason to under-report a package.
+    /// </summary>
+    [Fact]
+    public void Parse_AnUnrecognisedCapabilityElement_IsStillReported()
+    {
+        string manifest =
+            $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                     xmlns:future="http://schemas.contoso.com/appx/manifest/future/windows10">
+              <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.0.0.0" ProcessorArchitecture="x64" />
+              <Properties>
+                <DisplayName>App</DisplayName>
+                <PublisherDisplayName>Contoso</PublisherDisplayName>
+              </Properties>
+              <Capabilities>
+                <future:QuantumCapability Name="entangle" />
+                <future:QuantumCapability />
+              </Capabilities>
+            </Package>
+            """;
+
+        AppxManifest parsed = AppxManifestParser.Parse(new MemoryStream(Encoding.UTF8.GetBytes(manifest)));
+
+        // The nameless one is ignored rather than rejected, matching the pre-existing behaviour for
+        // an element the parser cannot identify.
+        ManifestCapability capability = Assert.Single(parsed.DeclaredCapabilities);
+        Assert.Equal("entangle", capability.Name);
+        Assert.Equal(CapabilityKind.Unknown, capability.Kind);
+        Assert.Equal(["entangle"], parsed.Capabilities);
     }
 
     /// <summary>

@@ -66,8 +66,8 @@ public sealed record ManifestCapability
     public required string Namespace { get; init; }
 
     /// <summary>
-    /// The devices constrained by a <see cref="CapabilityKind.Device"/> capability. Always empty for
-    /// other kinds, and also empty for an unconstrained <c>DeviceCapability</c>.
+    /// The devices constrained by a <c>DeviceCapability</c>. Empty for every other element, and also
+    /// empty for an unconstrained <c>DeviceCapability</c> that declares no <c>Device</c> children.
     /// </summary>
     public IReadOnlyList<CapabilityDevice> Devices { get; init; } = [];
 }

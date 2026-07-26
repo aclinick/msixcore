@@ -57,6 +57,14 @@ public static partial class AppxManifestParser
             tiles.Add(RequiredAttribute(showOn, "Tile"));
         }
 
+        // The schema requires 1..4 ShowOn children, so an empty container is malformed. Rejecting it
+        // also keeps the empty list unambiguously meaning "ShowNameOnTiles was not declared".
+        if (tiles.Count == 0)
+        {
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                "A 'ShowNameOnTiles' element must declare at least one 'ShowOn' child.");
+        }
+
         return tiles;
     }
 
@@ -101,6 +109,14 @@ public static partial class AppxManifestParser
         foreach (XElement rotation in element.ElementsByLocalName("Rotation"))
         {
             preferences.Add(RequiredAttribute(rotation, "Preference"));
+        }
+
+        // 1..4 Rotation children are required, so an empty container is malformed; rejecting it also
+        // keeps the empty list unambiguously meaning "no preference was declared".
+        if (preferences.Count == 0)
+        {
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                "An 'InitialRotationPreference' element must declare at least one 'Rotation' child.");
         }
 
         return preferences;
