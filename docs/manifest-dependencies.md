@@ -12,7 +12,7 @@ so it keeps its own model ([`TargetDeviceFamily`](../src/MsixCore.Packaging/Mani
 
 | Element | `PackageDependencyKind` | Meaning |
 |---|---|---|
-| `PackageDependency` | `Framework` | A framework or resource package needed at runtime, e.g. `Microsoft.VCLibs.140.00`. |
+| `PackageDependency` | `Framework` | A framework package needed at runtime, e.g. `Microsoft.VCLibs.140.00`. |
 | `uap3:MainPackageDependency`, `uap4:MainPackageDependency` | `MainPackage` | The package this modification package modifies. |
 | `uap10:HostRuntimeDependency`, `uap13:HostRuntimeDependency` | `HostRuntime` | The host runtime that executes a hosted app's code. |
 
