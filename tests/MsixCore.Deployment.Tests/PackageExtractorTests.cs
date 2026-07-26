@@ -169,6 +169,39 @@ public class PackageExtractorTests : IDisposable
         Assert.All(blockMap.Files, mapped => Assert.Contains(result.Files, result => result.Name == mapped.Name));
     }
 
+    [Fact]
+    public void ExtractAndVerify_DirectoryMutatedAfterOpen_RejectsBeforeCopy()
+    {
+        string packagePath = PackedMsixBuilder.Create(
+            _root,
+            "drift-source.msix",
+            extraParts: new Dictionary<string, byte[]>
+            {
+                ["Assets/Logo.png"] = "legitimate"u8.ToArray(),
+            });
+        string looseDirectory = Path.Combine(_root, "drift-loose");
+        using (MsixPackage packed = MsixPackage.Open(packagePath))
+        {
+            PackageExtractor.Extract(packed.Opc, looseDirectory);
+        }
+
+        using MsixPackage loose = MsixPackage.OpenDirectory(looseDirectory);
+        File.WriteAllText(Path.Combine(looseDirectory, "unmapped.txt"), "attacker");
+        string destination = Path.Combine(_root, "drift-output");
+
+        BlockMapVerificationResult result = PackageExtractor.ExtractAndVerify(
+            loose.Opc,
+            loose.BlockMap,
+            destination);
+
+        Assert.False(result.IsValid);
+        string driftError = Assert.Single(
+            result.CoverageErrors,
+            error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+        Assert.Contains("unmapped.txt", driftError);
+        Assert.False(Directory.Exists(destination));
+    }
+
     /// <summary>A hostile <see cref="IOpcPackage"/> that returns a traversing part name.</summary>
     private sealed class EscapingOpcPackage : IOpcPackage
     {

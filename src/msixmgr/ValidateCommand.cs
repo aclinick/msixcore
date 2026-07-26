@@ -135,7 +135,7 @@ internal static class ValidateCommand
 
                     if (!binding.IsBindingValid)
                     {
-                        errors.Add("signature: APPX indirect-data digest binding FAILED.");
+                        errors.Add($"signature: {binding.Summary}");
                     }
 
                     foreach (DigestEntryResult dr in binding.Results)

@@ -237,7 +237,8 @@ public class CliCommandTests : IDisposable
         Assert.False(report.IsValid);
         string driftError = Assert.Single(
             report.Errors,
-            error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+            error => error.Contains("evil.dll", StringComparison.Ordinal));
+        Assert.Contains("Directory drift detected", driftError);
         Assert.Contains("evil.dll", driftError);
     }
 

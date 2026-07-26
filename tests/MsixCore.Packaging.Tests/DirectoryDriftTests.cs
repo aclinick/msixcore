@@ -45,6 +45,33 @@ public sealed class DirectoryDriftTests : IDisposable
         Assert.Contains(result.CoverageErrors, error => error.Contains("Directory drift detected", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BlockMapVerifier_PublicEntryPoints_DetectPostOpenAddition(bool verifyContent)
+    {
+        string directory = CreatePackage();
+        using MsixPackage package = MsixPackage.OpenDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "unmapped.txt"), "unmapped");
+
+        IReadOnlyList<string> coverageErrors;
+        if (verifyContent)
+        {
+            BlockMapVerificationResult result = BlockMapVerifier.Verify(package.Opc, package.BlockMap);
+            Assert.False(result.IsValid);
+            coverageErrors = result.CoverageErrors;
+        }
+        else
+        {
+            coverageErrors = BlockMapVerifier.VerifyCoverage(package.Opc, package.BlockMap);
+        }
+
+        string driftError = Assert.Single(
+            coverageErrors,
+            error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+        Assert.Contains("unmapped.txt", driftError);
+    }
+
     [Fact]
     public void DetectDirectoryDrift_CaseVariantCollisionAddedAfterOpen_IsDetected()
     {

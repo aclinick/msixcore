@@ -155,6 +155,47 @@ public sealed class DirectoryOpcPackage : IOpcPackage
             new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), [], error);
     }
 
+    internal string? DetectDrift()
+    {
+        DirectoryPartEnumeration liveEnumeration;
+        try
+        {
+            liveEnumeration = EnumerateValidatedParts(_root);
+        }
+        catch (IOException ex)
+        {
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
+        }
+
+        if (liveEnumeration.Error is not null)
+        {
+            return $"{liveEnumeration.Error} The directory has been modified since the package was opened.";
+        }
+
+        var liveParts = new HashSet<string>(liveEnumeration.PartNames, StringComparer.OrdinalIgnoreCase);
+        foreach (string live in liveParts)
+        {
+            if (!_partToFullPath.ContainsKey(live))
+            {
+                return $"Part '{live}' now exists on disk but was absent when the package was opened — the directory has been modified.";
+            }
+        }
+
+        foreach (string original in _partNames)
+        {
+            if (!liveParts.Contains(original))
+            {
+                return $"Part '{original}' was present when the package was opened but is now missing from disk — the directory has been modified.";
+            }
+        }
+
+        return null;
+    }
+
     /// <inheritdoc/>
     public Stream OpenPart(string partName)
     {

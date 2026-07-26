@@ -25,7 +25,10 @@ public static class BlockMapVerifier
         OpcPartNames.CodeIntegrityCatalog,
     };
 
-    /// <summary>Verifies a package's payload against a parsed block map.</summary>
+    /// <summary>
+    /// Verifies a package's payload against a parsed block map. Directory-backed packages are also
+    /// re-enumerated so part-set drift since open invalidates the result.
+    /// </summary>
     /// <param name="package">The OPC package to read content from.</param>
     /// <param name="blockMap">The parsed block map to verify against.</param>
     /// <returns>A result describing per-file and coverage outcomes.</returns>
@@ -150,7 +153,10 @@ public static class BlockMapVerifier
         return new BlockMapFileResult { Name = file.Name, IsValid = true };
     }
 
-    /// <summary>Checks that the block map and package contain the same payload files.</summary>
+    /// <summary>
+    /// Checks that the block map and package contain the same payload files. Directory-backed
+    /// packages are re-enumerated and any drift since open is returned as a coverage error.
+    /// </summary>
     public static IReadOnlyList<string> VerifyCoverage(IOpcPackage package, BlockMap blockMap)
     {
         ArgumentNullException.ThrowIfNull(package);
@@ -211,6 +217,12 @@ public static class BlockMapVerifier
     private static List<string> CheckCoverage(IOpcPackage package, HashSet<string> mappedNames)
     {
         var errors = new List<string>();
+        if (package is DirectoryOpcPackage directoryPackage
+            && directoryPackage.DetectDrift() is string driftError)
+        {
+            errors.Add($"Directory drift detected: {driftError}");
+        }
+
         var payloadParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (string part in package.PartNames)

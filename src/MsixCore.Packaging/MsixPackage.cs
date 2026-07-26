@@ -133,18 +133,7 @@ public sealed class MsixPackage : IPackage
     public BlockMapVerificationResult VerifyBlockMap()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        BlockMapVerificationResult result = BlockMapVerifier.Verify(_opc, BlockMap);
-        string? driftError = DetectDirectoryDrift();
-        if (driftError is null)
-        {
-            return result;
-        }
-
-        return result with
-        {
-            IsValid = false,
-            CoverageErrors = [.. result.CoverageErrors, $"Directory drift detected: {driftError}"],
-        };
+        return BlockMapVerifier.Verify(_opc, BlockMap);
     }
 
     /// <summary>
@@ -230,13 +219,8 @@ public sealed class MsixPackage : IPackage
             return new IndirectDataBindingResult
             {
                 IsBindingValid = false,
-                Results = [new DigestEntryResult
-                {
-                    Tag = AppxDigestTag.Axci,
-                    Status = DigestVerificationStatus.DigestMissing,
-                    Detail = driftError,
-                }],
-                Summary = $"APPX indirect-data binding FAILED — {driftError}",
+                Results = [],
+                Summary = $"APPX indirect-data binding FAILED — directory drift detected: {driftError}",
             };
         }
 
@@ -252,13 +236,14 @@ public sealed class MsixPackage : IPackage
     /// <summary>
     /// For <see cref="DirectoryOpcPackage"/>-backed packages, compares the live part set on disk
     /// against the open-time snapshot. Returns an error message if any parts were added or
-    /// removed since open, or <see langword="null"/> if the directory is unchanged.
+    /// removed since open or the live layout fails part validation, or <see langword="null"/> if
+    /// the directory is unchanged.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Container-backed packages (<c>.msix</c>/<c>.appx</c> files opened from a file we control)
-    /// are inherently safe — the ZIP archive is a single immutable stream. This check only
-    /// applies to loose directories.
+    /// Non-directory packages have no live filesystem part set to re-enumerate, so this method
+    /// returns <see langword="null"/> for them. Mutability of a caller-supplied container
+    /// <see cref="Stream"/> is outside the scope of this directory-specific check.
     /// </para>
     /// <para>
     /// Uses <see cref="DirectoryOpcPackage.EnumerateValidatedParts"/> — the single implementation
@@ -266,8 +251,8 @@ public sealed class MsixPackage : IPackage
     /// root-containment, and duplicate checks.
     /// </para>
     /// <para>
-    /// This is a public method so that callers (including the CLI validate command) can
-    /// gate the overall validation verdict on directory integrity regardless of signature status.
+    /// This public method exposes the drift state for diagnostics. Block-map verification already
+    /// enforces the same check through <see cref="BlockMapVerifier"/>.
     /// </para>
     /// </remarks>
     /// <returns>An error message describing the drift, or <see langword="null"/> if safe.</returns>
@@ -280,55 +265,7 @@ public sealed class MsixPackage : IPackage
             return null; // Container packages: no drift possible from the archive.
         }
 
-        string root = dirPkg.RootDirectory;
-
-        DirectoryOpcPackage.DirectoryPartEnumeration liveEnumeration;
-        try
-        {
-            liveEnumeration = DirectoryOpcPackage.EnumerateValidatedParts(root);
-        }
-        catch (IOException ex)
-        {
-            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
-        }
-
-        if (liveEnumeration.Error is not null)
-        {
-            return $"{liveEnumeration.Error} The directory has been modified since the package was opened.";
-        }
-
-        var liveParts = new HashSet<string>(liveEnumeration.PartNames, StringComparer.OrdinalIgnoreCase);
-
-        // Build the open-time normalized set from PartNames.
-        var openTimeParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string part in _opc.PartNames)
-        {
-            openTimeParts.Add(OpcPackage.NormalizeLookup(part));
-        }
-
-        // Check for additions: parts on disk now that were not in the open-time snapshot.
-        foreach (string live in liveParts)
-        {
-            if (!openTimeParts.Contains(live))
-            {
-                return $"Part '{live}' now exists on disk but was absent when the package was opened — the directory has been modified.";
-            }
-        }
-
-        // Check for removals: parts in the open-time snapshot that are no longer on disk.
-        foreach (string original in openTimeParts)
-        {
-            if (!liveParts.Contains(original))
-            {
-                return $"Part '{original}' was present when the package was opened but is now missing from disk — the directory has been modified.";
-            }
-        }
-
-        return null;
+        return dirPkg.DetectDrift();
     }
 
     /// <summary>
