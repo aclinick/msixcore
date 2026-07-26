@@ -11,7 +11,7 @@
     For each configuration it records the total published output size and the size of the
     key assemblies, then writes a Markdown summary to bench/size-report.md.
 
-    A comparison against the original C++ MSIX Core (msixkit.exe / MsixCore.dll) is a FUTURE
+    A comparison against the original C++ MSIX Core (msixmgr.exe / MsixCore.dll) is a FUTURE
     step: those binaries are not part of this repository. The intended methodology is documented
     in the generated report.
 
@@ -169,10 +169,10 @@ foreach ($r in $results) {
 
 [void]$sb.AppendLine('## Comparison against the original C++ MSIX Core (future work)')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('The original C++ `msixkit.exe` and `MsixCore` binaries are **not** part of this')
+[void]$sb.AppendLine('The original C++ `msixmgr.exe` and `MsixCore` binaries are **not** part of this')
 [void]$sb.AppendLine('repository, so a direct size comparison cannot be produced here yet. Intended methodology:')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('1. Obtain an official release build of the C++ MSIX Core `msixkit.exe` (and its')
+[void]$sb.AppendLine('1. Obtain an official release build of the C++ MSIX Core `msixmgr.exe` (and its')
 [void]$sb.AppendLine('   dependent DLLs) for `win-x64` from the upstream `microsoft/msix-packaging` project.')
 [void]$sb.AppendLine('2. Record the on-disk size of the shipped executable + DLLs (the C++ build has no')
 [void]$sb.AppendLine('   managed runtime, so its natural analogue is the **framework-dependent** column,')

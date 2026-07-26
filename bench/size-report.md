@@ -86,10 +86,10 @@ comparison harness (`appxpackaging.dll` and `opcservices.dll`). OS DLLs are excl
 
 ## Comparison against the original C++ MSIX Core (future work)
 
-The original C++ `msixkit.exe` and `MsixCore` binaries are **not** part of this
+The original C++ `msixmgr.exe` and `MsixCore` binaries are **not** part of this
 repository, so a direct size comparison cannot be produced here yet. Intended methodology:
 
-1. Obtain an official release build of the C++ MSIX Core `msixkit.exe` (and its
+1. Obtain an official release build of the C++ MSIX Core `msixmgr.exe` (and its
    dependent DLLs) for `win-x64` from the upstream `microsoft/msix-packaging` project.
 2. Record the on-disk size of the shipped executable + DLLs (the C++ build has no
    managed runtime, so its natural analogue is the **framework-dependent** column,

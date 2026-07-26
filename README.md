@@ -1,7 +1,7 @@
 # MSIX Core (.NET)
 
 A cross-platform C# (.NET 10) port and modernization of Microsoft's
-[MSIX Core (`msixkit`)](https://github.com/microsoft/msix-packaging/tree/master/MsixCore).
+[MSIX Core (`msixmgr`)](https://github.com/microsoft/msix-packaging/tree/master/MsixCore).
 
 The original MSIX Core was a C++ downlevel installer that let older Windows
 releases (Windows 7 SP1+, Server 2012+) install MSIX packages. It was intended

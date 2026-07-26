@@ -89,7 +89,7 @@ clearly labeled emulation contrast. See
 
 ## Comparison against the original C++ MSIX Core (future work)
 
-The original C++ `msixkit.exe` / `MsixCore` binaries are **not** in this repository, so no direct
+The original C++ `msixmgr.exe` / `MsixCore` binaries are **not** in this repository, so no direct
 comparison is produced yet. The intended methodology is documented at the bottom of `size-report.md`
 and, for runtime, would re-run the same logical operations (open, verify, extract) against the C++
-`msixkit` on identical synthesized packages and identical hardware.
+`msixmgr` on identical synthesized packages and identical hardware.

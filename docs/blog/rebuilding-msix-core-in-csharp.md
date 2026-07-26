@@ -102,16 +102,16 @@ Error: 0x8bad0002
 
 That's the API surface. Good luck parsing that in a pipeline.
 
-The Windows-only `msixkit` from MsixCore is a different shape but the same era:
+The Windows-only `msixmgr` from MsixCore is a different shape but the same era:
 
 ```text
-msixkit -AddPackage <path> [-sourceApplicationId] [-correlationId]
-msixkit -RemovePackage <fullName>
-msixkit -FindPackage <fullName>
-msixkit -Unpack -packagePath <p> -destination <d> [-applyACLs] [-validateSignature]
-               [-create] [-rootDirectory] [-fileType] [-vhdSize]
-msixkit -ApplyACLs -packagePath <p>
-msixkit -MountImage -imagePath <p>
+msixmgr -AddPackage <path> [-sourceApplicationId] [-correlationId]
+msixmgr -RemovePackage <fullName>
+msixmgr -FindPackage <fullName>
+msixmgr -Unpack -packagePath <p> -destination <d> [-applyACLs] [-validateSignature]
+                [-create] [-rootDirectory] [-fileType] [-vhdSize]
+msixmgr -ApplyACLs -packagePath <p>
+msixmgr -MountImage -imagePath <p>
 ```
 
 Integrity checking is `-validateSignature` — **a suboption of `-Unpack`**. Verification isn't a thing
@@ -121,7 +121,7 @@ And it was never going to run anywhere else. The source includes `TraceLoggingPr
 HRESULTs, pulls help text from Win32 string resources, and contains this include:
 
 ```cpp
-#include "..\msixkitLib\GeneralUtil.hpp"
+#include "..\msixmgrLib\GeneralUtil.hpp"
 ```
 
 A backslash. That file will not compile on Linux, and it never intended to.
