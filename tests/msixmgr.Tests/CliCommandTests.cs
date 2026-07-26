@@ -204,7 +204,7 @@ public class CliCommandTests : IDisposable
         string bindingError = Assert.Single(
             report.Errors,
             error => error.StartsWith("signature: APPX indirect-data binding FAILED", StringComparison.Ordinal));
-        Assert.Contains("directory drift detected", bindingError, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("snapshot drift detected", bindingError, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
             report.Errors,
             error => error.Contains("AXCI", StringComparison.OrdinalIgnoreCase));

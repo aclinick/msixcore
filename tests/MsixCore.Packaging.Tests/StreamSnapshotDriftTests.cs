@@ -7,6 +7,9 @@ namespace MsixCore.Packaging.Tests;
 
 public sealed class StreamSnapshotDriftTests
 {
+    private const string OriginalIdentityName = "Contoso.StreamDrift";
+    private const string MutatedIdentityName = "Contoso.EvilPayload";
+
     private const string Manifest =
         """
         <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
@@ -66,6 +69,96 @@ public sealed class StreamSnapshotDriftTests
             error => error.Contains("consistency cannot be established", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void Manifest_CallerStreamPayloadMutatedAfterVerification_UsesVerifiedBytes()
+    {
+        using MemoryStream stream = CreatePackageStream();
+        using MsixPackage package = MsixPackage.Open(stream, leaveOpen: true);
+        Assert.True(package.VerifyBlockMap().IsValid);
+
+        MutateStoredManifestIdentity(stream);
+
+        Assert.Null(package.Opc.DetectSnapshotDrift());
+        Assert.Equal(OriginalIdentityName, package.Identity.Name);
+    }
+
+    [Fact]
+    public void Manifest_FilePayloadMutatedAfterVerification_UsesVerifiedBytes()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            VerifyMutableDirectoryManifestUsesCachedBytes();
+            return; // FileShare.Read blocks the file-path attack; the file branch runs on POSIX.
+        }
+
+        string path = Path.Combine(
+            Path.GetTempPath(),
+            $"msixcore-manifest-cache-{Guid.NewGuid():N}.msix");
+        using (MemoryStream source = CreatePackageStream())
+        {
+            File.WriteAllBytes(path, source.ToArray());
+        }
+
+        try
+        {
+            using MsixPackage package = MsixPackage.Open(path);
+            Assert.True(package.VerifyBlockMap().IsValid);
+
+            using (var writer = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.ReadWrite,
+                FileShare.ReadWrite | FileShare.Delete))
+            {
+                MutateStoredManifestIdentity(writer);
+            }
+
+            Assert.Null(package.Opc.DetectSnapshotDrift());
+            Assert.Equal(OriginalIdentityName, package.Identity.Name);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static void VerifyMutableDirectoryManifestUsesCachedBytes()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"msixcore-manifest-cache-fallback-{Guid.NewGuid():N}");
+        try
+        {
+            using (MemoryStream source = CreatePackageStream())
+            using (var archive = new ZipArchive(source, ZipArchiveMode.Read))
+            {
+                foreach (ZipArchiveEntry entry in archive.Entries)
+                {
+                    string target = Path.Combine(
+                        directory,
+                        entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    entry.ExtractToFile(target);
+                }
+            }
+
+            using MsixPackage package = MsixPackage.OpenDirectory(directory);
+            Assert.True(package.VerifyBlockMap().IsValid);
+            File.WriteAllText(
+                Path.Combine(directory, "AppxManifest.xml"),
+                Manifest.Replace(OriginalIdentityName, MutatedIdentityName, StringComparison.Ordinal));
+
+            Assert.Equal(OriginalIdentityName, package.Identity.Name);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     private static MemoryStream CreatePackageStream()
     {
         var payload = new Dictionary<string, byte[]>(StringComparer.Ordinal)
@@ -83,7 +176,7 @@ public sealed class StreamSnapshotDriftTests
         {
             foreach ((string name, byte[] content) in parts)
             {
-                using Stream entry = archive.CreateEntry(name).Open();
+                using Stream entry = archive.CreateEntry(name, CompressionLevel.NoCompression).Open();
                 entry.Write(content);
             }
         }
@@ -113,6 +206,24 @@ public sealed class StreamSnapshotDriftTests
         long originalPosition = stream.Position;
         stream.Position = 0;
         stream.Write(bytes);
+        stream.Position = originalPosition;
+    }
+
+    private static void MutateStoredManifestIdentity(Stream stream)
+    {
+        Assert.Equal(OriginalIdentityName.Length, MutatedIdentityName.Length);
+        byte[] bytes = new byte[stream.Length];
+        long originalPosition = stream.Position;
+        stream.Position = 0;
+        stream.ReadExactly(bytes);
+
+        byte[] original = Encoding.UTF8.GetBytes(OriginalIdentityName);
+        int offset = bytes.AsSpan().IndexOf(original);
+        Assert.True(offset >= 0, "The stored manifest identity must be present in the ZIP payload.");
+        Assert.Equal(-1, bytes.AsSpan(offset + original.Length).IndexOf(original));
+
+        stream.Position = offset;
+        stream.Write(Encoding.UTF8.GetBytes(MutatedIdentityName));
         stream.Position = originalPosition;
     }
 

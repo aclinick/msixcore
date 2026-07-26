@@ -40,8 +40,14 @@ public static class BlockMapVerifier
         ArgumentNullException.ThrowIfNull(blockMap);
 
         var fileResults = new List<BlockMapFileResult>(blockMap.Files.Count);
-        var mappedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        bool allValid = true;
+        var mappedNames = new HashSet<string>(
+            blockMap.Files.Select(static file => file.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Check snapshot consistency before opening any payload streams. This narrows, but cannot
+        // eliminate, the race window for mutable backing stores.
+        List<string> coverageErrors = CheckCoverage(package, mappedNames);
+        bool allValid = coverageErrors.Count == 0;
 
         // Rent a single block buffer and reuse it across every verified file. The pool may return an
         // array larger than BlockMap.BlockSize, so all reads are capped at exactly BlockMap.BlockSize.
@@ -50,7 +56,6 @@ public static class BlockMapVerifier
         {
             foreach (BlockMapFile file in blockMap.Files)
             {
-                mappedNames.Add(file.Name);
                 BlockMapFileResult result = VerifyFile(package, blockMap.HashMethod, file, buffer);
                 fileResults.Add(result);
                 allValid &= result.IsValid;
@@ -60,9 +65,6 @@ public static class BlockMapVerifier
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-
-        List<string> coverageErrors = CheckCoverage(package, mappedNames);
-        allValid &= coverageErrors.Count == 0;
 
         return new BlockMapVerificationResult
         {

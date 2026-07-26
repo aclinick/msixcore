@@ -1362,7 +1362,7 @@ public class AppxDigestBindingTests
             Assert.False(binding.IsBindingValid,
                 "Binding must FAIL: catalog appeared after open, even with same/different casing.");
             Assert.Empty(binding.Results);
-            Assert.Contains("directory drift detected", binding.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("snapshot drift detected", binding.Summary, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("AXCI", binding.Summary, StringComparison.OrdinalIgnoreCase);
         }
         finally

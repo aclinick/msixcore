@@ -13,29 +13,39 @@ namespace MsixCore.Packaging;
 /// </remarks>
 public sealed class MsixPackage : IPackage
 {
+    private static readonly HashSet<string> CachedSecurityParts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        OpcPartNames.AppxManifest,
+        OpcPartNames.AppxBlockMap,
+        OpcPartNames.ContentTypes,
+        OpcPartNames.CodeIntegrityCatalog,
+        OpcPartNames.AppxSignature,
+    };
+
     private readonly IOpcPackage _opc;
+    private readonly IOpcPackage _securityCachingOpc;
     private readonly Lazy<AppxManifest> _manifest;
     private readonly Lazy<BlockMap> _blockMap;
 
     /// <summary>
-    /// Cached raw bytes of footprint parts that are read during parsing and must be hashed
-    /// at binding time over the <em>same</em> bytes. Eliminates TOCTOU exposure on
-    /// directory-backed packages where <see cref="IOpcPackage.OpenPart"/> re-opens the live
-    /// file on each call.
+    /// Cached raw bytes of security-relevant parts that must be parsed, hashed, copied, or reported
+    /// from the <em>same</em> read. Payload files not listed in <see cref="CachedSecurityParts"/>
+    /// deliberately remain streaming to keep memory independent of package size.
     /// </summary>
-    private readonly Dictionary<string, byte[]> _footprintCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, byte[]> _securityPartCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Serializes access to <see cref="_footprintCache"/> so that concurrent calls to
-    /// <see cref="GetFootprintBytes"/> cannot both miss and both read the file (potentially
+    /// Serializes access to <see cref="_securityPartCache"/> so that concurrent calls to
+    /// <see cref="GetSecurityPartBytes"/> cannot both miss and both read the part (potentially
     /// reading different bytes at different times on a mutable directory).
     /// </summary>
-    private readonly object _footprintLock = new();
+    private readonly object _securityPartLock = new();
     private bool _disposed;
 
     private MsixPackage(IOpcPackage opc)
     {
         _opc = opc;
+        _securityCachingOpc = new SecurityPartCachingOpcPackage(this);
         _manifest = new Lazy<AppxManifest>(ReadManifest);
         _blockMap = new Lazy<BlockMap>(ReadBlockMap);
     }
@@ -46,7 +56,7 @@ public sealed class MsixPackage : IPackage
         get
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            return _opc;
+            return _securityCachingOpc;
         }
     }
 
@@ -133,7 +143,7 @@ public sealed class MsixPackage : IPackage
     public BlockMapVerificationResult VerifyBlockMap()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return BlockMapVerifier.Verify(_opc, BlockMap);
+        return BlockMapVerifier.Verify(_securityCachingOpc, BlockMap);
     }
 
     /// <summary>
@@ -151,7 +161,13 @@ public sealed class MsixPackage : IPackage
             return null;
         }
 
-        using Stream signature = _opc.OpenPart(OpcPartNames.AppxSignature);
+        byte[]? raw = GetSecurityPartBytes(OpcPartNames.AppxSignature);
+        if (raw is null)
+        {
+            return null;
+        }
+
+        using var signature = new MemoryStream(raw, writable: false);
         return PackageSignatureReader.Read(signature);
     }
 
@@ -162,27 +178,27 @@ public sealed class MsixPackage : IPackage
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>Container packages (<c>.msix</c>/<c>.appx</c>) opened from a file:</strong> the
-    /// underlying ZIP archive is opened once from a single file stream. The single-read-single-hash
-    /// guarantee is unconditional — no concurrent modification is possible.
+    /// <strong>Container packages (<c>.msix</c>/<c>.appx</c>) opened from a file:</strong> Windows
+    /// share modes block in-place writers while the handle is open. POSIX does not provide that
+    /// guarantee, so cached security-part bytes provide internal consistency but not backing-file
+    /// immutability.
     /// </para>
     /// <para>
     /// <strong>Container packages opened from a caller-supplied <see cref="Stream"/>:</strong>
-    /// the guarantee depends on the caller providing an immutable, exclusively-owned stream.
-    /// A writable, shared, or custom <see cref="Stream"/> can change underneath verification,
-    /// reducing the guarantee to best-effort — equivalent to the directory case.
+    /// central-directory metadata is checked for drift and security-relevant parts are cached on
+    /// first read. Same-length payload mutations, read races, and deceptive custom streams remain
+    /// outside that check.
     /// </para>
     /// <para>
     /// <strong>Loose directory packages:</strong> validation is best-effort against a
-    /// concurrently-writable directory. The implementation caches footprint bytes on first read
+    /// concurrently-writable directory. The implementation caches security-part bytes on first read
     /// and detects parts that appear after open, but a sufficiently-privileged attacker with
     /// write access to the directory <em>before</em> the package is opened can still present
     /// crafted content. For a hard security boundary, validate container files, not directories.
     /// </para>
     /// <para>
-    /// For <c>AppxBlockMap.xml</c>, binding hashes the exact bytes that were read and parsed
-    /// by the block-map parser. <c>[Content_Types].xml</c> and <c>AppxMetadata/CodeIntegrity.cat</c>
-    /// are read once at binding time and cached.
+    /// Manifest, signature, block map, content-types, and code-integrity-catalog bytes all use one
+    /// cache choke point. General payload remains streaming.
     /// </para>
     /// </remarks>
     /// <param name="signature">
@@ -220,15 +236,15 @@ public sealed class MsixPackage : IPackage
             {
                 IsBindingValid = false,
                 Results = [],
-                Summary = $"APPX indirect-data binding FAILED — directory drift detected: {driftError}",
+                Summary = $"APPX indirect-data binding FAILED — snapshot drift detected: {driftError}",
             };
         }
 
         // Build a snapshot dictionary from cached footprint bytes.
         var snapshots = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-        SnapshotFootprint(OpcPartNames.ContentTypes, snapshots);
-        SnapshotFootprint(OpcPartNames.AppxBlockMap, snapshots);
-        SnapshotFootprint(OpcPartNames.CodeIntegrityCatalog, snapshots);
+        SnapshotSecurityPart(OpcPartNames.ContentTypes, snapshots);
+        SnapshotSecurityPart(OpcPartNames.AppxBlockMap, snapshots);
+        SnapshotSecurityPart(OpcPartNames.CodeIntegrityCatalog, snapshots);
 
         return AppxDigestTableVerifier.VerifyFromSnapshots(signature.DigestTable, snapshots);
     }
@@ -259,30 +275,31 @@ public sealed class MsixPackage : IPackage
     }
 
     /// <summary>
-    /// Ensures the named part's bytes are in <see cref="_footprintCache"/>, reading from
+    /// Ensures the named part's bytes are in <see cref="_securityPartCache"/>, reading from
     /// <see cref="_opc"/> only if not already cached. Returns the cached bytes. This is the
-    /// single choke-point for all footprint-part reads — every method that needs raw footprint
-    /// bytes must go through here so there is exactly one read per part per package lifetime.
-    /// Serialized by <see cref="_footprintLock"/> so concurrent callers cannot both miss and
+    /// single choke-point for all security-relevant part reads, so there is exactly one backing
+    /// read per part per package lifetime. Serialized by <see cref="_securityPartLock"/> so
+    /// concurrent callers cannot both miss and
     /// both read.
     /// </summary>
     /// <returns>The cached bytes, or <see langword="null"/> if the part does not exist.</returns>
-    private byte[]? GetFootprintBytes(string partName)
+    private byte[]? GetSecurityPartBytes(string partName)
     {
-        lock (_footprintLock)
+        string normalized = OpcPackage.NormalizeLookup(partName);
+        lock (_securityPartLock)
         {
-            if (_footprintCache.TryGetValue(partName, out byte[]? cached))
+            if (_securityPartCache.TryGetValue(normalized, out byte[]? cached))
             {
                 return cached;
             }
 
-            if (!_opc.ContainsPart(partName))
+            if (!_opc.ContainsPart(normalized))
             {
                 return null;
             }
 
-            cached = ReadPartBytesUncached(partName);
-            _footprintCache[partName] = cached;
+            cached = ReadPartBytesUncached(normalized);
+            _securityPartCache[normalized] = cached;
             return cached;
         }
     }
@@ -291,9 +308,9 @@ public sealed class MsixPackage : IPackage
     /// Copies the cached bytes for <paramref name="partName"/> into <paramref name="snapshots"/>.
     /// Uses a defensive copy so the verifier cannot mutate the cache.
     /// </summary>
-    private void SnapshotFootprint(string partName, Dictionary<string, byte[]> snapshots)
+    private void SnapshotSecurityPart(string partName, Dictionary<string, byte[]> snapshots)
     {
-        byte[]? cached = GetFootprintBytes(partName);
+        byte[]? cached = GetSecurityPartBytes(partName);
         if (cached is null)
         {
             return; // Part does not exist — binding verifier handles absence.
@@ -340,28 +357,61 @@ public sealed class MsixPackage : IPackage
 
     private AppxManifest ReadManifest()
     {
-        if (!_opc.ContainsPart(OpcPartNames.AppxManifest))
+        byte[]? raw = GetSecurityPartBytes(OpcPartNames.AppxManifest);
+        if (raw is null)
         {
             throw new InvalidDataException(
                 $"The package does not contain '{OpcPartNames.AppxManifest}'.");
         }
 
-        using Stream manifestStream = _opc.OpenPart(OpcPartNames.AppxManifest);
-        return AppxManifestParser.Parse(manifestStream);
+        using var manifest = new MemoryStream(raw, writable: false);
+        return AppxManifestParser.Parse(manifest);
     }
 
     private BlockMap ReadBlockMap()
     {
         // Go through the single choke-point so the raw bytes are cached and shared with
         // binding verification — guaranteeing single-read-single-hash across the pipeline.
-        byte[]? raw = GetFootprintBytes(OpcPartNames.AppxBlockMap);
+        byte[]? raw = GetSecurityPartBytes(OpcPartNames.AppxBlockMap);
         if (raw is null)
         {
             throw new InvalidDataException(
                 $"The package does not contain '{OpcPartNames.AppxBlockMap}'.");
         }
 
-        return BlockMapParser.Parse(new MemoryStream(raw, writable: false));
+        using var blockMap = new MemoryStream(raw, writable: false);
+        return BlockMapParser.Parse(blockMap);
+    }
+
+    private sealed class SecurityPartCachingOpcPackage(MsixPackage owner) : IOpcPackage
+    {
+        public IReadOnlyCollection<string> PartNames => owner._opc.PartNames;
+
+        public string? DetectSnapshotDrift() => owner._opc.DetectSnapshotDrift();
+
+        public bool ContainsPart(string partName) => owner._opc.ContainsPart(partName);
+
+        public Stream OpenPart(string partName)
+        {
+            string normalized = OpcPackage.NormalizeLookup(partName);
+            if (!CachedSecurityParts.Contains(normalized))
+            {
+                return owner._opc.OpenPart(partName);
+            }
+
+            byte[]? cached = owner.GetSecurityPartBytes(normalized);
+            if (cached is null)
+            {
+                throw new FileNotFoundException($"Part '{partName}' was not found in the package.", partName);
+            }
+
+            return new MemoryStream(cached, writable: false);
+        }
+
+        public void Dispose()
+        {
+            owner._opc.Dispose();
+        }
     }
 
     private static MsixPackage Create(OpcPackage opc)
