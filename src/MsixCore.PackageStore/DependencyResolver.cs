@@ -68,6 +68,18 @@ public sealed record DependencyResolutionResult(IReadOnlyList<DependencyResoluti
     /// <summary>The dependencies that are not satisfied, in manifest order.</summary>
     public IReadOnlyList<DependencyResolution> Unsatisfied =>
         Resolutions.Where(static resolution => !resolution.IsSatisfied).ToList();
+
+    /// <summary>
+    /// The unsatisfied dependencies that actually block deployment — that is, excluding those
+    /// declared <c>uap6:Optional="true"</c>, which the package can run without.
+    /// </summary>
+    public IReadOnlyList<DependencyResolution> Blocking =>
+        Resolutions
+            .Where(static resolution => !resolution.IsSatisfied && !resolution.Dependency.IsOptional)
+            .ToList();
+
+    /// <summary>Whether deployment can proceed: every <em>required</em> dependency is satisfied.</summary>
+    public bool CanDeploy => Blocking.Count == 0;
 }
 
 /// <summary>

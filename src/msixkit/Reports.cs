@@ -50,6 +50,9 @@ internal sealed record DependencyReport
     public string? MinVersion { get; init; }
 
     public int? MaxMajorVersionTested { get; init; }
+
+    /// <summary>Whether the dependency is declared <c>uap6:Optional</c>.</summary>
+    public bool IsOptional { get; init; }
 }
 
 /// <summary>Machine-readable result of the <c>validate</c> verb.</summary>

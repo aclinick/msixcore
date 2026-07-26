@@ -321,7 +321,30 @@ public static class AppxManifestParser
             Publisher = publisher,
             MinVersion = minVersion,
             MaxMajorVersionTested = ParseMaxMajorVersionTested(element, elementName, name),
+            IsOptional = ParseOptionalFlag(element, elementName, name),
         };
+    }
+
+    /// <summary>
+    /// Parses <c>uap6:Optional</c>, which marks a framework dependency the package can run without.
+    /// </summary>
+    private static bool ParseOptionalFlag(XElement element, string elementName, string name)
+    {
+        string? value = NullIfEmpty(element.AttributeValue("Optional")?.Trim());
+        if (value is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return XmlConvert.ToBoolean(value);
+        }
+        catch (FormatException ex)
+        {
+            throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                $"{elementName} '{name}' has an invalid Optional value '{value}'.", ex);
+        }
     }
 
     /// <summary>

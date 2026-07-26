@@ -22,6 +22,7 @@ public class ManifestDependencyTests
               xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
               xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4"
               xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+              xmlns:uap6="http://schemas.microsoft.com/appx/manifest/uap/windows10/6"
               xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10">
               <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.0.0.0" ProcessorArchitecture="x64" />
               <Properties>
@@ -98,6 +99,40 @@ public class ManifestDependencyTests
     {
         // All three are use="required" in the foundation schema.
         InvalidDataException error = Assert.Throws<InvalidDataException>(() => Parse($"    {element}"));
+
+        Assert.Equal(MsixErrorCode.ManifestSemantics, MsixError.GetCode(error));
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    public void Parse_PackageDependency_ReadsTheOptionalFlag(string value, bool expected)
+    {
+        AppxManifest manifest = Parse(
+            $"""
+                <PackageDependency Name="Framework" MinVersion="1.0.0.0" Publisher="{Publisher}"
+                                   uap6:Optional="{value}" />
+            """);
+
+        Assert.Equal(expected, Assert.Single(manifest.PackageDependencies).IsOptional);
+    }
+
+    [Fact]
+    public void Parse_PackageDependency_DefaultsToRequired()
+    {
+        AppxManifest manifest = Parse(
+            $"""<PackageDependency Name="Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
+
+        Assert.False(Assert.Single(manifest.PackageDependencies).IsOptional);
+    }
+
+    [Fact]
+    public void Parse_PackageDependency_RejectsAnInvalidOptionalFlag()
+    {
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => Parse(
+            $"""<PackageDependency Name="Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="yes" />"""));
 
         Assert.Equal(MsixErrorCode.ManifestSemantics, MsixError.GetCode(error));
     }

@@ -40,8 +40,9 @@ kind rather than one blanket rule:
 | `Publisher` | required | optional (absent from the `uap3` form) | required |
 | `MinVersion` | required | **not present** | required |
 | `MaxMajorVersionTested` | optional | not present | not present |
+| `uap6:Optional` | optional | not present | not present |
 
-Two consequences follow:
+Three consequences follow:
 
 - `PackageDependency.MinVersion` is **nullable**, and is always `null` for a `MainPackage`. A
   modification package binds to its parent by name and publisher alone. It is not defaulted to
@@ -50,13 +51,15 @@ Two consequences follow:
 - `MaxMajorVersionTested` is a single `xs:unsignedShort` — **not** a four-part version quad like every
   other version attribute in the manifest. It is modelled as `ushort?`. Parsing it as a quad would
   reject every real manifest that declares it.
+- `uap6:Optional="true"` marks a framework the package can run without. Such a dependency is still
+  resolved and reported, but its absence does not block deployment.
 
 ## Install-time resolution
 
 [`DependencyResolver`](../src/MsixCore.PackageStore/DependencyResolver.cs) resolves each declared
 dependency against an `IPackageStore`. `PackageManager.AddPackage` runs it **before extraction**, so
 an unsatisfiable package fails fast without writing a staging tree, and reports
-`MsixErrorCode.DependencyNotSatisfied` naming every unsatisfied dependency.
+`MsixErrorCode.DependencyNotSatisfied` naming every blocking dependency.
 
 Resolution rules:
 
@@ -70,8 +73,33 @@ Resolution rules:
   package on either side matches anything, since neutral packages carry no architecture-specific code.
 - Among the surviving candidates the **highest version** decides, since a store legitimately holds
   several versions of a framework family.
+- A dependency marked `uap6:Optional="true"` is reported in `Unsatisfied` when absent but is excluded
+  from `Blocking`, so it never fails a deployment. `CanDeploy` — not `IsSatisfied` — is the gate.
 - `DeploymentOptions.SkipDependencyCheck` bypasses the whole check for staging scenarios where
   dependencies are added afterwards.
+
+### What a package family holds
+
+Resolution assumes a family can hold several installed packages at once, and the store honours that:
+[`FileSystemPackageStore`](../src/MsixCore.PackageStore/FileSystemPackageStore.cs) replaces only the
+packages a commit genuinely **supersedes** — same architecture and resource id, and for frameworks the
+same version too. Consequently:
+
+- **Architecture variants coexist.** An x86 app and an x64 app on one machine each need their own
+  build of a framework, so installing the x64 build must not evict the x86 one.
+- **Framework versions coexist.** Each app binds to the specific `MinVersion` it declared, so a newer
+  framework must not evict the older one an already-installed app resolved against.
+- **Resource packages coexist** with the main package, since they differ by resource id.
+- **App packages keep single-slot upgrade semantics**: installing a new version of a non-framework
+  package still replaces the old one, subject to `ForceReinstall`/`AllowDowngrade`.
+
+### Known race: removal is not dependency-aware
+
+Dependencies are resolved before extraction and re-checked immediately before commit, which narrows
+but does not close the window in which a concurrent `RemovePackage` deletes a dependency that has
+just resolved. Closing it properly requires **dependency-aware removal** — refusing to remove a
+package while an installed package depends on it — which Windows does and msixcore does not yet.
+Until then, `RemovePackage` can leave an installed package unsatisfiable.
 
 ## Divergences from Windows
 
@@ -79,8 +107,7 @@ Resolution rules:
   missing framework from the Store. msixcore resolves only against the store it was given and never
   acquires anything.
 - Windows enforces `MaxMajorVersionTested` when choosing among installed framework versions.
-  msixcore parses and surfaces it but does not yet use it to *reject* a newer major version.
-- The `uap17:PackageDependency` `DependencyType` distinction (install-time versus runtime) is not
+  msixcore parses and surfaces it but does not yet use it to *reject* a newer major version.- The `uap17:PackageDependency` `DependencyType` distinction (install-time versus runtime) is not
   modelled, so such a dependency is treated as required at install time.
 
 ## Surfacing

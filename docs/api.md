@@ -125,7 +125,7 @@ publisher hash used in family/full names.
 | `ManifestApplication` | record | `Id`, `Executable`, `EntryPoint`, `VisualElements`. |
 | `VisualElements` | record | `DisplayName`, `Description`, logos, `BackgroundColor`, `AppListEntry`. |
 | `TargetDeviceFamily` | record | `Name`, `MinVersion`, `MaxVersionTested`. |
-| `PackageDependency` | record | `Kind`, `Name`, `Publisher`, `MinVersion`, `MaxMajorVersionTested`. See [manifest dependencies](manifest-dependencies.md). |
+| `PackageDependency` | record | `Kind`, `Name`, `Publisher`, `MinVersion`, `MaxMajorVersionTested`, `IsOptional`. See [manifest dependencies](manifest-dependencies.md). |
 | `PackageDependencyKind` | enum | `Framework`, `MainPackage`, `HostRuntime`. |
 | `BundleManifestParser` | static class | `Parse(...)` → `BundleManifest`. |
 | `BundleManifest` | record | `Identity`, `Packages`. |
@@ -233,7 +233,7 @@ runs it before extraction unless `DeploymentOptions.SkipDependencyCheck` is set.
 | Member | Description |
 |--------|-------------|
 | `DependencyResolutionResult Resolve(AppxManifest manifest, IPackageStore store)` | One `DependencyResolution` per declared dependency, in manifest order. |
-| `DependencyResolutionResult` | `Resolutions`, `IsSatisfied`, `Unsatisfied`. |
+| `DependencyResolutionResult` | `Resolutions`, `IsSatisfied`, `Unsatisfied`, `Blocking`, `CanDeploy`. `CanDeploy` excludes `uap6:Optional` dependencies, and is the gate `AddPackage` uses. |
 | `DependencyResolution` | `Dependency`, `Status`, `ResolvedPackage`, `IsSatisfied`, `Describe()`. |
 | `DependencyResolutionStatus` | `Resolved`, `NotInstalled`, `VersionTooLow`. |
 

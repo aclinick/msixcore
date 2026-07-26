@@ -82,4 +82,14 @@ public sealed record PackageDependency
     /// <c>[MinVersion, MaxMajorVersionTested + 1)</c>.
     /// </remarks>
     public ushort? MaxMajorVersionTested { get; init; }
+
+    /// <summary>
+    /// Whether the dependency is declared optional (<c>uap6:Optional="true"</c>), meaning the
+    /// package may be installed and run without it.
+    /// </summary>
+    /// <remarks>
+    /// Only foundation <c>PackageDependency</c> carries this attribute. An optional dependency is
+    /// still reported by resolution, but its absence does not block deployment.
+    /// </remarks>
+    public bool IsOptional { get; init; }
 }

@@ -137,7 +137,8 @@ $ dotnet $DLL inspect ./Contoso.MyApp --json
       "Kind": "framework",
       "Name": "Microsoft.VCLibs.140.00",
       "Publisher": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
-      "MinVersion": "14.0.30704.0"
+      "MinVersion": "14.0.30704.0",
+      "IsOptional": false
     }
   ],
   "IsSigned": false,

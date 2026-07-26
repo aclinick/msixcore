@@ -37,12 +37,19 @@ public class DependencyResolutionTests : IDisposable
         string name,
         string version = "1.0.0.0",
         string architecture = "x64",
-        string publisher = Publisher)
+        string publisher = Publisher,
+        bool isFramework = false)
     {
         string staging = _store.CreateStagingLocation();
         File.WriteAllText(
             Path.Combine(staging, "AppxManifest.xml"),
-            LoosePackageBuilder.ManifestXml(name, publisher, version, architecture, executable: null));
+            LoosePackageBuilder.ManifestXml(
+                name,
+                publisher,
+                version,
+                architecture,
+                executable: null,
+                isFramework: isFramework));
         _store.Commit(staging, InstalledPackageInfo.ReadFromDirectory(staging), DeploymentOptions.None);
     }
 
@@ -225,9 +232,12 @@ public class DependencyResolutionTests : IDisposable
     public void Resolve_PrefersTheHighestInstalledVersion()
     {
         // A store legitimately holds several versions of a framework family; the newest one decides
-        // whether the MinVersion constraint is met.
-        GivenInstalled("Contoso.Framework", "1.0.0.0");
-        GivenInstalled("Contoso.Framework", "3.0.0.0");
+        // whether the MinVersion constraint is met. Both must really still be present — if the store
+        // evicted the older one on commit this test would pass for the wrong reason.
+        GivenInstalled("Contoso.Framework", "1.0.0.0", isFramework: true);
+        GivenInstalled("Contoso.Framework", "3.0.0.0", isFramework: true);
+        Assert.Equal(2, _store.EnumeratePackages().Count(p => p.Identity.Name == "Contoso.Framework"));
+
         AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="2.0.0.0" Publisher="{Publisher}" />"""));
 
@@ -236,6 +246,87 @@ public class DependencyResolutionTests : IDisposable
         DependencyResolution resolution = Assert.Single(result.Resolutions);
         Assert.Equal(DependencyResolutionStatus.Resolved, resolution.Status);
         Assert.Equal(new Version(3, 0, 0, 0), resolution.ResolvedPackage!.Identity.Version);
+    }
+
+    [Fact]
+    public void Store_KeepsFrameworkVersionsSideBySide()
+    {
+        // An app binds to the specific MinVersion it declared, so installing a newer framework must
+        // not evict the older one an already-installed app resolved against.
+        GivenInstalled("Contoso.Framework", "1.0.0.0", isFramework: true);
+        GivenInstalled("Contoso.Framework", "2.0.0.0", isFramework: true);
+
+        Assert.Equal(
+            [new Version(1, 0, 0, 0), new Version(2, 0, 0, 0)],
+            _store.EnumeratePackages().Select(p => p.Identity.Version).Order());
+    }
+
+    [Fact]
+    public void Store_KeepsArchitectureVariantsSideBySide()
+    {
+        // An x86 app and an x64 app on one machine each need their own build of the framework.
+        GivenInstalled("Contoso.Framework", architecture: "x64", isFramework: true);
+        GivenInstalled("Contoso.Framework", architecture: "x86", isFramework: true);
+
+        Assert.Equal(
+            [ProcessorArchitecture.X86, ProcessorArchitecture.X64],
+            _store.EnumeratePackages().Select(p => p.Identity.Architecture).Order());
+    }
+
+    [Fact]
+    public void Store_ReplacesAnOlderVersionOfANonFrameworkPackage()
+    {
+        // App packages keep the single-slot-per-family upgrade behaviour.
+        GivenInstalled("Contoso.App", "1.0.0.0");
+        GivenInstalled("Contoso.App", "2.0.0.0");
+
+        InstalledPackageInfo installed = Assert.Single(_store.EnumeratePackages());
+        Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
+    }
+
+    [Fact]
+    public async Task AddPackage_WithAMissingOptionalDependency_StillInstalls()
+    {
+        // uap6:Optional marks a framework the package can run without, so its absence must not block
+        // deployment.
+        string path = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />""");
+
+        Exception? error = await InstallAsync(path);
+
+        Assert.Null(error);
+        Assert.Contains(_store.EnumeratePackages(), p => p.Identity.Name == "Contoso.MyApp");
+    }
+
+    [Fact]
+    public void Resolve_MissingOptionalDependency_IsReportedButNotBlocking()
+    {
+        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
+            $"""
+            <PackageDependency Name="Contoso.Optional" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />
+                <PackageDependency Name="Contoso.Required" MinVersion="1.0.0.0" Publisher="{Publisher}" />
+            """));
+
+        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
+
+        // Both are unsatisfied and both are reported, but only the required one blocks.
+        Assert.False(result.IsSatisfied);
+        Assert.Equal(["Contoso.Optional", "Contoso.Required"], result.Unsatisfied.Select(r => r.Dependency.Name));
+        Assert.False(result.CanDeploy);
+        Assert.Equal(["Contoso.Required"], result.Blocking.Select(r => r.Dependency.Name));
+    }
+
+    [Fact]
+    public async Task AddPackage_WithOnlyOptionalDependenciesMissing_ReportsCanDeploy()
+    {
+        string path = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Optional" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />""");
+
+        DependencyResolutionResult result = DependencyResolver.Resolve(ManifestOf(path), _store);
+
+        Assert.False(result.IsSatisfied);
+        Assert.True(result.CanDeploy);
+        Assert.Null(await InstallAsync(path));
     }
 
     [Fact]

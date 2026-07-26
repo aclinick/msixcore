@@ -22,6 +22,16 @@ public sealed record InstalledPackageInfo
     /// <summary>The declared capabilities.</summary>
     public required IReadOnlyList<string> Capabilities { get; init; }
 
+    /// <summary>
+    /// Whether this is a framework package (<c>Properties/Framework</c>).
+    /// </summary>
+    /// <remarks>
+    /// Frameworks are installed side by side across versions — an app binds to a specific
+    /// <c>MinVersion</c>, so installing a newer framework must not evict the older one that an
+    /// already-installed app resolved against. The store uses this to decide what a commit replaces.
+    /// </remarks>
+    public bool IsFramework { get; init; }
+
     /// <summary>The package-relative logo path, if declared.</summary>
     public string? LogoPath { get; init; }
 
@@ -45,6 +55,7 @@ public sealed record InstalledPackageInfo
             DisplayName = manifest.DisplayName,
             PublisherDisplayName = manifest.PublisherDisplayName,
             Capabilities = manifest.Capabilities,
+            IsFramework = manifest.IsFramework,
             LogoPath = manifest.Logo,
             ExecutablePath = manifest.Applications
                 .FirstOrDefault(static application => !string.IsNullOrEmpty(application.Executable))

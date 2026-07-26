@@ -121,6 +121,7 @@ internal static class InspectCommand
                     Publisher = dependency.Publisher,
                     MinVersion = dependency.MinVersion?.ToString(),
                     MaxMajorVersionTested = dependency.MaxMajorVersionTested,
+                    IsOptional = dependency.IsOptional,
                 })
                 .ToList(),
             IsSigned = package.IsSigned,
@@ -147,7 +148,8 @@ internal static class InspectCommand
             foreach (DependencyReport dependency in r.Dependencies)
             {
                 string version = dependency.MinVersion is null ? "" : $" >= {dependency.MinVersion}";
-                o.WriteLine($"  {dependency.Kind,-11} {dependency.Name}{version}");
+                string optional = dependency.IsOptional ? " (optional)" : "";
+                o.WriteLine($"  {dependency.Kind,-11} {dependency.Name}{version}{optional}");
             }
         }
 

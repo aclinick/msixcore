@@ -31,7 +31,8 @@ public class InspectDependencyTests : IDisposable
             $"""
             <?xml version="1.0" encoding="utf-8"?>
             <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-                     xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4">
+                     xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4"
+                     xmlns:uap6="http://schemas.microsoft.com/appx/manifest/uap/windows10/6">
               <Identity Name="Contoso.MyApp" Publisher="{Publisher}" Version="1.2.3.4" ProcessorArchitecture="x64" />
               <Properties>
                 <DisplayName>Contoso My App</DisplayName>
@@ -92,6 +93,19 @@ public class InspectDependencyTests : IDisposable
         Assert.Equal("Microsoft.VCLibs.140.00", dependency.GetProperty("Name").GetString());
         Assert.Equal("14.0.30704.0", dependency.GetProperty("MinVersion").GetString());
         Assert.Equal(15, dependency.GetProperty("MaxMajorVersionTested").GetInt32());
+        Assert.False(dependency.GetProperty("IsOptional").GetBoolean());
+    }
+
+    [Fact]
+    public void Inspect_MarksOptionalDependencies()
+    {
+        string dir = CreatePackage(
+            $"""<PackageDependency Name="Contoso.Optional" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />""");
+
+        (int code, string output) = RunInspect(dir);
+
+        Assert.Equal(0, code);
+        Assert.Contains("framework   Contoso.Optional >= 1.0.0.0 (optional)", output, StringComparison.Ordinal);
     }
 
     [Fact]
