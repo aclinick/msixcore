@@ -6,7 +6,7 @@ this project's tools. Each skill is a folder containing a `SKILL.md` with YAML f
 
 ## `msix`
 
-Use the MSIX Core (.NET) library and the `msixmgr` CLI to **inspect**, **validate**, **unpack**, and
+Use the MSIX Core (.NET) library and the `msixkit` CLI to **inspect**, **validate**, **unpack**, and
 (on Windows) **install** MSIX/APPX packages. See [`msix/SKILL.md`](msix/SKILL.md).
 
 ## Installing a skill for GitHub Copilot CLI

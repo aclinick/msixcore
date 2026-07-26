@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
-using MsixCore.Deployment;
+using MsixCore.PackageStore;
 using MsixCore.Packaging.Authoring;
 using MsixCore.Packaging.Integrity;
 using MsixCore.Packaging.Opc;

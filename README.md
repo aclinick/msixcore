@@ -14,7 +14,7 @@ as a modern, memory-safe, **cross-platform** library and CLI.
   extraction, and unsigned authoring are pure managed code on top of
   `System.IO.Compression`, `System.Xml`, and `System.Security.Cryptography` — no
   Windows-only APIs — so it runs on Linux, macOS, and Windows alike.
-- **Linux CI validation.** `msixmgr validate` verifies block-map integrity and
+- **Linux CI validation.** `msixkit validate` verifies block-map integrity and
   signature-envelope integrity (an integrity verdict, not an authenticity
   verdict) and returns a CI-friendly exit code, so a Linux build agent can gate
   MSIX packages before they ship.
@@ -51,15 +51,15 @@ signing service) -> **validate** (MSIX Core, cross-platform integrity gate).
   (`AppxManifestParser`), block-map and signature integrity (`BlockMapVerifier`,
   `PackageSignatureReader`), identity (`PackageFullName` /
   `PackageFamilyName`), and `MsixPackageBuilder`.
-- **`MsixCore.Deployment`** — install/uninstall/query engine over an
+- **`MsixCore.PackageStore`** — install/uninstall/query engine over an
   `IPackageStore`, with cross-platform payload extraction (`PackageExtractor`) and a
   *planned* handler pipeline (interfaces defined, not yet wired).
   `PackageManager.AddPackage`/`RemovePackage` are implemented (transactional install
   with rollback); OS integration (shortcuts, registry, file-type associations) is a
   later phase.
-- **`msixmgr`** — command-line tool. `inspect`, `validate`, `unpack`, and `pack` are
+- **`msixkit`** — command-line tool. `inspect`, `validate`, `unpack`, and `pack` are
   implemented. Deployment operations remain available through the
-  `MsixCore.Deployment` library until dedicated CLI verbs are implemented.
+  `MsixCore.PackageStore` library until dedicated CLI verbs are implemented.
 
 ## Status
 
@@ -96,7 +96,7 @@ Build once, then invoke the tool via `dotnet`:
 
 ```bash
 dotnet build -c Release
-DLL=src/msixmgr/bin/Release/net10.0/msixmgr.dll
+DLL=src/msixkit/bin/Release/net10.0/msixkit.dll
 ```
 
 `<path>` may be a `.msix`/`.appx` file **or** an unpacked directory.
@@ -166,13 +166,13 @@ src/
     Opc/                      OpcPackage, DirectoryOpcPackage, OpcPartNames
     Manifest/                 AppxManifestParser, BundleManifestParser, models
     Integrity/                BlockMapVerifier, PackageSignatureReader
-  MsixCore.Deployment/        Install/uninstall/query engine + IPackageStore
+  MsixCore.PackageStore/        Install/uninstall/query engine + IPackageStore
     Handlers/                 IPackageHandler pipeline
-  msixmgr/                    CLI (inspect, validate, ...)
+  msixkit/                    CLI (inspect, validate, ...)
 tests/
   MsixCore.Packaging.Tests/
-  MsixCore.Deployment.Tests/
-  msixmgr.Tests/
+  MsixCore.PackageStore.Tests/
+  msixkit.Tests/
 .github/workflows/ci.yml      Build & test on ubuntu-latest + windows-latest
 ```
 
@@ -182,10 +182,10 @@ See the [`docs/`](docs/) folder:
 
 - [Architecture](docs/architecture.md) — layering, key types, cross-platform and
   security design.
-- [`msixmgr` CLI reference](docs/cli.md) — every verb, options, exit codes, and
+- [`msixkit` CLI reference](docs/cli.md) — every verb, options, exit codes, and
   text/JSON output.
 - [Public API reference](docs/api.md) — `MsixCore.Packaging` and
-  `MsixCore.Deployment` surface.
+  `MsixCore.PackageStore` surface.
 - [Contributing](docs/contributing.md) — build/test, conventions, and the
   branch → PR → review → merge workflow.
 

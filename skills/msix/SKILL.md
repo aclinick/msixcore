@@ -2,12 +2,12 @@
 name: msix
 description: >-
   Inspect, validate, unpack, and (on Windows) install MSIX/APPX packages with the cross-platform
-  MSIX Core (.NET 10) library and its `msixmgr` CLI. USE FOR: reading a package's identity/manifest
+  MSIX Core (.NET 10) library and its `msixkit` CLI. USE FOR: reading a package's identity/manifest
   (name, publisher, version, architecture, package family/full name, capabilities, applications);
   verifying integrity in CI (block-map hash + coverage, and CMS signature envelope) with a
   CI-friendly exit code; extracting a `.msix`/`.appx` (or loose folder) to disk without installing;
   reading signature/signer details; MSIX in Linux/macOS CI/CD pipelines; consuming the
-  `MsixCore.Packaging` / `MsixCore.Deployment` NuGet libraries from C#. Works on a package FILE or an
+  `MsixCore.Packaging` / `MsixCore.PackageStore` NuGet libraries from C#. Works on a package FILE or an
   unpacked DIRECTORY. Sign packages with `winapp sign`. DO NOT USE FOR: building/scaffolding a WinUI 3
   app or authoring `Package.appxmanifest` (use the winui skills), or creating a package from source
   with makeappx (this reads/validates/unpacks existing packages).
@@ -17,39 +17,39 @@ description: >-
 
 **MSIX Core (.NET 10)** is a memory-safe, **cross-platform** port of Microsoft's MSIX Core. It ships:
 
-- **`msixmgr`** — a CLI for inspecting, validating, and unpacking MSIX/APPX packages. The read/verify/
+- **`msixkit`** — a CLI for inspecting, validating, and unpacking MSIX/APPX packages. The read/verify/
   unpack paths run on **Windows, Linux, and macOS** (no OS integration required), so they work in CI.
 - **`MsixCore.Packaging`** — the library for opening a package (container file *or* loose folder),
   reading identity/manifest/block-map/signature, and verifying integrity.
-- **`MsixCore.Deployment`** — extraction (`PackageExtractor`) and a **cross-platform package store**
+- **`MsixCore.PackageStore`** — extraction (`PackageExtractor`) and a **cross-platform package store**
   (`PackageManager`) that stages/removes packages into a filesystem store. This is *not* Windows OS
   registration — actual OS install/integration is future work.
 
-The packaging **reads** and the `msixmgr` verbs (`inspect`/`validate`/`unpack`) each accept either a
+The packaging **reads** and the `msixkit` verbs (`inspect`/`validate`/`unpack`) each accept either a
 **package file** (`.msix`/`.appx`) or an **unpacked directory** (a loose layout containing
 `AppxManifest.xml`). `PackageManager.AddPackage` takes a package file.
 
-## Quick reference (`msixmgr` CLI)
+## Quick reference (`msixkit` CLI)
 
 | Task | Command |
 |------|---------|
-| Show identity + metadata | `msixmgr inspect <path>` |
-| Same, machine-readable | `msixmgr inspect <path> --json` |
-| Verify integrity (CI gate) | `msixmgr validate <path>` |
-| Same, machine-readable | `msixmgr validate <path> --json` |
-| Extract without installing | `msixmgr unpack <path> -Destination <dir>` |
-| Help / version | `msixmgr --help` · `msixmgr --version` |
+| Show identity + metadata | `msixkit inspect <path>` |
+| Same, machine-readable | `msixkit inspect <path> --json` |
+| Verify integrity (CI gate) | `msixkit validate <path>` |
+| Same, machine-readable | `msixkit validate <path> --json` |
+| Extract without installing | `msixkit unpack <path> -Destination <dir>` |
+| Help / version | `msixkit --help` · `msixkit --version` |
 
 `<path>` is a `.msix`/`.appx` file or an unpacked directory. **Exit codes:** `0` success/valid,
 `1` runtime error or **invalid** package, `2` usage error.
 
-Run the built CLI with `dotnet run --project src/msixmgr -- <verb> ...`, or publish it and invoke
-`msixmgr` directly.
+Run the built CLI with `dotnet run --project src/msixkit -- <verb> ...`, or publish it and invoke
+`msixkit` directly.
 
 ## `inspect` — identity & metadata
 
 ```console
-$ msixmgr inspect .\App.msix
+$ msixkit inspect .\App.msix
 Name            : Contoso.App
 Full name       : Contoso.App_1.2.3.0_x64__abcd1234efgh5
 Family name     : Contoso.App_abcd1234efgh5
@@ -72,7 +72,7 @@ envelope** integrity and that the signer subject matches the manifest `Publisher
 valid, `1` when invalid — ideal for pipeline gating.
 
 ```console
-$ msixmgr validate .\App.msix
+$ msixkit validate .\App.msix
 INTEGRITY OK      Contoso.App_1.2.3.0_x64__abcd1234efgh5
   Block map : ok (42 files)
   Signature : CMS envelope ok (binding + trust NOT verified)
@@ -87,13 +87,13 @@ INTEGRITY OK      Contoso.App_1.2.3.0_x64__abcd1234efgh5
 CI example (fail the job on an invalid package):
 
 ```yaml
-- run: dotnet run -c Release --project src/msixmgr -- validate ./artifact/App.msix
+- run: dotnet run -c Release --project src/msixkit -- validate ./artifact/App.msix
 ```
 
 ## `unpack` — extract without installing
 
 ```console
-$ msixmgr unpack .\App.msix -Destination .\out
+$ msixkit unpack .\App.msix -Destination .\out
 Extracted 45 parts to D:\work\out
 ```
 
@@ -102,12 +102,12 @@ symlink/reparse-point escapes (a malicious package cannot write outside `-Destin
 
 ## Library usage (C#)
 
-Reference `MsixCore.Packaging` (+ `MsixCore.Deployment` for extract/install).
+Reference `MsixCore.Packaging` (+ `MsixCore.PackageStore` for extract/install).
 
 ```csharp
 using MsixCore.Packaging;
 using MsixCore.Packaging.Integrity;
-using MsixCore.Deployment;
+using MsixCore.PackageStore;
 
 // Open a package file OR a loose directory:
 using MsixPackage package = MsixPackage.Open("App.msix");     // or .OpenDirectory("./loose")
@@ -138,7 +138,7 @@ PackageExtractor.Extract(package.Opc, "./out");
 **Stage / remove in a cross-platform package store** (filesystem store; not Windows OS registration):
 
 ```csharp
-var manager = new MsixCore.Deployment.PackageManager();       // default per-user file-system store
+var manager = new MsixCore.PackageStore.PackageManager();       // default per-user file-system store
 IMsixResponse add = manager.AddPackage("App.msix", DeploymentOptions.None);
 add.ProgressChanged += (_, r) => Console.WriteLine($"{r.Percentage:F0}% {r.StatusText}");
 await add.Completion;                                          // throws on failure
@@ -156,7 +156,7 @@ Sign a built package with **winapp** (the environment's signing tool), then `val
 
 ```powershell
 winapp sign .\App.msix .\devcert.pfx --password <pwd>
-msixmgr validate .\App.msix
+msixkit validate .\App.msix
 ```
 
 For generating/trusting a dev certificate and packaging a WinUI app, use the **winui-packaging**

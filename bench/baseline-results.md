@@ -20,7 +20,7 @@ across 64 files so block-map hashing and extraction throughput are meaningful.
 - **Open + parse manifest/identity** — `MsixPackage.Open` then read `Identity`/`DisplayName`.
 - **Verify block map** — `MsixPackage.VerifyBlockMap()` (SHA-256 over every 64 KiB block).
 - **Read signature** — `MsixPackage.ReadSignature()` (CMS envelope decode + integrity check).
-- **Extract package** — `MsixCore.Deployment.PackageExtractor.Extract(package.Opc, dir)` (small and
+- **Extract package** — `MsixCore.PackageStore.PackageExtractor.Extract(package.Opc, dir)` (small and
   large). To isolate extraction, the package is opened in an `[IterationSetup]` and disposed (plus the
   extracted output deleted) in an `[IterationCleanup]`, both outside the measured region, so neither
   `MsixPackage.Open` nor cleanup is timed; BenchmarkDotNet therefore runs these two with

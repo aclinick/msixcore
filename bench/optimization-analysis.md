@@ -47,7 +47,7 @@ the block-map string. The existing one-shot `CryptographicOperations.HashData` p
 
 ### Extraction
 
-`src/MsixCore.Deployment/PackageExtractor.cs:164-178` already uses an 80 KiB `ArrayPool` buffer.
+`src/MsixCore.PackageStore/PackageExtractor.cs:164-178` already uses an 80 KiB `ArrayPool` buffer.
 Managed allocation therefore stays nearly flat from the small to large package (200.66 KB to
 514.53 KB). `ExtractAndVerify` also performs hashing while copying the same read at lines 120-147,
 so there is no redundant payload read in that path.

@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MsixCore.Packaging\MsixCore.Packaging.csproj" />
-    <ProjectReference Include="..\..\src\MsixCore.Deployment\MsixCore.Deployment.csproj" />
+    <ProjectReference Include="..\..\src\MsixCore.PackageStore\MsixCore.PackageStore.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-# msixmgr published-size report
+# msixkit published-size report
 
 Generated: 2026-07-25 08:09:44 -07:00
 
@@ -9,7 +9,7 @@ Generated: 2026-07-25 08:09:44 -07:00
 
 ## Totals
 
-| Configuration | Total size | Files | msixmgr host |
+| Configuration | Total size | Files | msixkit host |
 | --- | ---: | ---: | ---: |
 | Framework-dependent (portable, host architecture) | 1.10 MB | 14 | 137.00 KB |
 | Self-contained (win-x64) | 77.20 MB | 200 | 159.00 KB |
@@ -33,56 +33,56 @@ comparison harness (`appxpackaging.dll` and `opcservices.dll`). OS DLLs are excl
 
 | Assembly | Size |
 | --- | ---: |
-| msixmgr.exe | 137.00 KB |
+| msixkit.exe | 137.00 KB |
 | MsixCore.Packaging.dll | 89.00 KB |
-| msixmgr.dll | 75.00 KB |
-| msixmgr.pdb | 42.18 KB |
-| MsixCore.Deployment.dll | 24.00 KB |
-| msixmgr.xml | 7.32 KB |
+| msixkit.dll | 75.00 KB |
+| msixkit.pdb | 42.18 KB |
+| MsixCore.PackageStore.dll | 24.00 KB |
+| msixkit.xml | 7.32 KB |
 
 ### Self-contained (win-x64)
 
 | Assembly | Size |
 | --- | ---: |
-| msixmgr.exe | 159.00 KB |
+| msixkit.exe | 159.00 KB |
 | MsixCore.Packaging.dll | 89.00 KB |
-| msixmgr.dll | 74.50 KB |
-| msixmgr.pdb | 42.21 KB |
-| msixmgr.deps.json | 28.87 KB |
-| MsixCore.Deployment.dll | 24.00 KB |
+| msixkit.dll | 74.50 KB |
+| msixkit.pdb | 42.21 KB |
+| msixkit.deps.json | 28.87 KB |
+| MsixCore.PackageStore.dll | 24.00 KB |
 
 ### Self-contained + trimmed (win-x64)
 
 | Assembly | Size |
 | --- | ---: |
-| msixmgr.exe | 159.00 KB |
-| msixmgr.dll | 71.00 KB |
+| msixkit.exe | 159.00 KB |
+| msixkit.dll | 71.00 KB |
 | MsixCore.Packaging.dll | 69.50 KB |
-| msixmgr.pdb | 41.09 KB |
-| msixmgr.deps.json | 28.87 KB |
-| MsixCore.Deployment.dll | 8.50 KB |
+| msixkit.pdb | 41.09 KB |
+| msixkit.deps.json | 28.87 KB |
+| MsixCore.PackageStore.dll | 8.50 KB |
 
 ### Self-contained (win-arm64)
 
 | Assembly | Size |
 | --- | ---: |
-| msixmgr.exe | 137.00 KB |
+| msixkit.exe | 137.00 KB |
 | MsixCore.Packaging.dll | 89.00 KB |
-| msixmgr.dll | 74.50 KB |
-| msixmgr.pdb | 42.21 KB |
-| msixmgr.deps.json | 28.88 KB |
-| MsixCore.Deployment.dll | 24.00 KB |
+| msixkit.dll | 74.50 KB |
+| msixkit.pdb | 42.21 KB |
+| msixkit.deps.json | 28.88 KB |
+| MsixCore.PackageStore.dll | 24.00 KB |
 
 ### Self-contained + trimmed (win-arm64)
 
 | Assembly | Size |
 | --- | ---: |
-| msixmgr.exe | 137.00 KB |
-| msixmgr.dll | 71.00 KB |
+| msixkit.exe | 137.00 KB |
+| msixkit.dll | 71.00 KB |
 | MsixCore.Packaging.dll | 69.50 KB |
-| msixmgr.pdb | 41.09 KB |
-| msixmgr.deps.json | 28.88 KB |
-| MsixCore.Deployment.dll | 8.50 KB |
+| msixkit.pdb | 41.09 KB |
+| msixkit.deps.json | 28.88 KB |
+| MsixCore.PackageStore.dll | 8.50 KB |
 
 ## Comparison against the original C++ MSIX Core (future work)
 

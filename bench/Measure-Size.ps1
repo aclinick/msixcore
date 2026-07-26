@@ -1,10 +1,10 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Measures the published binary size of the msixmgr CLI across deployment configurations.
+    Measures the published binary size of the msixkit CLI across deployment configurations.
 
 .DESCRIPTION
-    Publishes src/msixmgr framework-dependent, self-contained, and trimmed for
+    Publishes src/msixkit framework-dependent, self-contained, and trimmed for
     win-x64 and win-arm64. Trim failures remain non-fatal so the report explains
     unsupported configurations rather than losing the other measurements.
 
@@ -28,13 +28,13 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $repoRoot 'src/msixmgr/msixmgr.csproj'
+$project = Join-Path $repoRoot 'src/msixkit/msixkit.csproj'
 $publishRoot = Join-Path $PSScriptRoot 'publish'
 $reportPath = Join-Path $PSScriptRoot 'size-report.md'
 $hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 
 if (-not (Test-Path $project)) {
-    throw "Cannot find msixmgr project at $project"
+    throw "Cannot find msixkit project at $project"
 }
 
 if (Test-Path $publishRoot) {
@@ -73,9 +73,9 @@ function Publish-Config {
     $total = ($files | Measure-Object -Property Length -Sum).Sum
     if ($null -eq $total) { $total = 0 }
 
-    $exe = $files | Where-Object { $_.Name -in @('msixmgr.exe', 'msixmgr') } | Select-Object -First 1
+    $exe = $files | Where-Object { $_.Name -in @('msixkit.exe', 'msixkit') } | Select-Object -First 1
     $keyAssemblies = $files |
-        Where-Object { $_.Extension -in @('.dll', '.exe') -and $_.Name -like 'MsixCore*' -or $_.Name -like 'msixmgr*' } |
+        Where-Object { $_.Extension -in @('.dll', '.exe') -and $_.Name -like 'MsixCore*' -or $_.Name -like 'msixkit*' } |
         Sort-Object Length -Descending |
         Select-Object -First 6
 
@@ -109,7 +109,7 @@ $results = $results | Where-Object { $null -ne $_ }
 
 # --- Emit report -----------------------------------------------------------
 $sb = [System.Text.StringBuilder]::new()
-[void]$sb.AppendLine('# msixmgr published-size report')
+[void]$sb.AppendLine('# msixkit published-size report')
 [void]$sb.AppendLine()
 [void]$sb.AppendLine("Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
 [void]$sb.AppendLine()
@@ -121,7 +121,7 @@ $sb = [System.Text.StringBuilder]::new()
 
 [void]$sb.AppendLine('## Totals')
 [void]$sb.AppendLine()
-[void]$sb.AppendLine('| Configuration | Total size | Files | msixmgr host |')
+[void]$sb.AppendLine('| Configuration | Total size | Files | msixkit host |')
 [void]$sb.AppendLine('| --- | ---: | ---: | ---: |')
 foreach ($r in $results) {
     [void]$sb.AppendLine("| $($r.Name) | $(Format-Size $r.TotalBytes) | $($r.FileCount) | $(Format-Size $r.ExeBytes) |")

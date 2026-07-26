@@ -6,8 +6,8 @@ the implementation under `src/` at the current tip of `main` and cross-referenci
 MSIX/APPX format and manifest-schema documentation.
 
 - **Scope of the port** (per `README.md`): a cross-platform reader/validator and unsigned
-  authoring layer (`MsixCore.Packaging`), a deployment/query layer (`MsixCore.Deployment`),
-  and the `msixmgr` CLI. Signature production is an explicit non-goal: packages are packed
+  authoring layer (`MsixCore.Packaging`), a deployment/query layer (`MsixCore.PackageStore`),
+  and the `msixkit` CLI. Signature production is an explicit non-goal: packages are packed
   unsigned, signed by external SignTool/CI signing services, then validated here.
 - **Verification method**: every "Supported" claim below points at the concrete file that implements
   it. Where a feature is only partially present, the gap is called out. Nothing is marked supported
@@ -194,20 +194,20 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 
 ---
 
-## 8. Deployment (`MsixCore.Deployment`)
+## 8. Package store (`MsixCore.PackageStore`)
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
-| Query: FindPackage / FindPackageByFamilyName / FindPackages (wildcard) | [PackageManager API parity](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `Deployment/PackageManager.cs` | Metadata-first; exact full-name lookup is targeted and family lookup is deterministic. |
+| Query: FindPackage / FindPackageByFamilyName / FindPackages (wildcard) | [PackageManager API parity](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `MsixCore.PackageStore/PackageManager.cs` | Metadata-first; exact full-name lookup is targeted and family lookup is deterministic. |
 | Get package info from a file | [PackageManager API](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `PackageManager.GetMsixPackageInfo` | Opens an `MsixPackage`. |
-| Enumerate installed (loose) packages | — | yes | `Deployment/FileSystemPackageStore.cs` | Treats any non-reserved subdir with `AppxManifest.xml` as installed; skips `.`-prefixed staging/backup dirs. |
-| Resolve entry-point execution info | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `Deployment/InstalledPackage.cs` | Resolves first app with an `Executable`; guards against path traversal. |
-| Loose extraction (unpack) with traversal + symlink/junction containment | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `Deployment/PackageExtractor.cs` | Pure managed; rejects reparse-point escapes (including a dangling link and a reparse-point root) and out-of-root part paths; cooperative cancellation. Plain `Extract` does not verify integrity and must not be treated as safe merely because a loose directory passed an earlier point-in-time validation. Use `ExtractAndVerify` for trusted extraction. |
+| Enumerate installed (loose) packages | — | yes | `MsixCore.PackageStore/FileSystemPackageStore.cs` | Treats any non-reserved subdir with `AppxManifest.xml` as installed; skips `.`-prefixed staging/backup dirs. |
+| Resolve entry-point execution info | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixCore.PackageStore/InstalledPackage.cs` | Resolves first app with an `Executable`; guards against path traversal. |
+| Loose extraction (unpack) with traversal + symlink/junction containment | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixCore.PackageStore/PackageExtractor.cs` | Pure managed; rejects reparse-point escapes (including a dangling link and a reparse-point root) and out-of-root part paths; cooperative cancellation. Plain `Extract` does not verify integrity and must not be treated as safe merely because a loose directory passed an earlier point-in-time validation. Use `ExtractAndVerify` for trusted extraction. |
 | Add / install (extract → stage → commit) | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `PackageManager.RunAdd`, `PackageExtractor.ExtractAndVerify`, `FileSystemPackageStore.Commit` | Hashes while extracting to `.staging` and commits only validated content. |
 | Remove / uninstall | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `PackageManager.RunRemove`, `FileSystemPackageStore.Delete` | Deletes the install root; errors if not installed. |
 | Transactional staging + rollback | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `FileSystemPackageStore.CommitLocked`, `DurableFileSystem` | Staged files and directories are flushed before an integrity-checked, phase-aware intent journal orders and idempotently recovers promotion or rollback. |
-| Async progress / status reporting | [DeploymentResult](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentresult) | yes | `Deployment/MsixResponse.cs`, `InstallationStep.cs`, `SynchronousProgress.cs` | Reports staged progress (Started → GetPackageInformation → Extraction → Integration → Completed) and a completion task. |
-| Handler pipeline (extraction + OS integration) | [Original MSIX Core handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | partial | `Deployment/Handlers/IPackageHandler.cs` | Interface + `PackageDeploymentContext` exist; extraction is currently inlined in `RunAdd` rather than run through pluggable handlers, and no OS-integration handlers are registered. |
+| Async progress / status reporting | [DeploymentResult](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentresult) | yes | `MsixCore.PackageStore/MsixResponse.cs`, `InstallationStep.cs`, `SynchronousProgress.cs` | Reports staged progress (Started → GetPackageInformation → Extraction → Integration → Completed) and a completion task. |
+| Handler pipeline (extraction + OS integration) | [Original MSIX Core handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | partial | `MsixCore.PackageStore/Handlers/IPackageHandler.cs` | Interface + `PackageDeploymentContext` exist; extraction is currently inlined in `RunAdd` rather than run through pluggable handlers, and no OS-integration handlers are registered. |
 | Version / downgrade policy | [DeploymentOptions](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentoptions) | yes | `FileSystemPackageStore.CommitLocked`, `DeploymentOptions.cs` | One version per family; upgrades replace, downgrades require `AllowDowngrade`, duplicates require `ForceReinstall`; `ForceApplicationShutdown` retains process-shutdown semantics only. |
 | OS integration: Start Menu shortcuts | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | — |
 | OS integration: Add/Remove Programs registration | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | — |
@@ -215,7 +215,7 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 
 ---
 
-## CLI (`msixmgr`) surface, for context
+## CLI (`msixkit`) surface, for context
 
 - `inspect` (`InspectCommand.cs`): identity, family/full name, version, arch, display/publisher name,
   capabilities, signed flag, block-map file count/hash method. Text or `--json`.
@@ -225,4 +225,4 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 - `unpack` (`UnpackCommand.cs`): extracts a package to a loose layout via `PackageExtractor`
   (`unpack <path> -Destination <dir> [--json]`), cross-platform, no install/OS integration.
 - `PackageManager.AddPackage` / `RemovePackage` are now **implemented** (see §8) but not yet wired to
-  dedicated `msixmgr` verbs, so they are not advertised by CLI help.
+  dedicated `msixkit` verbs, so they are not advertised by CLI help.

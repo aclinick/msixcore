@@ -109,7 +109,7 @@ msixmgr -AddPackage <path> [-sourceApplicationId] [-correlationId]
 msixmgr -RemovePackage <fullName>
 msixmgr -FindPackage <fullName>
 msixmgr -Unpack -packagePath <p> -destination <d> [-applyACLs] [-validateSignature]
-               [-create] [-rootDirectory] [-fileType] [-vhdSize]
+                [-create] [-rootDirectory] [-fileType] [-vhdSize]
 msixmgr -ApplyACLs -packagePath <p>
 msixmgr -MountImage -imagePath <p>
 ```
@@ -129,11 +129,11 @@ A backslash. That file will not compile on Linux, and it never intended to.
 ### What ours looks like
 
 ```text
-msixmgr inspect  <path> [--json]
-msixmgr validate <path> [--json]
-msixmgr unpack   <path> -Destination <dir>
-msixmgr pack     <dir>  -o <package> [--compress] [--overwrite]
-msixmgr bundle   ...
+msixkit inspect  <path> [--json]
+msixkit validate <path> [--json]
+msixkit unpack   <path> -Destination <dir>
+msixkit pack     <dir>  -o <package> [--compress] [--overwrite]
+msixkit bundle   ...
 ```
 
 Five verbs. About seven flags total. **`--json` on every verb.** Exit codes are `0` valid, `1`
@@ -143,7 +143,7 @@ directory; the tool figures it out.
 `validate` is the verb that didn't exist before:
 
 ```console
-$ msixmgr validate .\App.msix
+$ msixkit validate .\App.msix
 INTEGRITY OK      Contoso.App_1.2.3.0_x64__abcd1234efgh5
   Block map : ok (42 files)
   Signature : CMS envelope ok, binding verified
@@ -152,7 +152,7 @@ INTEGRITY OK      Contoso.App_1.2.3.0_x64__abcd1234efgh5
 One line in a workflow:
 
 ```yaml
-- run: msixmgr validate ./artifact/App.msix
+- run: msixkit validate ./artifact/App.msix
 ```
 
 That's the whole pitch for "CLI is the new API." Same information, one round trip, parseable by a
@@ -289,10 +289,10 @@ For scale: the MakeAppx SDK footprint is **6.39 MB** across `AppxPackaging.dll`,
 
 - `MsixCore.Packaging` — open a package file *or* a loose folder; identity, manifest, block map,
   signature, integrity.
-- `MsixCore.Deployment` — extraction with path-traversal and symlink-escape containment, plus a
+- `MsixCore.PackageStore` — extraction with path-traversal and symlink-escape containment, plus a
   cross-platform filesystem package store.
-- `msixmgr` — the CLI above. `inspect` / `validate` / `unpack` / `pack` (aliased `makemsix`) /
-  `bundle` run on Windows, Linux, and macOS.
+- `msixkit` — the CLI above. `inspect` / `validate` / `unpack` / `pack` / `bundle` run on Windows,
+  Linux, and macOS.
 
 Cross-tool compatibility is verified both directions: MakeAppx reads what we write, we read what
 MakeAppx writes.
