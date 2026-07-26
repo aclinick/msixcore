@@ -262,7 +262,7 @@ no `Name` is now rejected instead of silently ignored.
 **Deliberately not modelled:** `uap:TileUpdate` and the holographic / `uap5:MixedRealityModel` tile
 content — neither affects deployment or inspection of a desktop package, and both would grow the
 model surface for no consumer. Capability *names* are not validated against the per-namespace
-enumerations; that belongs to the schema validator.
+enumerations; that needs the XSDs, which are not vendored — see P2-6.
 
 ---
 
@@ -294,6 +294,24 @@ Ref: [Signing overview](https://learn.microsoft.com/en-us/windows/msix/package/s
 ### P2-5. Encrypted packages & Zip64 scale
 - **TC-P2-5a:** `.emsix` → assert a clear "encrypted packages unsupported" diagnostic (not a crash).
 - **TC-P2-5b:** Zip64 package (>4 GB or >65535 entries) → assert parts enumerate correctly.
+
+### P2-6. Manifest validation — **done**
+Ref: [Package manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/schema-root).
+Semantic validation, separate from the deliberately tolerant parser. See
+[`docs/manifest-validation.md`](manifest-validation.md) for the rule list.
+- **TC-VAL-01..13:** identifier form, length, reserved DOS device names and prefixes, and publisher
+  distinguished-name shape.
+- **TC-VAL-14..17:** inverted `MinVersion`/`MaxMajorVersionTested` and
+  `MinVersion`/`MaxVersionTested` ranges, and malformed dependency names.
+- **TC-VAL-18..27:** framework / resource / optional package content restrictions and type conflicts.
+- **TC-VAL-28..33:** application-id form, duplicate ids, and namespace-scoped capability uniqueness.
+- **TC-VAL-34..37:** an unknown namespace is a warning, is reported once, is not raised for a merely
+  declared prefix, and is skipped by the manifest-only overload.
+
+**Still open:** XSD validation. The ~46 Microsoft schema documents are not vendored into this
+repository, so element ordering, cardinality, and attribute enumerations (including capability names)
+are unchecked. `ManifestNamespaces` records the schema path for every namespace so this can be added
+without re-deriving the mapping; vendoring would need a `THIRD-PARTY-NOTICES` file.
 
 ---
 

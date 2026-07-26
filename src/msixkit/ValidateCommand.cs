@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MsixCore.Packaging;
 using MsixCore.Packaging.Integrity;
+using MsixCore.Packaging.Validation;
 
 namespace MsixKit;
 
@@ -102,6 +103,22 @@ internal static class ValidateCommand
             errors.Add($"block map coverage: {coverage}");
         }
 
+        ManifestValidationResult manifest = package.ValidateManifest();
+        List<ManifestIssueReport> manifestIssues = new(manifest.Issues.Count);
+        foreach (ManifestValidationIssue issue in manifest.Issues)
+        {
+            bool isError = issue.Severity == ManifestValidationSeverity.Error;
+            manifestIssues.Add(new ManifestIssueReport
+            {
+                Severity = isError ? "error" : "warning",
+                Rule = issue.Rule.ToString(),
+                Target = issue.Target,
+                Message = issue.Message,
+            });
+
+            (isError ? errors : warnings).Add($"manifest: {issue.Target} — {issue.Message}");
+        }
+
         bool signed = package.IsSigned;
         bool? cmsValid = null;
         bool? bindingValid = null;
@@ -197,6 +214,8 @@ internal static class ValidateCommand
             SignatureBindingVerified = bindingValid,
             SignatureTrustVerified = signed ? false : null,
             BindingDigests = bindingDigests,
+            ManifestValid = manifest.IsValid,
+            ManifestIssues = manifestIssues,
             Errors = errors,
             Warnings = warnings,
         };
@@ -262,6 +281,8 @@ internal static class ValidateCommand
             }
         }
 
+        o.WriteLine($"  Manifest  : {(r.ManifestValid ? "ok" : "FAILED")}{ManifestIssueSuffix(r)}");
+
         foreach (string err in r.Errors)
         {
             o.WriteLine($"  error: {err}");
@@ -271,5 +292,28 @@ internal static class ValidateCommand
         {
             o.WriteLine($"  note:  {warn}");
         }
+    }
+
+    private static string ManifestIssueSuffix(ValidationReport r)
+    {
+        int errors = r.ManifestIssues.Count(i => i.Severity == "error");
+        int warnings = r.ManifestIssues.Count - errors;
+        if (errors == 0 && warnings == 0)
+        {
+            return "";
+        }
+
+        List<string> parts = [];
+        if (errors > 0)
+        {
+            parts.Add($"{errors} error{(errors == 1 ? "" : "s")}");
+        }
+
+        if (warnings > 0)
+        {
+            parts.Add($"{warnings} warning{(warnings == 1 ? "" : "s")}");
+        }
+
+        return $" ({string.Join(", ", parts)})";
     }
 }
