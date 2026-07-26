@@ -133,7 +133,18 @@ public sealed class MsixPackage : IPackage
     public BlockMapVerificationResult VerifyBlockMap()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return BlockMapVerifier.Verify(_opc, BlockMap);
+        BlockMapVerificationResult result = BlockMapVerifier.Verify(_opc, BlockMap);
+        string? driftError = DetectDirectoryDrift();
+        if (driftError is null)
+        {
+            return result;
+        }
+
+        return result with
+        {
+            IsValid = false,
+            CoverageErrors = [.. result.CoverageErrors, $"Directory drift detected: {driftError}"],
+        };
     }
 
     /// <summary>
@@ -250,10 +261,9 @@ public sealed class MsixPackage : IPackage
     /// applies to loose directories.
     /// </para>
     /// <para>
-    /// Uses <see cref="DirectoryOpcPackage.EnumerateLiveNormalizedParts"/> — the same traversal
-    /// (symlink-safe, reparse-point-skipping, root-escape-checking) and normalization
-    /// (<see cref="OpcPackage.NormalizeLookup"/>, case-insensitive) as
-    /// <see cref="DirectoryOpcPackage.Open"/>. There is exactly one enumeration implementation.
+    /// Uses <see cref="DirectoryOpcPackage.EnumerateValidatedParts"/> — the single implementation
+    /// shared with <see cref="DirectoryOpcPackage.Open"/> for traversal, normalization, validity,
+    /// root-containment, and duplicate checks.
     /// </para>
     /// <para>
     /// This is a public method so that callers (including the CLI validate command) can
@@ -272,11 +282,10 @@ public sealed class MsixPackage : IPackage
 
         string root = dirPkg.RootDirectory;
 
-        // Re-enumerate using the shared helper (single implementation for all callers).
-        HashSet<string> liveParts;
+        DirectoryOpcPackage.DirectoryPartEnumeration liveEnumeration;
         try
         {
-            liveParts = DirectoryOpcPackage.EnumerateLiveNormalizedParts(root);
+            liveEnumeration = DirectoryOpcPackage.EnumerateValidatedParts(root);
         }
         catch (IOException ex)
         {
@@ -286,6 +295,13 @@ public sealed class MsixPackage : IPackage
         {
             return $"Failed to re-enumerate the package directory for drift detection: {ex.Message}. Validation cannot be trusted.";
         }
+
+        if (liveEnumeration.Error is not null)
+        {
+            return $"{liveEnumeration.Error} The directory has been modified since the package was opened.";
+        }
+
+        var liveParts = new HashSet<string>(liveEnumeration.PartNames, StringComparer.OrdinalIgnoreCase);
 
         // Build the open-time normalized set from PartNames.
         var openTimeParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

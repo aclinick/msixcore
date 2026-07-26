@@ -83,18 +83,10 @@ internal static class ValidateCommand
         return true;
     }
 
-    private static ValidationReport Validate(MsixPackage package)
+    internal static ValidationReport Validate(MsixPackage package)
     {
         var errors = new List<string>();
         var warnings = new List<string>();
-
-        // For directory-backed packages, detect part-set drift (additions/removals since open).
-        // This gates the overall verdict regardless of signature status.
-        string? driftError = package.DetectDirectoryDrift();
-        if (driftError is not null)
-        {
-            errors.Add($"directory drift: {driftError}");
-        }
 
         BlockMapVerificationResult blockMap = package.VerifyBlockMap();
         foreach (BlockMapFileResult file in blockMap.Files)

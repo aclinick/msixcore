@@ -225,6 +225,22 @@ public class CliCommandTests : IDisposable
         Assert.Contains("INTEGRITY FAILED", output);
     }
 
+    [Fact]
+    public void Validate_DirectoryMutatedAfterOpen_ReportsDriftOnce()
+    {
+        string dir = LooseCliPackage.Create(_root, "pkgPostOpenMutation");
+        using MsixPackage package = MsixPackage.OpenDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "evil.dll"), "attacker");
+
+        ValidationReport report = ValidateCommand.Validate(package);
+
+        Assert.False(report.IsValid);
+        string driftError = Assert.Single(
+            report.Errors,
+            error => error.Contains("Directory drift detected", StringComparison.Ordinal));
+        Assert.Contains("evil.dll", driftError);
+    }
+
     #endregion
 
     private static (int Code, string Out, string Err) RunUnpack(params string[] args)

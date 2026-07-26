@@ -46,42 +46,13 @@ public sealed class DirectoryOpcPackage : IOpcPackage
             throw new DirectoryNotFoundException($"The package directory '{directory}' does not exist.");
         }
 
-        var partToFullPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var partNames = new List<string>();
-
-        string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-
-        foreach (string fullPath in EnumeratePayloadFiles(root))
+        DirectoryPartEnumeration enumeration = EnumerateValidatedParts(root);
+        if (enumeration.Error is not null)
         {
-            string relative = Path.GetRelativePath(root, fullPath).Replace(Path.DirectorySeparatorChar, '/');
-            if (Path.AltDirectorySeparatorChar != '/')
-            {
-                relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
-            }
-
-            if (!OpcPackage.IsValidPartName(relative))
-            {
-                throw new InvalidDataException($"The package directory contains an invalid part name: '{relative}'.");
-            }
-
-            // Defense in depth: the canonical path must stay within the package root, so a crafted
-            // layout cannot expose files outside it.
-            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
-            {
-                throw new InvalidDataException($"The package directory contains a part that escapes the root: '{relative}'.");
-            }
-
-            if (!partToFullPath.TryAdd(relative, fullPath))
-            {
-                throw new InvalidDataException($"The package directory contains a duplicate part name: '{relative}'.");
-            }
-
-            partNames.Add(relative);
+            throw new InvalidDataException(enumeration.Error);
         }
 
-        return new DirectoryOpcPackage(root, partToFullPath, partNames);
+        return new DirectoryOpcPackage(root, enumeration.PartToFullPath, enumeration.PartNames);
     }
 
     /// <summary>
@@ -124,25 +95,25 @@ public sealed class DirectoryOpcPackage : IOpcPackage
     }
 
     /// <summary>
-    /// Re-enumerates the live directory rooted at <paramref name="root"/> and returns the
-    /// normalized part names found on disk right now. Uses the same traversal (symlink-safe),
-    /// normalization (<see cref="OpcPackage.NormalizeLookup"/>), and case-insensitive semantics
-    /// as <see cref="Open"/>. This is the single shared implementation used by both opening and
-    /// drift detection — no separate enumeration logic exists.
+    /// Enumerates and validates every part under <paramref name="root"/>. Both opening and drift
+    /// detection consume this result, so traversal, normalization, part-name validation,
+    /// root-containment validation, and case-insensitive duplicate detection cannot diverge.
     /// </summary>
     /// <remarks>
-    /// The root-escape check from <see cref="Open"/> is preserved: any file whose canonical path
-    /// escapes the root is silently skipped (rather than throwing, since drift detection must not
-    /// abort on attacker-created symlinks that <see cref="EnumeratePayloadFiles"/> already skips).
+    /// Reparse points remain deliberately skipped by <see cref="EnumeratePayloadFiles"/>. Any other
+    /// validation violation stops enumeration and is returned as an error; callers must fail closed.
     /// </remarks>
-    internal static HashSet<string> EnumerateLiveNormalizedParts(string root)
+    internal static DirectoryPartEnumeration EnumerateValidatedParts(
+        string root,
+        IEnumerable<string>? payloadFiles = null)
     {
         string rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
             ? root
             : root + Path.DirectorySeparatorChar;
 
-        var parts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string fullPath in EnumeratePayloadFiles(root))
+        var partToFullPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var partNames = new List<string>();
+        foreach (string fullPath in payloadFiles ?? EnumeratePayloadFiles(root))
         {
             string relative = Path.GetRelativePath(root, fullPath)
                 .Replace(Path.DirectorySeparatorChar, '/');
@@ -151,16 +122,37 @@ public sealed class DirectoryOpcPackage : IOpcPackage
                 relative = relative.Replace(Path.AltDirectorySeparatorChar, '/');
             }
 
-            // Root-escape check: skip files that escape the root.
-            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
+            if (!OpcPackage.IsValidPartName(relative))
             {
-                continue;
+                return DirectoryPartEnumeration.Invalid(
+                    $"The package directory contains an invalid part name: '{relative}'.");
             }
 
-            parts.Add(OpcPackage.NormalizeLookup(relative));
+            if (!Path.GetFullPath(fullPath).StartsWith(rootWithSeparator, StringComparison.Ordinal))
+            {
+                return DirectoryPartEnumeration.Invalid(
+                    $"The package directory contains a part that escapes the root: '{relative}'.");
+            }
+
+            if (!partToFullPath.TryAdd(relative, fullPath))
+            {
+                return DirectoryPartEnumeration.Invalid(
+                    $"The package directory contains a duplicate part name: '{relative}'.");
+            }
+
+            partNames.Add(relative);
         }
 
-        return parts;
+        return new DirectoryPartEnumeration(partToFullPath, partNames, null);
+    }
+
+    internal sealed record DirectoryPartEnumeration(
+        Dictionary<string, string> PartToFullPath,
+        List<string> PartNames,
+        string? Error)
+    {
+        public static DirectoryPartEnumeration Invalid(string error) =>
+            new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), [], error);
     }
 
     /// <inheritdoc/>
