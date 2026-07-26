@@ -250,6 +250,93 @@ public sealed class ReadPathValidationTests : IDisposable
         Assert.True(package.VerifyBlockMap().IsValid);
     }
 
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("notamediatype")]
+    [InlineData("application/")]
+    [InlineData("/octet-stream")]
+    [InlineData("application/octet stream")]
+    public void ContentTypeWithoutAWellFormedMediaType_IsRejected(string contentType)
+    {
+        string path = Build("bad-content-type", CompressionLevel.NoCompression);
+        RewriteContentTypes(
+            path,
+            document => document.Root!.Elements(ContentTypesNamespace + "Default")
+                .Single(element => element.Attribute("Extension")!.Value.Equals("bin", StringComparison.OrdinalIgnoreCase))
+                .SetAttributeValue("ContentType", contentType));
+
+        using MsixPackage package = MsixPackage.Open(path);
+
+        BlockMapVerificationResult result = package.VerifyBlockMap();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.CoverageErrors, error => error.Contains("invalid ContentType", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ContentTypeWithMediaTypeParameters_IsAccepted()
+    {
+        string path = Build("parameterized-content-type", CompressionLevel.NoCompression);
+        RewriteContentTypes(
+            path,
+            document => document.Root!.Elements(ContentTypesNamespace + "Default")
+                .Single(element => element.Attribute("Extension")!.Value.Equals("bin", StringComparison.OrdinalIgnoreCase))
+                .SetAttributeValue("ContentType", "application/octet-stream; charset=utf-8"));
+
+        using MsixPackage package = MsixPackage.Open(path);
+
+        Assert.True(package.VerifyBlockMap().IsValid);
+    }
+
+    [Fact]
+    public void ExtensionContainingWhitespace_IsRejected()
+    {
+        string path = Build("bad-extension", CompressionLevel.NoCompression);
+        RewriteContentTypes(
+            path,
+            document => document.Root!.Add(
+                new XElement(
+                    ContentTypesNamespace + "Default",
+                    new XAttribute("Extension", "b in"),
+                    new XAttribute("ContentType", "application/octet-stream"))));
+
+        using MsixPackage package = MsixPackage.Open(path);
+
+        BlockMapVerificationResult result = package.VerifyBlockMap();
+        Assert.False(result.IsValid);
+        Assert.Contains(result.CoverageErrors, error => error.Contains("invalid Extension", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TrailingBytesAfterEndOfCentralDirectory_AreRejected()
+    {
+        // The runtime's ZIP reader tolerates trailing bytes after the end-of-central-directory record,
+        // which would leave room for a second, decoy directory. Reject the archive outright instead.
+        string path = Build("trailing-bytes", CompressionLevel.NoCompression);
+        byte[] original = File.ReadAllBytes(path);
+        File.WriteAllBytes(path, [.. original, .. new byte[16]]);
+
+        Assert.Throws<InvalidDataException>(() => MsixPackage.Open(path));
+    }
+
+    [Fact]
+    public void DecoyEndOfCentralDirectoryRecord_IsRejected()
+    {
+        string path = Build("decoy-eocd", CompressionLevel.NoCompression);
+        byte[] original = File.ReadAllBytes(path);
+
+        // Claim the real record has a 22-byte comment, then hide a decoy record inside that comment.
+        int eocd = original.Length - 22;
+        Assert.Equal(0x06054B50u, BitConverter.ToUInt32(original, eocd));
+        BitConverter.GetBytes((ushort)22).CopyTo(original, eocd + 20);
+
+        var decoy = new byte[22];
+        BitConverter.GetBytes(0x06054B50u).CopyTo(decoy, 0);
+        BitConverter.GetBytes((ushort)5000).CopyTo(decoy, 20);
+        File.WriteAllBytes(path, [.. original, .. decoy]);
+
+        Assert.Throws<InvalidDataException>(() => MsixPackage.Open(path));
+    }
+
     private string Build(
         string name,
         CompressionLevel compressionLevel,
