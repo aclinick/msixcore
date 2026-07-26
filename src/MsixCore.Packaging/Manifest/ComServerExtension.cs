@@ -65,8 +65,8 @@ public sealed record ComClass
     public string? Path { get; init; }
 
     /// <summary>
-    /// The apartment model (<c>STA</c>, <c>MTA</c>, <c>both</c>, <c>neutral</c>). Declared by
-    /// <c>SurrogateServer/Class</c> only.
+    /// The apartment model (<c>STA</c>, <c>MTA</c>, <c>both</c>, <c>neutral</c>). Required on a
+    /// <c>SurrogateServer/Class</c>, and not declared at all on an <c>ExeServer/Class</c>.
     /// </summary>
     public string? ThreadingModel { get; init; }
 

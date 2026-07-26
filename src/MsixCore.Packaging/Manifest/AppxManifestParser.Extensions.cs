@@ -6,43 +6,58 @@ namespace MsixCore.Packaging.Manifest;
 public static partial class AppxManifestParser
 {
     /// <summary>
-    /// Parses an <c>&lt;Extensions&gt;</c> container, which is optional on both an
-    /// <c>&lt;Application&gt;</c> and the <c>&lt;Package&gt;</c> root.
+    /// Parses the <c>&lt;Extensions&gt;</c> container(s) of an <c>&lt;Application&gt;</c> or of the
+    /// <c>&lt;Package&gt;</c> root, both of which are optional.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// Every immediate child named <c>Extensions</c> is parsed, not just the first. At package
+    /// level the foundation <c>&lt;Extensions&gt;</c> and <c>&lt;com:Extensions&gt;</c> are distinct
+    /// elements that may both appear, in either order, so taking only the first would silently drop
+    /// one container's worth of declarations.
+    /// </para>
+    /// <para>
     /// Extension elements are matched by local name, so the many namespace variants of the same
     /// element (<c>uap3:AppExecutionAlias</c> vs <c>uap5:AppExecutionAlias</c>,
     /// <c>desktop:StartupTask</c> vs <c>uap5:StartupTask</c>) collapse onto one model, consistent
     /// with the rest of this parser.
+    /// </para>
     /// </remarks>
     private static List<AppExtension> ParseExtensions(XElement? owner)
     {
-        XElement? extensions = owner?.ElementByLocalName("Extensions");
-        if (extensions is null)
+        var result = new List<AppExtension>();
+        if (owner is null)
         {
-            return [];
+            return result;
         }
 
-        var result = new List<AppExtension>();
-        foreach (XElement element in extensions.ElementsByLocalName("Extension"))
+        foreach (XElement container in owner.ElementsByLocalName("Extensions"))
         {
-            string category = NullIfEmpty(element.AttributeValue("Category")?.Trim())
-                ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics,
-                    "An 'Extension' element is missing the required 'Category' attribute.");
-
-            result.Add(new AppExtension
+            foreach (XElement element in container.ElementsByLocalName("Extension"))
             {
-                Category = category,
-                Executable = NullIfEmpty(element.AttributeValue("Executable")),
-                EntryPoint = NullIfEmpty(element.AttributeValue("EntryPoint")),
-                StartPage = NullIfEmpty(element.AttributeValue("StartPage")),
-                ResourceGroup = NullIfEmpty(element.AttributeValue("ResourceGroup")),
-                RuntimeType = NullIfEmpty(element.AttributeValue("RuntimeType")),
-                Payload = ParseExtensionPayload(element, category),
-            });
+                result.Add(ParseExtension(element));
+            }
         }
 
         return result;
+    }
+
+    private static AppExtension ParseExtension(XElement element)
+    {
+        string category = NullIfEmpty(element.AttributeValue("Category")?.Trim())
+            ?? throw MsixError.Format(MsixErrorCode.ManifestSemantics,
+                "An 'Extension' element is missing the required 'Category' attribute.");
+
+        return new AppExtension
+        {
+            Category = category,
+            Executable = NullIfEmpty(element.AttributeValue("Executable")),
+            EntryPoint = NullIfEmpty(element.AttributeValue("EntryPoint")),
+            StartPage = NullIfEmpty(element.AttributeValue("StartPage")),
+            ResourceGroup = NullIfEmpty(element.AttributeValue("ResourceGroup")),
+            RuntimeType = NullIfEmpty(element.AttributeValue("RuntimeType")),
+            Payload = ParseExtensionPayload(element, category),
+        };
     }
 
     /// <summary>
@@ -203,7 +218,7 @@ public static partial class AppxManifestParser
                 Executable = RequiredAttribute(server, "Executable"),
                 Arguments = NullIfEmpty(server.AttributeValue("Arguments")),
                 DisplayName = NullIfEmpty(server.AttributeValue("DisplayName")?.Trim()),
-                Classes = ParseComClasses(server),
+                Classes = ParseComClasses(server, isSurrogate: false),
             });
         }
 
@@ -214,7 +229,7 @@ public static partial class AppxManifestParser
             {
                 DisplayName = NullIfEmpty(server.AttributeValue("DisplayName")?.Trim()),
                 AppId = NullIfEmpty(server.AttributeValue("AppId")?.Trim()),
-                Classes = ParseComClasses(server),
+                Classes = ParseComClasses(server, isSurrogate: true),
             });
         }
 
@@ -236,7 +251,18 @@ public static partial class AppxManifestParser
         };
     }
 
-    private static List<ComClass> ParseComClasses(XElement server)
+    /// <summary>
+    /// Parses the <c>com:Class</c> children of a server element.
+    /// </summary>
+    /// <remarks>
+    /// <c>ThreadingModel</c> is required on a surrogate class in every COM schema revision, and is
+    /// not declared at all on an <c>ExeServer</c> class, so it is enforced for the former.
+    /// <c>Path</c> is deliberately <em>not</em> enforced even though the base schema requires it:
+    /// <c>com4</c> relaxed it, and this parser matches by local name and therefore cannot tell
+    /// which revision a manifest is written against. Rejecting it would break valid <c>com4</c>
+    /// packages, which is the worse failure.
+    /// </remarks>
+    private static List<ComClass> ParseComClasses(XElement server, bool isSurrogate)
     {
         var result = new List<ComClass>();
         foreach (XElement comClass in server.ElementsByLocalName("Class"))
@@ -246,7 +272,9 @@ public static partial class AppxManifestParser
                 Id = RequiredAttribute(comClass, "Id"),
                 DisplayName = NullIfEmpty(comClass.AttributeValue("DisplayName")?.Trim()),
                 Path = NullIfEmpty(comClass.AttributeValue("Path")),
-                ThreadingModel = NullIfEmpty(comClass.AttributeValue("ThreadingModel")?.Trim()),
+                ThreadingModel = isSurrogate
+                    ? RequiredAttribute(comClass, "ThreadingModel")
+                    : NullIfEmpty(comClass.AttributeValue("ThreadingModel")?.Trim()),
                 ProgId = NullIfEmpty(comClass.AttributeValue("ProgId")?.Trim()),
             });
         }

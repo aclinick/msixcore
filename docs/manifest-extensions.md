@@ -17,9 +17,12 @@ owning application:
 | Container | Model |
 | --- | --- |
 | `Package/Applications/Application/Extensions` | [`ManifestApplication.Extensions`](../src/MsixCore.Packaging/Manifest/ManifestApplication.cs) |
-| `Package/Extensions` | [`AppxManifest.Extensions`](../src/MsixCore.Packaging/Manifest/AppxManifest.cs) |
+| `Package/Extensions` and `Package/com:Extensions` | [`AppxManifest.Extensions`](../src/MsixCore.Packaging/Manifest/AppxManifest.cs) |
 
-Both are optional and both are lists preserving manifest order.
+Both are optional and both are lists preserving manifest order. **Every** immediate child named
+`Extensions` is read, not just the first: at package level the foundation `<Extensions>` and
+`<com:Extensions>` are distinct elements that may both appear, in either order, so taking only the
+first would silently drop a container's worth of declarations.
 
 ## The `Extension` element
 
@@ -86,8 +89,13 @@ convenience here — the same logical extension is spelled differently across sc
 A missing **required** attribute is a semantic error (`MsixErrorCode.ManifestSemantics`): an
 `Extension` without `Category`, a `FileTypeAssociation` without `Name`, a `Protocol` without `Name`,
 an `ExecutionAlias` without `Alias`, a `StartupTask` without `TaskId`, a `ParameterGroup` missing
-`GroupId`/`Parameters`, a `Class`/`ProgId` without `Id`, a `Shortcut` without `File`/`Icon`, and an
-empty `FileType`. So is a non-boolean `Enabled` or `PinToStartMenu`.
+`GroupId`/`Parameters`, a `Class`/`ProgId` without `Id`, a `SurrogateServer/Class` without
+`ThreadingModel`, a `Shortcut` without `File`/`Icon`, and an empty `FileType`. So is a non-boolean
+`Enabled` or `PinToStartMenu`.
+
+`SurrogateServer/Class/@Path` is **not** enforced despite being required by the base COM schema:
+`com4` relaxed it, and a local-name parser cannot tell which schema revision a manifest targets.
+Rejecting a valid `com4` package is the worse failure of the two.
 
 ## Surfacing
 

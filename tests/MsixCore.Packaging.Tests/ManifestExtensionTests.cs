@@ -299,6 +299,43 @@ public class ManifestExtensionTests
         Assert.Equal(MsixErrorCode.ManifestSemantics, MsixError.GetCode(error));
     }
 
+    [Fact]
+    public void Parse_SurrogateClass_WithoutAThreadingModel_IsRejected()
+    {
+        // ThreadingModel is required on a surrogate class in every COM schema revision.
+        InvalidDataException error = Assert.Throws<InvalidDataException>(() => ParseAppExtensions(
+            """
+            <com:Extension Category="windows.comServer">
+              <com:ComServer>
+                <com:SurrogateServer>
+                  <com:Class Id="a1b2c3d4-e5f6-4708-9a0b-1c2d3e4f5061" Path="Inproc.dll" />
+                </com:SurrogateServer>
+              </com:ComServer>
+            </com:Extension>
+            """));
+
+        Assert.Equal(MsixErrorCode.ManifestSemantics, MsixError.GetCode(error));
+    }
+
+    [Fact]
+    public void Parse_ExeServerClass_DoesNotRequireAThreadingModel()
+    {
+        // The attribute is not declared on an ExeServer class at all.
+        AppxManifest manifest = ParseAppExtensions(
+            """
+            <com:Extension Category="windows.comServer">
+              <com:ComServer>
+                <com:ExeServer Executable="Server.exe">
+                  <com:Class Id="8e0d5c1f-2e2b-4f8a-9d3a-6b1c9f4a7e21" />
+                </com:ExeServer>
+              </com:ComServer>
+            </com:Extension>
+            """);
+
+        var com = (ComServerExtension)SingleExtension(manifest).Payload!;
+        Assert.Null(Assert.Single(Assert.Single(com.ExeServers).Classes).ThreadingModel);
+    }
+
     // TC-P1-4f
     [Fact]
     public void Parse_FullTrustProcess_ReadsTheExecutableAndParameterGroups()
@@ -401,6 +438,30 @@ public class ManifestExtensionTests
 
         Assert.Equal("windows.shortcut", Assert.Single(manifest.Extensions).Category);
         Assert.Equal("windows.protocol", SingleExtension(manifest).Category);
+    }
+
+    [Fact]
+    public void Parse_TwoPackageLevelExtensionContainers_AreBothRead()
+    {
+        // The foundation <Extensions> and <com:Extensions> are distinct elements that may both
+        // appear at package level, in either order. Reading only the first would drop one.
+        AppxManifest manifest = ParseManifest(
+            applicationExtensions: "",
+            packageExtensions:
+                """
+                <com:Extensions>
+                  <com:Extension Category="windows.comInterface" />
+                </com:Extensions>
+                <Extensions>
+                  <desktop7:Extension Category="windows.shortcut">
+                    <desktop7:Shortcut File="Contoso.lnk" Icon="icon.ico" />
+                  </desktop7:Extension>
+                </Extensions>
+                """);
+
+        Assert.Equal(
+            ["windows.comInterface", "windows.shortcut"],
+            manifest.Extensions.Select(e => e.Category));
     }
 
     [Fact]

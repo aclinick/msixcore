@@ -96,7 +96,7 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 
 ## 3. Extensions (`Application/Extensions` and package-level `Extensions`)
 
-Extension **declarations** are parsed and surfaced for tooling; msixcore does not yet **register** any of them with the OS. Six categories have a strongly-typed model, and any other category is reported by its `Category` string with no payload. Extension category overview:
+Extension **declarations** are parsed and surfaced for tooling; msixcore does not yet **register** any of them with the OS. Seven categories have a strongly-typed model (the `windows.shortcut` and `windows.fullTrustProcess` pair share one row below), and any other category is reported by its `Category` string with no payload. Extension category overview:
 <https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-extensions>.
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
