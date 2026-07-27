@@ -152,6 +152,35 @@ internal sealed record ValidationReport
 
     /// <summary>Per-tag binding digest verification details (when the signature has a digest table).</summary>
     public IReadOnlyList<BindingDigestReport>? BindingDigests { get; init; }
+
+    /// <summary>
+    /// Whether the manifest passed semantic validation (identifier form, package-type consistency,
+    /// version ranges). Warnings do not make it false.
+    /// </summary>
+    /// <remarks>Additive to schema v1.</remarks>
+    public required bool ManifestValid { get; init; }
+
+    /// <summary>
+    /// The manifest validation issues, including warnings. Empty when the manifest is clean.
+    /// </summary>
+    /// <remarks>Additive to schema v1.</remarks>
+    public IReadOnlyList<ManifestIssueReport> ManifestIssues { get; init; } = [];
+}
+
+/// <summary>Machine-readable form of a single manifest validation issue.</summary>
+internal sealed record ManifestIssueReport
+{
+    /// <summary>Either "error" or "warning".</summary>
+    public required string Severity { get; init; }
+
+    /// <summary>The rule identifier (e.g. "IdentifierReserved").</summary>
+    public required string Rule { get; init; }
+
+    /// <summary>The element or attribute the issue is about (e.g. "Identity/@Name").</summary>
+    public required string Target { get; init; }
+
+    /// <summary>A human-readable explanation.</summary>
+    public required string Message { get; init; }
 }
 
 /// <summary>Machine-readable status of a single APPX digest tag from the signature binding.</summary>

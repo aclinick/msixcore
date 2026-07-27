@@ -61,6 +61,7 @@ directory.
 | `bool IsSigned { get; }` | Whether an `AppxSignature.p7x` part is present. |
 | `BlockMapVerificationResult VerifyBlockMap()` | Verify payload against the block map. |
 | `PackageSignature? ReadSignature()` | Read signer identity/CMS status, or `null` if unsigned. |
+| `ManifestValidationResult ValidateManifest()` | Validate the manifest's semantics (see [manifest validation](manifest-validation.md)). |
 | `Stream? OpenLogo()` | Open the package logo, or `null`. |
 | `void Dispose()` | Release the underlying container. |
 
@@ -165,6 +166,21 @@ publisher hash used in family/full names.
 | `BlockMapFileResult` | record | `Name`, `IsValid`, `Error?`. |
 | `PackageSignatureReader` | static class | `Read(Stream)` / `Read(byte[])` → `PackageSignature`. |
 | `PackageSignature` | record | `SubjectName`, `SubjectNameRawData` (raw DER subject bytes), `IssuerName`, `Thumbprint`, `NotBefore/NotAfter`, `IsCmsIntegrityValid`; `bool MatchesPublisher(string)` compares by decoded RDN sequence. |
+
+### Validation — `MsixCore.Packaging.Validation`
+
+Semantic manifest validation, opt-in and separate from parsing. See
+[manifest validation](manifest-validation.md) for the rule list and known
+divergences from Windows.
+
+| Type | Kind | Description |
+|------|------|-------------|
+| `ManifestValidator` | static class | `Validate(AppxManifest)`, `Validate(AppxManifest, XDocument)` (adds the namespace check), `Validate(Stream)` (parses and validates). |
+| `ManifestValidationResult` | sealed class | `Issues`, `IsValid` (no errors), `Errors`, `Warnings`. |
+| `ManifestValidationIssue` | record | `Severity`, `Rule`, `Target`, `Message`. |
+| `ManifestValidationSeverity` | enum | `Warning`, `Error`. |
+| `ManifestValidationRule` | enum | Stable rule identifiers, e.g. `IdentifierReserved`, `VersionRangeInverted`, `UnknownNamespace`. |
+| `ManifestNamespaces` | static class | `Package` / `Bundle` namespace→schema tables; `IsKnownPackageNamespace(string)`, `IsKnownBundleNamespace(string)`. |
 
 ## `MsixCore.PackageStore`
 

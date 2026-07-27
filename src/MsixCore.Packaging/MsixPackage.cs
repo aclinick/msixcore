@@ -1,6 +1,7 @@
 using MsixCore.Packaging.Integrity;
 using MsixCore.Packaging.Manifest;
 using MsixCore.Packaging.Opc;
+using MsixCore.Packaging.Validation;
 
 namespace MsixCore.Packaging;
 
@@ -341,6 +342,32 @@ public sealed class MsixPackage : IPackage
         }
 
         return _opc.OpenPart(logo);
+    }
+
+    /// <summary>
+    /// Validates the manifest against the rules Windows enforces at deployment time: identifier
+    /// form, package-type consistency, and version ranges. Parsing is deliberately tolerant, so this
+    /// is opt-in.
+    /// </summary>
+    /// <returns>The issues found; see <see cref="ManifestValidationResult.IsValid"/>.</returns>
+    /// <exception cref="InvalidDataException">The package has no manifest or it is malformed.</exception>
+    /// <remarks>
+    /// This validates the manifest only. Use <see cref="VerifyBlockMap"/> and
+    /// <see cref="VerifySignatureBinding"/> for payload and signature integrity.
+    /// </remarks>
+    public ManifestValidationResult ValidateManifest()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        byte[]? raw = GetSecurityPartBytes(OpcPartNames.AppxManifest);
+        if (raw is null)
+        {
+            throw MsixError.Format(MsixErrorCode.FootprintMissing,
+                $"The package does not contain '{OpcPartNames.AppxManifest}'.");
+        }
+
+        using var manifest = new MemoryStream(raw, writable: false);
+        return ManifestValidator.Validate(manifest);
     }
 
     /// <inheritdoc/>

@@ -67,7 +67,8 @@ prints identity even if the block map is missing/invalid (use `validate` to gate
 
 ## `validate` — integrity for CI/CD
 
-Verifies **block-map** file hashes + coverage and, when the package is signed, the **CMS signature
+Verifies **block-map** file hashes + coverage, the **manifest**'s semantic rules (identifier form,
+package-type consistency, version ranges), and, when the package is signed, the **CMS signature
 envelope** integrity and that the signer subject matches the manifest `Publisher`. Returns `0` when
 valid, `1` when invalid — ideal for pipeline gating.
 
@@ -76,6 +77,7 @@ $ msixkit validate .\App.msix
 INTEGRITY OK      Contoso.App_1.2.3.0_x64__abcd1234efgh5
   Block map : ok (42 files)
   Signature : CMS envelope ok (binding + trust NOT verified)
+  Manifest  : ok
   note:  signature binding (APPX indirect-data digests) and certificate trust are NOT verified; this is not an authenticity guarantee.
 ```
 

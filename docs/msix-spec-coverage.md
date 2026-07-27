@@ -25,14 +25,14 @@ the public read path; **no** = not implemented.
 | Area | yes | partial | no | rows |
 | --- | --- | --- | --- | --- |
 | Container / OPC | 5 | 2 | 1 | 8 |
-| Manifest (AppxManifest.xml) | 12 | 1 | 4 | 17 |
+| Manifest (AppxManifest.xml) | 14 | 1 | 5 | 20 |
 | Extensions | 0 | 6 | 5 | 11 |
 | Block map | 6 | 0 | 1 | 7 |
 | Signature | 9 | 1 | 4 | 14 |
 | Bundles | 4 | 0 | 2 | 6 |
 | Package kinds | 1 | 5 | 1 | 7 |
 | Deployment | 10 | 1 | 3 | 14 |
-| **Total** | **47** | **16** | **21** | **84** |
+| **Total** | **49** | **16** | **22** | **87** |
 
 **Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
@@ -80,7 +80,7 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 | `PackageFamilyName` / `PackageFullName` + publisher hash | [Package identity](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/package-identity) | yes | `PackageIdentity.cs`, `PublisherHash.cs` | Base32 publisher hash verified against the canonical `8wekyb3d8bbwe` case. |
 | `Properties`: DisplayName, PublisherDisplayName, Description, Logo, Framework | [Properties element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-properties) | yes | `AppxManifestParser.Parse`, `AppxManifest.cs` | Framework flag parsed with XML boolean semantics. |
 | `Properties`: other (SupportedUsers, ModificationPackage, AutoUpdate, etc.) | [Properties element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-properties) | no | — | Not read; matters for optional/modification/self-updating packages. |
-| `Capabilities` (capability names) | [Capabilities element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-capabilities) | partial | `AppxManifestParser.ParseCapabilities`, `ManifestCapability.cs` | Each declaration is categorized by declaring namespace (`General` / `Device` / `Restricted` / `Windows` / `Custom` / `Unknown`) and `DeviceCapability` devices/functions are read. Names are **not** validated against the per-namespace enumerations — that belongs to the (unbuilt) schema validator. |
+| `Capabilities` (capability names) | [Capabilities element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-capabilities) | partial | `AppxManifestParser.ParseCapabilities`, `ManifestCapability.cs` | Each declaration is categorized by declaring namespace (`General` / `Device` / `Restricted` / `Windows` / `Custom` / `Unknown`) and `DeviceCapability` devices/functions are read. Duplicate declarations are rejected by `ManifestValidator`, but names are **not** validated against the per-namespace enumerations — that needs the XSDs. |
 | `Applications/Application` (Id, Executable, EntryPoint) | [Application element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-application) | yes | `AppxManifestParser.ParseApplications`, `ManifestApplication.cs` | Id required; Executable/EntryPoint optional. |
 | `uap:VisualElements` (all attributes, `DefaultTile`, `SplashScreen`, `LockScreen`, `InitialRotationPreference`) | [VisualElements](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-visualelements) | yes | `AppxManifestParser.ParseVisualElements`, `VisualElements.cs` | Includes the wide/large/small tile logos and `ShowNameOnTiles` (which live on `DefaultTile`, not on `VisualElements`), `uap3:VisualGroup`, and `uap5:Optional` on the splash screen. `uap:TileUpdate` and the holographic/mixed-reality tile content are not modelled. |
 | `Application` modern attrs (uap10:TrustLevel, uap10:RuntimeBehavior, HostId/HostRuntime) | [uap10 hostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | no | — | Needed for containerized / host-runtime apps. |
@@ -91,6 +91,9 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 | `Dependencies/uap5:DriverDependency`, `uap7:OSPackageDependency` | [Dependencies](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-dependencies) | no | — | Not package-to-package relationships; deliberately ignored. |
 | `Resources/Resource` (language/scale/DXFL of the package itself) | [Resources element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-resources) | yes | `AppxManifestParser.ParseResources`, `AppxManifest.Resources` | Language, scale, and DXFL qualifiers parsed. |
 | Build metadata (`build:Metadata`/`metadata:Item`) | [Package manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/schema-root) | no | — | Toolchain provenance not surfaced. |
+| Manifest semantic validation (identifier form, reserved names, publisher DN, package-type consistency, version ranges, duplicate ids/capabilities) | [AppxManifest schema](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/schema-root) | yes | `Validation/ManifestValidator.cs`, `docs/manifest-validation.md` | Covers every check upstream's `AppxManifestValidation.cpp` performs, plus application-id form and duplicate detection. Surfaced by `MsixPackage.ValidateManifest()` and `msixkit validate`. |
+| Namespace recognition against the schema registry | [Package manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/schema-root) | yes | `Validation/ManifestNamespaces.cs` | All 46 package and 6 bundle namespaces from upstream `msix_resources.cmake`. An unknown namespace is a warning, never an error. |
+| XSD schema validation (element ordering, cardinality, attribute enumerations) | [Package manifest schema](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/schema-root) | no | — | The Microsoft XSDs are not vendored, so no `XmlSchemaSet` validation is performed. `ManifestNamespaces` records the schema path per namespace so this can be added without re-deriving the mapping. |
 
 ---
 

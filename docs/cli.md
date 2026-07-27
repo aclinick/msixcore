@@ -30,7 +30,7 @@ msixkit <verb> [options]
 | Verb / option                          | Status        | Description |
 |----------------------------------------|---------------|-------------|
 | `inspect <path> [--json]`              | Implemented   | Show package identity and metadata. |
-| `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature); CI exit code. |
+| `validate <path> [--json]`             | Implemented   | Verify integrity (block map + signature) and manifest semantics; CI exit code. |
 | `unpack <path> -Destination <dir> [--json]` | Implemented | Extract a package to a loose layout without installing. |
 | `pack <sourceDir> -o <file.msix> [--compress] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX package. |
 | `bundle <package.msix>... -o <file.msixbundle> [--version <a.b.c.d>] [--overwrite] [--json]` | Implemented | Build an unsigned MSIX bundle. |
@@ -193,6 +193,10 @@ Verifies package integrity and returns a CI-friendly exit code: `0` = OK,
   size match, and payload/block-map coverage is two-way consistent.
 - **Signature** (when an `AppxSignature.p7x` is present) — CMS-envelope integrity
   and signer-subject/manifest-`Publisher` agreement.
+- **Manifest** — semantic rules Windows enforces at deployment time: identifier
+  form, publisher shape, package-type consistency, and version ranges. See
+  [manifest validation](manifest-validation.md) for the rule list. An unknown XML
+  namespace is a *warning* and does not fail the gate.
 
 ```
 msixkit validate <package-file-or-directory> [--json]
@@ -203,8 +207,9 @@ msixkit validate <package-file-or-directory> [--json]
 ```console
 $ dotnet $DLL validate ./Contoso.MyApp
 INTEGRITY OK      Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
-  Block map : ok (2 files)
+  Block map : ok (1 files)
   Signature : unsigned
+  Manifest  : ok
   note:  package is unsigned; integrity is self-asserted by its own block map only.
 $ echo $?
 0
@@ -217,7 +222,22 @@ $ dotnet $DLL validate ./Corrupt
 INTEGRITY FAILED  Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt
   Block map : FAILED (2 files)
   Signature : unsigned
+  Manifest  : ok
   error: block map: 'AppxManifest.xml' File 'AppxManifest.xml': block 0 hash mismatch.
+  note:  package is unsigned; integrity is self-asserted by its own block map only.
+$ echo $?
+1
+```
+
+### Failure (invalid manifest)
+
+```console
+$ dotnet $DLL validate ./BadIdentity
+INTEGRITY FAILED  Contoso.MyApp._1.2.3.4_x64__h91ms92gdsmmt
+  Block map : ok (1 files)
+  Signature : unsigned
+  Manifest  : FAILED (1 error)
+  error: manifest: Identity/@Name — 'Contoso.MyApp.' ends with a period, which is not allowed in an identifier.
   note:  package is unsigned; integrity is self-asserted by its own block map only.
 $ echo $?
 1
@@ -228,17 +248,23 @@ $ echo $?
 ```console
 $ dotnet $DLL validate ./Contoso.MyApp --json
 {
+  "schemaVersion": 1,
   "PackageFullName": "Contoso.MyApp_1.2.3.4_x64__h91ms92gdsmmt",
   "IsValid": true,
   "BlockMapValid": true,
-  "VerifiedFileCount": 2,
+  "VerifiedFileCount": 1,
   "IsSigned": false,
   "Errors": [],
   "Warnings": [
     "package is unsigned; integrity is self-asserted by its own block map only."
-  ]
+  ],
+  "ManifestValid": true,
+  "ManifestIssues": []
 }
 ```
+
+Each entry in `ManifestIssues` carries `Severity` (`error` or `warning`), `Rule`
+(a stable identifier such as `IdentifierReserved`), `Target`, and `Message`.
 
 For a signed package, the JSON additionally reports `CmsIntegrityValid`,
 `SignatureBindingVerified`, and `SignatureTrustVerified`. The latter two are
