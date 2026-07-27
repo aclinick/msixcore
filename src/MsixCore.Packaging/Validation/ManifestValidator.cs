@@ -330,15 +330,25 @@ public static partial class ManifestValidator
             return;
         }
 
-        // ST_Publisher_2010_v2 restricts ST_NonEmptyString, whose own pattern forbids leading and
-        // trailing whitespace. The derived pattern does not repeat that, and its unquoted value class
-        // happens to admit whitespace, so the base facet has to be enforced separately.
+        // ST_Publisher_2010_v2 restricts ST_NonEmptyString, whose own pattern is
+        // "[^\s]|([^\s].*[^\s])". The derived pattern does not repeat it, and its unquoted value class
+        // happens to admit whitespace, so the base facet has to be enforced separately: no whitespace
+        // at either end, and — because XSD's '.' is [^\n\r] — no carriage return or line feed anywhere.
         if (XmlWhitespace.Contains(publisher[0]) || XmlWhitespace.Contains(publisher[^1]))
         {
             issues.Add(Error(
                 ManifestValidationRule.PublisherMalformed,
                 Target,
                 "The publisher has leading or trailing whitespace, which the schema's base type forbids."));
+            return;
+        }
+
+        if (publisher.AsSpan().ContainsAny('\r', '\n'))
+        {
+            issues.Add(Error(
+                ManifestValidationRule.PublisherMalformed,
+                Target,
+                "The publisher contains a line break, which the schema's base type forbids."));
             return;
         }
 

@@ -247,6 +247,21 @@ public class ManifestValidatorTests
         Assert.Equal("Identity/@Publisher", SingleIssue(result, ManifestValidationRule.PublisherMalformed).Target);
     }
 
+    // TC-VAL-12e
+    [Theory]
+    [InlineData("CN=Con&#xA;toso")]
+    [InlineData("CN=Con&#xD;toso")]
+    [InlineData("CN=&quot;Con&#xA;toso&quot;")]
+    public void Validate_PublisherWithAnInteriorLineBreak_IsMalformed(string publisher)
+    {
+        // ST_NonEmptyString's pattern is "[^\s]|([^\s].*[^\s])", and XSD's '.' is [^\n\r], so a line
+        // break is forbidden anywhere in the value — not only at the ends.
+        ManifestValidationResult result = Validate(BuildManifest(publisher: publisher));
+
+        Assert.False(result.IsValid);
+        Assert.Equal("Identity/@Publisher", SingleIssue(result, ManifestValidationRule.PublisherMalformed).Target);
+    }
+
     // TC-VAL-13
     [Fact]
     public void Validate_PublisherLongerThanTheSchemaMaximum_IsMalformed()
