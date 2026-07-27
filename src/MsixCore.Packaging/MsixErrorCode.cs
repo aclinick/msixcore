@@ -58,4 +58,14 @@ public enum MsixErrorCode
 
     /// <summary>Package-store state is invalid or unsafe.</summary>
     PackageStore,
+
+    /// <summary>
+    /// Reserved. A package's declared <c>Dependencies</c> could not be satisfied by the target.
+    /// No code path emits this today: dependency resolution reports its outcome through
+    /// <c>DependencyResolutionResult</c> rather than by throwing, and the install engine that
+    /// used to throw it has been removed. The member is retained because category names are a
+    /// stable serialized contract and removing it would break source compatibility for callers
+    /// that reference it.
+    /// </summary>
+    DependencyNotSatisfied,
 }
