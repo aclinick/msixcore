@@ -6,23 +6,24 @@ the implementation under `src/` at the current tip of `main` and cross-referenci
 MSIX/APPX format and manifest-schema documentation.
 
 - **Scope of the port** (per `README.md`): a cross-platform reader/validator and unsigned
-  authoring layer (`MsixCore.Packaging`), a deployment/query layer (`MsixCore.PackageStore`),
-  and the `msixkit` CLI. Signature production is an explicit non-goal: packages are packed
-  unsigned, signed by external SignTool/CI signing services, then validated here.
+  authoring layer (`MsixCore.Packaging`), an extraction + dependency-resolution layer
+  (`MsixCore.PackageStore`), and the `msixkit` CLI. Signature production is an explicit non-goal:
+  packages are packed unsigned, signed by external SignTool/CI signing services, then validated
+  here. **Installing packages is also an explicit non-goal** — Windows installs MSIX natively.
 - **Verification method**: every "Supported" claim below points at the concrete file that implements
   it. Where a feature is only partially present, the gap is called out. Nothing is marked supported
   on the strength of a type/interface stub alone (those are marked *partial* or *no*).
 
 Legend: **yes** = implemented and exercised; **partial** = present but incomplete or not wired into
-the public read path; **no** = not implemented.
+the public read path; **no** = not implemented; **out of scope** = deliberately not implemented.
 
-> **Refreshed after signature binding and read-path validation.** Counts include the deployment
-> engine, bundle reader, signature footprint binding, ZIP compressed-size enforcement, and OPC
-> content-type validation now present in the implementation.
+> **Refreshed after the install engine was removed.** Counts include the bundle reader, signature
+> footprint binding, ZIP compressed-size enforcement, and OPC content-type validation, and exclude
+> the deployment engine that was deleted.
 
 ## Summary counts
 
-| Area | yes | partial | no | rows |
+| Area | yes | partial | no / out of scope | rows |
 | --- | --- | --- | --- | --- |
 | Container / OPC | 5 | 2 | 1 | 8 |
 | Manifest (AppxManifest.xml) | 14 | 1 | 5 | 20 |
@@ -31,17 +32,17 @@ the public read path; **no** = not implemented.
 | Signature | 9 | 1 | 4 | 14 |
 | Bundles | 4 | 0 | 2 | 6 |
 | Package kinds | 1 | 5 | 1 | 7 |
-| Deployment | 10 | 1 | 3 | 14 |
-| **Total** | **49** | **16** | **22** | **87** |
+| Tooling | 3 | 0 | 2 | 5 |
+| **Total** | **42** | **15** | **21** | **78** |
 
-**Headline:** the port is now a security-conscious **single-package reader/validator _and_ installer**:
+**Headline:** the port is a security-conscious **single-package reader, validator, and author**:
 OPC (with percent-decoding + footprint handling) + manifest identity/properties + block map +
-CMS signature reading with footprint-digest binding + faithful publisher-DN matching, plus a transactional
-extract/stage/commit/rollback install/uninstall engine and loose-layout extraction. It still does
-**not** cover: OS registration of the manifest extensions it now parses, most manifest namespaces beyond identity/properties,
-AXPC/AXCD verification, certificate trust, or OS-integration handlers (shortcuts, ARP,
-file-type/protocol registration). Bundle applicability (architecture/language/scale/DXFL selection)
-and manifest dependency parsing + install-time resolution are now implemented.
+CMS signature reading with footprint-digest binding + faithful publisher-DN matching, plus
+loose-layout extraction and dependency resolution. It deliberately does **not** install packages
+(Windows does that natively; see §8). It also does not yet cover: most manifest namespaces beyond
+identity/properties, AXPC/AXCD verification, or certificate trust. Bundle applicability
+(architecture/language/scale/DXFL selection) and manifest dependency parsing + resolution are
+implemented.
 
 Key doc references (full list per row): MSIX package format overview
 <https://learn.microsoft.com/en-us/windows/msix/overview>; package manifest schema reference
@@ -85,8 +86,8 @@ local name; XXE-hardened via `DtdProcessing.Prohibit` + null resolver). Root sch
 | `uap:VisualElements` (all attributes, `DefaultTile`, `SplashScreen`, `LockScreen`, `InitialRotationPreference`) | [VisualElements](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-visualelements) | yes | `AppxManifestParser.ParseVisualElements`, `VisualElements.cs` | Includes the wide/large/small tile logos and `ShowNameOnTiles` (which live on `DefaultTile`, not on `VisualElements`), `uap3:VisualGroup`, and `uap5:Optional` on the splash screen. `uap:TileUpdate` and the holographic/mixed-reality tile content are not modelled. |
 | `Application` modern attrs (uap10:TrustLevel, uap10:RuntimeBehavior, HostId/HostRuntime) | [uap10 hostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | no | — | Needed for containerized / host-runtime apps. |
 | `Dependencies/TargetDeviceFamily` (Name, MinVersion, MaxVersionTested) | [TargetDeviceFamily](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-targetdevicefamily) | yes | `AppxManifestParser.ParseTargetDeviceFamilies`, `TargetDeviceFamily.cs` | All three attributes parsed. |
-| `Dependencies/PackageDependency` (framework refs: Name, MinVersion, Publisher, MaxMajorVersionTested, uap6:Optional) | [PackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-packagedependency) | yes | `AppxManifestParser.ParsePackageDependencies`, `PackageDependency.cs`, `DependencyResolver.cs` | Parsed and resolved at install time; `uap6:Optional` honoured. `MaxMajorVersionTested` is surfaced but not yet used to reject a newer major version. |
-| `Dependencies/uap3:` and `uap4:MainPackageDependency` (optional/modification) | [MainPackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap4-mainpackagedependency) | yes | `AppxManifestParser.ParsePackageDependencies` | Relationship captured and resolved; related-set install ordering is not implemented. |
+| `Dependencies/PackageDependency` (framework refs: Name, MinVersion, Publisher, MaxMajorVersionTested, uap6:Optional) | [PackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-packagedependency) | yes | `AppxManifestParser.ParsePackageDependencies`, `PackageDependency.cs`, `DependencyResolver.cs` | Parsed and resolved; `uap6:Optional` honoured. `MaxMajorVersionTested` is surfaced but not yet used to reject a newer major version. |
+| `Dependencies/uap3:` and `uap4:MainPackageDependency` (optional/modification) | [MainPackageDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap4-mainpackagedependency) | yes | `AppxManifestParser.ParsePackageDependencies` | Relationship captured and resolved; related-set ordering is not implemented. |
 | `Dependencies/uap10:` and `uap13:HostRuntimeDependency` | [HostRuntimeDependency](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntimedependency) | yes | `AppxManifestParser.ParsePackageDependencies` | Parsed and resolved; the host runtime is not actually used to launch anything. |
 | `Dependencies/uap5:DriverDependency`, `uap7:OSPackageDependency` | [Dependencies](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-dependencies) | no | — | Not package-to-package relationships; deliberately ignored. |
 | `Resources/Resource` (language/scale/DXFL of the package itself) | [Resources element](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-f-resources) | yes | `AppxManifestParser.ParseResources`, `AppxManifest.Resources` | Language, scale, and DXFL qualifiers parsed. |
@@ -189,33 +190,24 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
 | Main / application package | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixPackage.cs` | The primary supported case. |
-| Framework package | [Framework packages](https://learn.microsoft.com/en-us/windows/msix/framework-packages/framework-packages-overview) | partial | `AppxManifest.IsFramework`, `DependencyResolver.cs` | Flag detected and framework dependencies are resolved against the store at install time; there is no framework sharing or automatic acquisition. |
-| Resource package | [Resource packages](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system) | partial | `PackageIdentity.ResourceId`, `BundleApplicability.cs` | Identity `ResourceId` parsed and bundle-level resource applicability implemented; no resource-package role handling at install. |
-| Optional package | [Optional packages](https://learn.microsoft.com/en-us/windows/msix/package/optional-packages) | partial | `PackageDependency.cs` | `MainPackageDependency` parsed and resolved; no related-set handling or install ordering. |
+| Framework package | [Framework packages](https://learn.microsoft.com/en-us/windows/msix/framework-packages/framework-packages-overview) | partial | `AppxManifest.IsFramework`, `DependencyResolver.cs` | Flag detected and framework dependencies are resolved against a caller-supplied installed set; there is no framework sharing or automatic acquisition. |
+| Resource package | [Resource packages](https://learn.microsoft.com/en-us/windows/uwp/app-resources/resource-management-system) | partial | `PackageIdentity.ResourceId`, `BundleApplicability.cs` | Identity `ResourceId` parsed and bundle-level resource applicability implemented; no resource-package role handling. |
+| Optional package | [Optional packages](https://learn.microsoft.com/en-us/windows/msix/package/optional-packages) | partial | `PackageDependency.cs` | `MainPackageDependency` parsed and resolved; no related-set handling. |
 | Modification package | [Modification packages](https://learn.microsoft.com/en-us/windows/msix/modification-package-authoring/modification-package) | partial | `PackageDependency.cs` | The main-package relationship is parsed and resolved; nothing applies the modification at runtime. |
 | Host runtime package | [uap10:HostRuntime](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap10-hostruntime) | partial | `PackageDependency.cs` | `HostRuntimeDependency` parsed and resolved; the `uap10:HostRuntime` *declaration* side and activation are not modeled. |
 | Sparse / external-location package | [Grant identity to non-packaged apps (sparse)](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps) | no | — | `AllowExternalContent` / external location not handled. |
 
 ---
 
-## 8. Package store (`MsixCore.PackageStore`)
+## 8. Tooling (`MsixCore.PackageStore`)
 
 | Feature | MSIX spec reference | Supported? | Where (file) | Notes / gaps |
 | --- | --- | --- | --- | --- |
-| Query: FindPackage / FindPackageByFamilyName / FindPackages (wildcard) | [PackageManager API parity](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `MsixCore.PackageStore/PackageManager.cs` | Metadata-first; exact full-name lookup is targeted and family lookup is deterministic. |
-| Get package info from a file | [PackageManager API](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.packagemanager) | yes | `PackageManager.GetMsixPackageInfo` | Opens an `MsixPackage`. |
-| Enumerate installed (loose) packages | — | yes | `MsixCore.PackageStore/FileSystemPackageStore.cs` | Treats any non-reserved subdir with `AppxManifest.xml` as installed; skips `.`-prefixed staging/backup dirs. |
-| Resolve entry-point execution info | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixCore.PackageStore/InstalledPackage.cs` | Resolves first app with an `Executable`; guards against path traversal. |
+| Read identity of an installed (loose) package | — | yes | `MsixCore.PackageStore/InstalledPackageInfo.cs` | Reads `AppxManifest.xml` from a directory; rejects non-regular-file and reparse-point manifests. |
+| Dependency resolution against an installed set | [Package dependencies](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-packagedependency) | yes | `MsixCore.PackageStore/DependencyResolver.cs` | Caller supplies the installed set (see §7); no store is owned by this library. |
 | Loose extraction (unpack) with traversal + symlink/junction containment | [MSIX overview](https://learn.microsoft.com/en-us/windows/msix/overview) | yes | `MsixCore.PackageStore/PackageExtractor.cs` | Pure managed; rejects reparse-point escapes (including a dangling link and a reparse-point root) and out-of-root part paths; cooperative cancellation. Plain `Extract` does not verify integrity and must not be treated as safe merely because a loose directory passed an earlier point-in-time validation. Use `ExtractAndVerify` for trusted extraction. |
-| Add / install (extract → stage → commit) | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `PackageManager.RunAdd`, `PackageExtractor.ExtractAndVerify`, `FileSystemPackageStore.Commit` | Hashes while extracting to `.staging` and commits only validated content. |
-| Remove / uninstall | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `PackageManager.RunRemove`, `FileSystemPackageStore.Delete` | Deletes the install root; errors if not installed. |
-| Transactional staging + rollback | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | yes | `FileSystemPackageStore.CommitLocked`, `DurableFileSystem` | Staged files and directories are flushed before an integrity-checked, phase-aware intent journal orders and idempotently recovers promotion or rollback. |
-| Async progress / status reporting | [DeploymentResult](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentresult) | yes | `MsixCore.PackageStore/MsixResponse.cs`, `InstallationStep.cs`, `SynchronousProgress.cs` | Reports staged progress (Started → GetPackageInformation → Extraction → Integration → Completed) and a completion task. |
-| Handler pipeline (extraction + OS integration) | [Original MSIX Core handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | partial | `MsixCore.PackageStore/Handlers/IPackageHandler.cs` | Interface + `PackageDeploymentContext` exist; extraction is currently inlined in `RunAdd` rather than run through pluggable handlers, and no OS-integration handlers are registered. |
-| Version / downgrade policy | [DeploymentOptions](https://learn.microsoft.com/en-us/uwp/api/windows.management.deployment.deploymentoptions) | yes | `FileSystemPackageStore.CommitLocked`, `DeploymentOptions.cs` | One version per family; upgrades replace, downgrades require `AllowDowngrade`, duplicates require `ForceReinstall`; `ForceApplicationShutdown` retains process-shutdown semantics only. |
-| OS integration: Start Menu shortcuts | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | — |
-| OS integration: Add/Remove Programs registration | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | — |
-| OS integration: file-type / protocol registration | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | no | — | Depends on manifest extension parsing (§3), also missing. |
+| Install / stage / remove packages | [Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview) | out of scope | — | Deliberately not implemented. Windows installs MSIX natively via the deployment APIs; a store that registers nothing with the OS has no consumer, so the earlier engine was removed. |
+| OS integration: Start Menu, Add/Remove Programs, file-type / protocol registration | [MSIX Core install handlers](https://github.com/microsoft/msix-packaging/tree/master/MsixCore) | out of scope | — | Follows from the row above. |
 
 ---
 
@@ -228,5 +220,4 @@ Reference: [MSIX package types / related sets](https://learn.microsoft.com/en-us
   surfaced as not verified. CI-friendly exit codes (0 valid, 1 invalid/runtime failure, 2 usage).
 - `unpack` (`UnpackCommand.cs`): extracts a package to a loose layout via `PackageExtractor`
   (`unpack <path> -Destination <dir> [--json]`), cross-platform, no install/OS integration.
-- `PackageManager.AddPackage` / `RemovePackage` are now **implemented** (see §8) but not yet wired to
-  dedicated `msixkit` verbs, so they are not advertised by CLI help.
+- Installing/registering packages is out of scope (see §8), so there are no add/remove verbs.

@@ -15,16 +15,17 @@
 | `no_applicable_package` | Bundle carries nothing for the target | No application package runs on the requested architecture |
 | `signature_format` | Malformed package signature | Invalid P7X/CMS data or digest table |
 | `xml` | Unsafe or malformed XML | XML syntax error or prohibited DTD/DOCTYPE |
-| `package_store` | Invalid deployment store state | Corrupt commit journal or unsafe staged content |
-| `dependency_not_satisfied` | A declared dependency is absent or too old | Installing a package whose framework, main package, or host runtime is not in the store |
+| `package_store` | Invalid installed-package state | An installed package's manifest is a directory or a reparse point rather than a regular file |
+| `dependency_not_satisfied` | **Reserved** — not emitted | Retained for source/serialization compatibility; dependency outcomes are reported by `DependencyResolutionResult`, not by throwing |
 | `unknown` | Reserved fallback | No more specific category is available |
 
 Category names are the stable contract. The enum deliberately has no assigned numeric values; callers
 must branch on serialized names rather than enum ordinals.
 
-Every category listed above is emitted by at least one code path. Categories are added only when the
-code that raises them exists — the registry never advertises a category a caller could wait for
-forever.
+Every category listed above is emitted by at least one code path, **except those explicitly marked
+reserved**. Categories are added only when the code that raises them exists — the registry never
+advertises a category a caller could wait for forever. A category that loses its last emitter is
+marked reserved rather than deleted, because the names are a stable contract.
 
 `unknown` is a read-side fallback only: it is what `MsixError.GetCode` returns for an exception that
 carries no category, and it is never assigned at a throw site. It is declared first in the enum so

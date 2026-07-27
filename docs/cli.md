@@ -37,8 +37,8 @@ msixkit <verb> [options]
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
-> Deployment operations are exposed programmatically through `PackageManager`
-> (see [api.md](api.md)); they are not advertised as CLI verbs until implemented.
+> Installing/registering packages is out of scope for this project — Windows installs MSIX natively —
+> so there are no add/remove verbs. See [architecture.md](architecture.md).
 
 ## Exit codes
 
@@ -339,7 +339,7 @@ Usage: msixkit unpack <package-file-or-directory> -Destination <dir> [--json]
 Extraction is hardened against traversal: a part that would resolve outside the
 destination, or a symlink/junction anywhere on the destination path (including a
 dangling link, or the destination root itself), aborts extraction with exit code
-`1`. See [architecture.md](architecture.md#layer-5--package-store-msixcorepackagestore).
+`1`. See [architecture.md](architecture.md#layer-4--tooling-msixcorepackagestore).
 
 ## `pack`
 

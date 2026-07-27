@@ -56,14 +56,16 @@ public enum MsixErrorCode
     /// <summary>XML is not well formed or contains a prohibited DTD or DOCTYPE.</summary>
     Xml,
 
-    /// <summary>Deployment or package-store state is invalid or corrupt.</summary>
+    /// <summary>Package-store state is invalid or unsafe.</summary>
     PackageStore,
 
     /// <summary>
-    /// A package is well formed but one of its declared <c>Dependencies</c> cannot be satisfied by
-    /// the target store — the dependency is not installed, or the installed version is older than
-    /// the declared <c>MinVersion</c>. Distinct from <see cref="ManifestSemantics"/> because the
-    /// manifest is valid; the environment is missing something it asks for.
+    /// Reserved. A package's declared <c>Dependencies</c> could not be satisfied by the target.
+    /// No code path emits this today: dependency resolution reports its outcome through
+    /// <c>DependencyResolutionResult</c> rather than by throwing, and the install engine that
+    /// used to throw it has been removed. The member is retained because category names are a
+    /// stable serialized contract and removing it would break source compatibility for callers
+    /// that reference it.
     /// </summary>
     DependencyNotSatisfied,
 }

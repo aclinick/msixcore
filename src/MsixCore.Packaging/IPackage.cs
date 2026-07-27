@@ -28,28 +28,3 @@ public interface IPackage : IDisposable
     /// <returns>A readable, seekable stream the caller owns and must dispose, or <see langword="null"/>.</returns>
     Stream? OpenLogo();
 }
-
-/// <summary>
-/// An <see cref="IPackage"/> that has been extracted/installed to a location on disk.
-/// </summary>
-public interface IInstalledPackage : IPackage
-{
-    /// <summary>The absolute path of the installed package root.</summary>
-    string InstalledLocation { get; }
-
-    /// <summary>The resolved entry-point execution info, or <see langword="null"/> if the package has no app.</summary>
-    ExecutionInfo? ExecutionInfo { get; }
-}
-
-/// <summary>Resolved information required to launch a package's primary application.</summary>
-public sealed record ExecutionInfo
-{
-    /// <summary>Absolute path to the executable to launch.</summary>
-    public required string ResolvedExecutableFilePath { get; init; }
-
-    /// <summary>Command-line arguments to pass, if any.</summary>
-    public string CommandLineArguments { get; init; } = string.Empty;
-
-    /// <summary>Working directory for the process, if specified.</summary>
-    public string WorkingDirectory { get; init; } = string.Empty;
-}
