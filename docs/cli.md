@@ -37,8 +37,8 @@ msixkit <verb> [options]
 | `-h`, `--help`, `-?`, `/?`             | Implemented   | Show help. |
 | `-v`, `--version`                      | Implemented   | Show version. |
 
-> Deployment operations are exposed programmatically through `PackageManager`
-> (see [api.md](api.md)); they are not advertised as CLI verbs until implemented.
+> Installing/registering packages is out of scope for this project — Windows installs MSIX natively —
+> so there are no add/remove verbs. See [architecture.md](architecture.md).
 
 ## Exit codes
 

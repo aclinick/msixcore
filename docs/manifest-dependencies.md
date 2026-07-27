@@ -57,12 +57,13 @@ Three consequences follow:
   modification package without its main package cannot run at all, so silently honouring the
   attribute there would let a malformed manifest opt out of a mandatory dependency.
 
-## Install-time resolution
+## Dependency resolution
 
 [`DependencyResolver`](../src/MsixCore.PackageStore/DependencyResolver.cs) resolves each declared
-dependency against an `IPackageStore`. `PackageManager.AddPackage` runs it **before extraction**, so
-an unsatisfiable package fails fast without writing a staging tree, and reports
-`MsixErrorCode.DependencyNotSatisfied` naming every blocking dependency.
+dependency against a set of installed packages the caller supplies. It is a pure function over that
+set rather than a query against a store, because the authority on what is installed differs by host:
+on Windows it is the OS deployment stack, in CI a directory of staged packages, in a deployment tool
+that tool's own inventory. A caller gates on `CanDeploy` and reports every entry in `Blocking`.
 
 Resolution rules:
 
@@ -79,46 +80,38 @@ Resolution rules:
   name reports `NotAFramework`, not `Resolved` — it is not loadable as a framework. The other two
   kinds carry no such role constraint: the package a modification package modifies, and a host
   runtime, are both ordinary packages.
-- Among the surviving candidates the **highest version** decides, since a store legitimately holds
+- Among the surviving candidates the **highest version** decides, since a machine legitimately holds
   several versions of a framework family.
+- `MinVersion` is a **floor, not a pin**: a newer installed framework satisfies it.
 - A dependency marked `uap6:Optional="true"` is reported in `Unsatisfied` when absent but is excluded
   from `Blocking`, so it never fails a deployment. `CanDeploy` — not `IsSatisfied` — is the gate.
-- `DeploymentOptions.SkipDependencyCheck` bypasses the whole check for staging scenarios where
-  dependencies are added afterwards.
+
+The installed sequence is materialised once, and is not enumerated at all when the manifest declares
+no dependencies, so a caller whose inventory is expensive to produce pays nothing for a package that
+depends on nothing.
 
 ### What a package family holds
 
-Resolution assumes a family can hold several installed packages at once, and the store honours that:
-[`FileSystemPackageStore`](../src/MsixCore.PackageStore/FileSystemPackageStore.cs) replaces only the
-packages a commit genuinely **supersedes** — same resource id, and for frameworks the same
-architecture and version too. Consequently:
+Resolution assumes a family can hold several installed packages at once, which is how MSIX behaves:
 
 - **Framework architecture variants coexist.** An x86 app and an x64 app on one machine each need
-  their own build of a framework, so installing the x64 build must not evict the x86 one.
+  their own build of a framework.
 - **Framework versions coexist.** Each app binds to the specific `MinVersion` it declared, so a newer
   framework must not evict the older one an already-installed app resolved against.
 - **Resource packages coexist** with the main package, since they differ by resource id.
-- **App packages keep single-slot upgrade semantics**: installing a non-framework package replaces
-  the installed one in that family, subject to `ForceReinstall`/`AllowDowngrade`. Architecture is
-  deliberately *not* part of the test here — a family holds one main package, so the x64 build
-  replaces the x86 build and remains subject to the downgrade guard. Excluding cross-architecture
-  installs would let them silently bypass both replacement and downgrade policy.
 
-### Known race: removal is not dependency-aware
-
-Dependencies are resolved before extraction and re-checked immediately before commit, which narrows
-but does not close the window in which a concurrent `RemovePackage` deletes a dependency that has
-just resolved. Closing it properly requires **dependency-aware removal** — refusing to remove a
-package while an installed package depends on it — which Windows does and msixcore does not yet.
-Until then, `RemovePackage` can leave an installed package unsatisfiable.
+A caller assembling the installed set must therefore pass **every** installed package in a family,
+not just the newest — collapsing a family to one entry would make architecture-variant resolution
+fail.
 
 ## Divergences from Windows
 
 - Windows resolves framework dependencies against the machine-wide package graph and can acquire a
-  missing framework from the Store. msixcore resolves only against the store it was given and never
+  missing framework from the Store. msixcore resolves only against the set it was given and never
   acquires anything.
 - Windows enforces `MaxMajorVersionTested` when choosing among installed framework versions.
-  msixcore parses and surfaces it but does not yet use it to *reject* a newer major version.- The `uap17:PackageDependency` `DependencyType` distinction (install-time versus runtime) is not
+  msixcore parses and surfaces it but does not yet use it to *reject* a newer major version.
+- The `uap17:PackageDependency` `DependencyType` distinction (install-time versus runtime) is not
   modelled, so such a dependency is treated as required at install time.
 
 ## Surfacing

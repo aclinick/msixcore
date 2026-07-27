@@ -2,8 +2,9 @@
 
 MSIX Core (.NET) is organized as a strict, bottom-up stack. Each layer depends
 only on the layers below it and exposes a small, testable surface. The two
-libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.PackageStore`
-(store + lifecycle) — sit under the `msixkit` CLI.
+libraries — `MsixCore.Packaging` (reading, authoring + integrity) and
+`MsixCore.PackageStore` (extraction + dependency resolution) — sit under the
+`msixkit` CLI.
 
 ## Layering
 
@@ -12,15 +13,9 @@ libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.PackageSt
 │  msixkit CLI            Program → InspectCommand / ValidateCommand │
 │                         PackageOpener, Reports (text + --json)     │
 ├──────────────────────────────────────────────────────────────────┤
-│  Deployment engine      PackageManager : IPackageManager          │
-│  (MsixCore.PackageStore)  PackageExtractor, MsixResponse            │
-│                         IMsixResponse / InstallationStep          │
-│                         IPackageHandler pipeline (add/remove)      │
-├──────────────────────────────────────────────────────────────────┤
-│  Package store / query  IPackageStore → FileSystemPackageStore    │
-│  (MsixCore.PackageStore)  (writable: staging + transactional Commit)│
-│                         InstalledPackage : IInstalledPackage      │
-│                         Wildcard (glob matching)                  │
+│  Tooling                PackageExtractor (unpack)                 │
+│  (MsixCore.PackageStore)  DependencyResolver (deployability)       │
+│                         InstalledPackageInfo (installed metadata) │
 ├──────────────────────────────────────────────────────────────────┤
 │  Integrity              BlockMapParser / BlockMapVerifier         │
 │  (MsixCore.Packaging)   PackageSignatureReader → PackageSignature │
@@ -38,14 +33,10 @@ libraries — `MsixCore.Packaging` (reading + integrity) and `MsixCore.PackageSt
 ```mermaid
 flowchart TD
     CLI[msixkit CLI] --> PKG[MsixPackage]
-    CLI --> PM[PackageManager]
     CLI --> EXT[PackageExtractor]
-    PM --> STORE[IPackageStore / FileSystemPackageStore]
-    PM --> EXT
-    PM --> RESP[MsixResponse : IMsixResponse]
-    STORE --> INST[InstalledPackage]
-    INST --> PKG
-    PM -. add/remove .-> HANDLERS[IPackageHandler pipeline]
+    TOOL[Deployment tool] --> DEP[DependencyResolver]
+    DEP --> INFO[InstalledPackageInfo]
+    INFO --> PKG
     EXT --> OPC
     PKG --> MANI[AppxManifestParser -> AppxManifest]
     PKG --> BM[BlockMapParser -> BlockMap]
@@ -132,65 +123,42 @@ part-name rules.
 > trust-chain and revocation evaluation to the platform/signing environment. The
 > `validate` verb states this explicitly.
 
-## Layer 4 — Package store & query (`MsixCore.PackageStore`)
+## Layer 4 — Tooling (`MsixCore.PackageStore`)
 
-- **`IPackageStore`** abstracts where installed packages are recorded and where
-  their unpacked payloads live. **`FileSystemPackageStore`** is a self-contained,
-  cross-platform store: each installed package is a subdirectory (identified by
-  the presence of `AppxManifest.xml`) under a store root, defaulting to
-  `LocalApplicationData/MsixCore/Packages`. It is **writable and transactional**:
-  `CreateStagingLocation()` yields a fresh `.staging/<guid>` directory the engine
-  extracts into. `Commit` flushes every staged file and then its directories
-  bottom-up before recording a durable intent journal, moving existing installs
-  aside, and promoting staging with `Directory.Move`. Every query or mutation
-  recovers an incomplete journal while holding the cross-process store lock.
-  Recovery rolls forward a completed promotion or atomically changes the journal
-  to rollback mode before restoring backups; either direction is idempotent if
-  interrupted. The journal carries a SHA-256 integrity check. POSIX systems
-  `fsync` files and affected directories at each phase barrier; Windows uses
-  `FlushFileBuffers`, write-through journal renames, and directory-handle flushing
-  behind `IDurableFileSystem`. Backup deletion is synchronized while the journal
-  remains present; only then is the journal deleted and the store synchronized
-  again. Synchronous recovery reports success when it durably rolls forward and
-  preserves the original failure when it rolls back.
-  Commit-time metadata reads fail closed before version policy is evaluated.
-  `.`-prefixed internal directories are excluded from enumeration.
-- **`InstalledPackageInfo`** reads only `AppxManifest.xml`; **`InstalledPackage`**
-  wraps that metadata and opens a loose `MsixPackage` only when payload content
-  such as the logo is requested.
-- **`Wildcard`** implements case-insensitive, whole-string glob matching (`*` and
-  `?`) used by `FindPackages`, with a regex timeout guard.
-
-## Layer 5 — Package store (`MsixCore.PackageStore`)
-
-- **`PackageManager : IPackageManager`** implements the full lifecycle.
-  `AddPackage`/`RemovePackage` return an `IMsixResponse` **immediately** and run
-  the operation on a background task. `AddPackage` hashes each payload while
-  extracting to staging, then commits only validated content. Commit enforces one
-  installed version per family, upgrades replace the family, downgrades require
-  `AllowDowngrade`, and duplicate installs require `ForceReinstall`.
 - **`PackageExtractor`** (public, static) extracts an `IOpcPackage`'s parts to a
-  directory as a loose layout. Pure managed and cross-platform, it powers both
-  the `unpack` CLI verb and the install engine's extraction step. It reports
-  progress (0–100), honors cancellation between chunks, and enforces the
-  traversal defenses described under [Security invariants](#security-invariants).
-- **`MsixResponse : IMsixResponse`** is the mutable response the engine drives
-  via `Report`/`Complete`/`Fail`. It exposes a `Completion` task,
-  `Percentage`/`Status` (`InstallationStep`), `StatusText`, `Failure`, a
-  thread-safe `ProgressChanged` event (each subscriber invoked independently so
-  one throwing observer can't strand the others or the completion task), and
-  `Cancel()` backed by a linked `CancellationTokenSource`. Progress after a
-  terminal transition is ignored. `SynchronousProgress<T>` delivers the engine's
-  progress callbacks inline and in order.
-- **`IPackageHandler` / `PackageDeploymentContext`** define a *planned* add/remove
-  handler pipeline — an extension point where handlers would run in order on add
-  and in reverse on remove, each guarded by `IsApplicable` so OS-integration steps
-  (shortcuts, registry, associations) only run on their platform. These interfaces
-  are declared but **not yet invoked**: `PackageManager` currently performs
-  extraction/commit (add) and delete (remove) directly. Wiring the pipeline and the
-  Windows OS-integration handlers lands in a later phase.
-- **`DeploymentOptions`** is a `[Flags]` enum (`None`, `ForceApplicationShutdown`,
-  `ExtractOnly`, `ForceReinstall`, `AllowDowngrade`).
+  directory as a loose layout. Pure managed and cross-platform, it powers the
+  `unpack` CLI verb. It reports progress (0–100), honors cancellation between
+  chunks, and enforces the traversal defenses described under
+  [Security invariants](#security-invariants).
+- **`InstalledPackageInfo`** reads only `AppxManifest.xml` from an installed
+  layout, owning no file handles, and opens a loose `MsixPackage` only when
+  payload content such as the logo is requested.
+- **`DependencyResolver`** answers whether a package's declared `Dependencies`
+  are satisfied by a given set of installed packages. It is a pure function: the
+  caller supplies the installed set, so the same decision logic serves a Windows
+  deployment tool reading the OS package inventory, a CI job reading a directory
+  of staged packages, and a test.
+
+### Why there is no install engine
+
+Earlier revisions carried a full deployment engine here — `PackageManager`, a
+transactional `FileSystemPackageStore` with a crash-recovery journal,
+`IMsixResponse` progress plumbing, and a planned `IPackageHandler` pipeline.
+That existed because the original MSIX Core installed packages on Windows 7/8,
+where the OS could not.
+
+That is no longer this project's purpose. Windows 10 and 11 install MSIX
+natively, so a second, non-OS-integrated store had no consumer: it registered
+nothing with the OS, so nothing it "installed" could actually be launched.
+Shipping it would have meant supporting a public API surface with no scenario
+behind it, and carrying the attack surface of transactional filesystem code
+nobody depended on.
+
+It was removed — about 3,700 lines including tests. What survives is what a real
+deployment tool needs and cannot easily rewrite correctly: extraction with
+traversal defenses, and dependency resolution. `DependencyResolver` was
+decoupled from the store as part of that removal, which is why it now takes an
+`IEnumerable<InstalledPackageInfo>` rather than an `IPackageStore`.
 
 ## Authoring (`MsixCore.Packaging.Authoring`)
 
@@ -236,16 +204,15 @@ so every verb supports both layouts. `InspectCommand`, `ValidateCommand`, and
   `System.Security.Cryptography`, and signatures use `SignedCms` (OpenSSL on
   Linux). This is what lets `validate` run in Linux CI.
 - **Loose layouts are first-class.** `DirectoryOpcPackage` mirrors `OpcPackage`
-  so inspection, validation, and the deployment store all work on unpacked
-  directories without a container, and `PackageExtractor` produces such layouts
-  cross-platform (powering both `unpack` and the install engine).
+  so inspection and validation work on unpacked directories without a container,
+  and `PackageExtractor` produces such layouts cross-platform (powering `unpack`).
 - **Idiomatic .NET shapes.** Native `HRESULT`/pointer interfaces become
   properties, exceptions, records, and `Task`-based async. Enum numeric values
   (`ProcessorArchitecture`) intentionally match the Windows
   `APPX_PACKAGE_ARCHITECTURE` values for faithful interop/telemetry.
-- **OS integration is opt-in and guarded.** Anything platform-specific lives
-  behind `IPackageHandler.IsApplicable`, keeping the libraries buildable and
-  testable everywhere.
+- **No platform-specific code.** Everything here builds and runs identically on
+  Windows, Linux, and macOS. OS integration is the job of the deployment tool
+  consuming these libraries, not of the libraries themselves.
 
 ## Security invariants
 
@@ -262,10 +229,8 @@ so every verb supports both layouts. `InspectCommand`, `ValidateCommand`, and
   symlink/junction appears anywhere on the destination path — including the
   destination root itself or a **dangling** link (detected via no-follow
   `LinkTarget`, not `Exists`, so a broken link can't slip through and redirect a
-  write). `FileSystemPackageStore` promotes only via `Directory.Move` into a
-  validated single-segment install folder. `InstalledPackage.ResolveExecutionInfo`
-  similarly rejects rooted or `..`-escaping executable paths from the (untrusted)
-  manifest.
+  write). `InstalledPackageInfo` similarly refuses to treat a directory or
+  reparse point named `AppxManifest.xml` as a manifest.
 - **XML hardening.** All parsers (`AppxManifestParser`, `BundleManifestParser`,
   `BlockMapParser`) create readers with `DtdProcessing.Prohibit` and no external
   `XmlResolver`, blocking XXE and entity-expansion attacks.

@@ -1,19 +1,21 @@
 ---
 name: msix
 description: >-
-  Inspect, validate, unpack, and (on Windows) install MSIX/APPX packages with the cross-platform
+  Inspect, validate, unpack, and check dependencies of MSIX/APPX packages with the cross-platform
   MSIX Core (.NET 10) library and its `msixkit` CLI. USE FOR: reading a package's identity/manifest
   (name, publisher, version, architecture, package family/full name, capabilities, applications);
   verifying integrity in CI (block-map hash + coverage, and CMS signature envelope) with a
   CI-friendly exit code; extracting a `.msix`/`.appx` (or loose folder) to disk without installing;
+  resolving whether a package's declared dependencies are satisfied;
   reading signature/signer details; MSIX in Linux/macOS CI/CD pipelines; consuming the
   `MsixCore.Packaging` / `MsixCore.PackageStore` NuGet libraries from C#. Works on a package FILE or an
   unpacked DIRECTORY. Sign packages with `winapp sign`. DO NOT USE FOR: building/scaffolding a WinUI 3
-  app or authoring `Package.appxmanifest` (use the winui skills), or creating a package from source
-  with makeappx (this reads/validates/unpacks existing packages).
+  app or authoring `Package.appxmanifest` (use the winui skills), creating a package from source
+  with makeappx (this reads/validates/unpacks existing packages), or installing/registering a package
+  on Windows (use the Windows deployment APIs - this library deliberately does not install).
 ---
 
-# MSIX Core (.NET) — inspect / validate / unpack / install
+# MSIX Core (.NET) — inspect / validate / unpack
 
 **MSIX Core (.NET 10)** is a memory-safe, **cross-platform** port of Microsoft's MSIX Core. It ships:
 
@@ -21,13 +23,17 @@ description: >-
   unpack paths run on **Windows, Linux, and macOS** (no OS integration required), so they work in CI.
 - **`MsixCore.Packaging`** — the library for opening a package (container file *or* loose folder),
   reading identity/manifest/block-map/signature, and verifying integrity.
-- **`MsixCore.PackageStore`** — extraction (`PackageExtractor`) and a **cross-platform package store**
-  (`PackageManager`) that stages/removes packages into a filesystem store. This is *not* Windows OS
-  registration — actual OS install/integration is future work.
+- **`MsixCore.PackageStore`** — extraction (`PackageExtractor`) and dependency resolution
+  (`DependencyResolver`).
+
+**This library does not install MSIX packages.** Windows installs MSIX natively, so an earlier
+non-OS-integrated install engine was removed rather than shipped. Use `Add-AppxPackage` /
+`PackageManager` from the Windows SDK to install; use this library to read, validate, author,
+extract, and to decide whether a package's dependencies are satisfied.
 
 The packaging **reads** and the `msixkit` verbs (`inspect`/`validate`/`unpack`) each accept either a
 **package file** (`.msix`/`.appx`) or an **unpacked directory** (a loose layout containing
-`AppxManifest.xml`). `PackageManager.AddPackage` takes a package file.
+`AppxManifest.xml`).
 
 ## Quick reference (`msixkit` CLI)
 
@@ -104,7 +110,7 @@ symlink/reparse-point escapes (a malicious package cannot write outside `-Destin
 
 ## Library usage (C#)
 
-Reference `MsixCore.Packaging` (+ `MsixCore.PackageStore` for extract/install).
+Reference `MsixCore.Packaging` (+ `MsixCore.PackageStore` for extraction and dependency resolution).
 
 ```csharp
 using MsixCore.Packaging;
@@ -137,20 +143,26 @@ if (package.ReadSignature() is { } sig)
 PackageExtractor.Extract(package.Opc, "./out");
 ```
 
-**Stage / remove in a cross-platform package store** (filesystem store; not Windows OS registration):
+**Check whether a package's dependencies are satisfied** before handing it to a real installer:
 
 ```csharp
-var manager = new MsixCore.PackageStore.PackageManager();       // default per-user file-system store
-IMsixResponse add = manager.AddPackage("App.msix", DeploymentOptions.None);
-add.ProgressChanged += (_, r) => Console.WriteLine($"{r.Percentage:F0}% {r.StatusText}");
-await add.Completion;                                          // throws on failure
-IMsixResponse remove = manager.RemovePackage(id.PackageFullName);
-await remove.Completion;
-```
+using MsixCore.PackageStore;
 
-`AddPackage`/`RemovePackage` are asynchronous (return immediately with an `IMsixResponse`; observe
-`ProgressChanged` and `await Completion`). Install performs extract → stage → atomic commit with
-rollback on failure.
+// You supply the installed set - from the Windows package inventory, a directory of
+// staged packages, or your own records. Pass every package in a family, not just the newest.
+IEnumerable<InstalledPackageInfo> installed = Directory
+    .EnumerateDirectories("/var/lib/packages")
+    .Select(InstalledPackageInfo.ReadFromDirectory);
+
+DependencyResolutionResult result = DependencyResolver.Resolve(package.Manifest, installed);
+if (!result.CanDeploy)                                     // not IsSatisfied: optional deps don't block
+{
+    foreach (DependencyResolution blocking in result.Blocking)
+    {
+        Console.Error.WriteLine(blocking.Describe());      // "framework 'X' is not installed."
+    }
+}
+```
 
 ## Signing
 
@@ -170,17 +182,14 @@ skill; this skill focuses on reading/validating/unpacking existing packages.
   Linux, and macOS — this is the point of the .NET 10 port (great for Linux CI/CD).
 - Filenames inside a package are matched per the OPC canonicalization rules (percent-decoded); the
   library is careful about case-sensitive filesystems on Linux.
-- **Cross-platform staging:** `PackageManager.AddPackage`/`RemovePackage` operate on a filesystem
-  package store on any OS. Actual OS **install/registration** (and anything touching the certificate
-  store or OS integration) is **not yet implemented** — future Windows-only work.
+- CI covers Windows and Linux. macOS is expected to work but is **not yet verified by CI**.
 
 ## Current limitations
 
 - **Bundles** (`.msixbundle`) are recognized as containers but bundle applicability/flattening is not
   yet implemented — reading a bundle as an app package throws `InvalidDataException`.
 - Signature **binding + trust chain** verification is not yet implemented (see the `validate` note).
-- CLI install/remove verbs are not yet wired; use the `PackageManager` library API (cross-platform
-  filesystem store).
+- **Installing packages is out of scope** — use the Windows deployment APIs.
 
 ## Build & test
 

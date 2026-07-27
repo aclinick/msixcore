@@ -75,15 +75,6 @@ Explicit bundle reader: `Open(string)` / `Open(Stream, bool)`, `Opc`, `Manifest`
 Read-only view over package metadata (`Identity`, `DisplayName`,
 `PublisherDisplayName`, `Capabilities`, `OpenLogo()`).
 
-### `IInstalledPackage : IPackage`
-
-Adds `string InstalledLocation` and `ExecutionInfo? ExecutionInfo`.
-
-### `ExecutionInfo`
-
-Resolved launch info: `ResolvedExecutableFilePath`, `CommandLineArguments`,
-`WorkingDirectory`.
-
 ### `PackageIdentity`
 
 Immutable `<Identity>` model.
@@ -184,98 +175,48 @@ divergences from Windows.
 
 ## `MsixCore.PackageStore`
 
-### `IPackageManager` / `PackageManager` (sealed class)
-
-Lifecycle + query over an `IPackageStore`.
-
-| Member | Description | Status |
-|--------|-------------|--------|
-| `IMsixResponse AddPackage(string path, DeploymentOptions = None, CancellationToken = default)` | Install a package: resolve declared dependencies, verify block map, extract to staging, transactionally commit. Returns immediately; runs on a background task. | Implemented. |
-| `IMsixResponse RemovePackage(string fullName, CancellationToken = default)` | Uninstall by full name. Returns immediately. | Implemented. |
-| `IInstalledPackage? FindPackage(string fullName)` | Find one by full name. | Implemented. |
-| `IInstalledPackage? FindPackageByFamilyName(string familyName)` | Find one by family name. | Implemented. |
-| `IReadOnlyList<IInstalledPackage> FindPackages(string pattern)` | Glob query (`*`, `?`). | Implemented. |
-| `IPackage GetMsixPackageInfo(string msixFilePath)` | Read metadata without installing. | Implemented. |
-
-`PackageManager` has a default constructor (backed by
-`FileSystemPackageStore.CreateDefault()`) and a `PackageManager(IPackageStore)`
-constructor.
+Extraction and the decision logic a deployment tool needs. This assembly does
+**not** install packages — see
+[architecture](architecture.md#why-there-is-no-install-engine) for why the
+staging/commit engine was removed.
 
 ### `PackageExtractor` (static class)
 
 Cross-platform extraction of an OPC package to a loose directory. Powers the
-`unpack` verb and the install engine.
+`unpack` verb.
 
 | Member | Description |
 |--------|-------------|
 | `static void Extract(IOpcPackage package, string destination, IProgress<float>? progress = null, CancellationToken = default)` | Extract all parts under `destination`, reporting 0–100 progress. Throws `InvalidDataException` if a part escapes the destination or a symlink/junction (incl. dangling, or the root itself) is on the path. It performs **no integrity verification**; do not trust later extraction from a loose directory based on an earlier validation. |
 | `static BlockMapVerificationResult ExtractAndVerify(IOpcPackage package, BlockMap blockMap, string destination, ...)` | Preferred path for trusted extraction: extract and hash each payload in the same read, then require `IsValid` before using the output. |
 
-### `IPackageStore` / `FileSystemPackageStore` (sealed class)
+### `InstalledPackageInfo` (sealed record)
 
-`IPackageStore` is now writable/transactional; `FileSystemPackageStore`
-implements it over a store root.
+Metadata of a package already installed somewhere, owning no file handles. This
+is the input to `DependencyResolver`.
 
 | Member | Description |
 |--------|-------------|
-| `IReadOnlyList<InstalledPackageInfo> EnumeratePackages()` | Enumerate manifest metadata without indexing payload files. |
-| `InstalledPackageInfo? FindByFullName(...) / FindByFamilyName(...)` | Targeted metadata lookup. Family lookup is deterministic. |
-| `string GetInstallLocation(string packageFullName)` | The (possibly not-yet-existing) install directory for a package. |
-| `bool Contains(string packageFullName)` | Whether a package is currently installed. |
-| `void Delete(string packageFullName)` | Remove an installed package's payload (no-op if absent). |
-| `string CreateStagingLocation()` | Create a fresh empty staging directory to extract into. |
-| `void Commit(string stagingLocation, InstalledPackageInfo package, DeploymentOptions options)` | Flush and promote verified staging with fail-closed policy, a cross-process lock, and an integrity-checked, phase-aware crash-recovery journal. |
-| `FileSystemPackageStore(string rootDirectory)` | Store rooted at a directory. |
-| `static FileSystemPackageStore CreateDefault()` | Store under `LocalApplicationData/MsixCore/Packages`. |
-| `string RootDirectory { get; }` | Absolute store root. |
-| `const string DefaultStoreFolderName` | `"MsixCore/Packages"`. |
-
-### `InstalledPackage` (sealed class, `IInstalledPackage`)
-
-`static InstalledPackage OpenDirectory(string directory)`; exposes
-`InstalledLocation`, `Identity`, `DisplayName`, `PublisherDisplayName`,
-`Capabilities`, `ExecutionInfo`, `OpenLogo()`, `Dispose()`.
-
-### `InstalledPackageInfo` (sealed record)
-
-Non-disposable identity and manifest metadata. `OpenPackage()` opens payload
-content only when requested.
-
-### `IMsixResponse` (interface)
-
-Async operation surface: `float Percentage`, `InstallationStep Status`,
-`string StatusText`, `Exception? Failure`, `Task Completion`,
-`event EventHandler<IMsixResponse>? ProgressChanged`, `void Cancel()`. Returned
-by `AddPackage`/`RemovePackage`. The concrete driver (`MsixResponse`) and the
-inline `SynchronousProgress<T>` reporter are `internal` implementation details.
-
-### `InstallationStep` (enum)
-
-`Unknown`, `Started`, `GetPackageInformation`, `Extraction`, `Integration`,
-`Completed`, `Error` — coarse progress stages (ordered by deployment sequence).
-
-### `DeploymentOptions` (flags enum)
-
-`None = 0`, `ForceApplicationShutdown = 1`, `ExtractOnly = 2`,
-`ForceReinstall = 4`, `AllowDowngrade = 8`, `SkipDependencyCheck = 16`.
+| `Identity`, `DisplayName`, `PublisherDisplayName`, `Capabilities`, `IsFramework`, `LogoPath`, `ExecutablePath` | Manifest metadata. |
+| `string InstalledLocation` | Absolute package root. |
+| `static InstalledPackageInfo ReadFromDirectory(string directory)` | Read only the manifest of an installed layout. A directory or reparse point named `AppxManifest.xml` is rejected rather than reported as absent. |
+| `MsixPackage OpenPackage()` | Open the installed content on demand. |
 
 ### `DependencyResolver` (static class)
 
-Resolves a manifest's declared `Dependencies` against an `IPackageStore`. `PackageManager.AddPackage`
-runs it before extraction unless `DeploymentOptions.SkipDependencyCheck` is set.
+Resolves a manifest's declared `Dependencies` against a set of installed
+packages. The installed set is supplied by the caller rather than read from a
+store, because the authority on what is installed differs by host: on Windows it
+is the OS deployment stack, in CI a directory of staged packages, in a
+deployment tool that tool's own inventory. The decision itself is the same in
+every case.
 
 | Member | Description |
 |--------|-------------|
-| `DependencyResolutionResult Resolve(AppxManifest manifest, IPackageStore store)` | One `DependencyResolution` per declared dependency, in manifest order. |
-| `DependencyResolutionResult` | `Resolutions`, `IsSatisfied`, `Unsatisfied`, `Blocking`, `CanDeploy`. `CanDeploy` excludes `uap6:Optional` dependencies, and is the gate `AddPackage` uses. |
+| `DependencyResolutionResult Resolve(AppxManifest manifest, IEnumerable<InstalledPackageInfo> installedPackages)` | One `DependencyResolution` per declared dependency, in manifest order. The sequence is materialised once, and is not enumerated at all when the manifest declares no dependencies. |
+| `DependencyResolutionResult` | `Resolutions`, `IsSatisfied`, `Unsatisfied`, `Blocking`, `CanDeploy`. `CanDeploy` excludes `uap6:Optional` dependencies, so it — not `IsSatisfied` — is the gate a deployment tool should use. |
 | `DependencyResolution` | `Dependency`, `Status`, `ResolvedPackage`, `IsSatisfied`, `Describe()`. |
-| `DependencyResolutionStatus` | `Resolved`, `NotInstalled`, `VersionTooLow`. |
+| `DependencyResolutionStatus` | `Resolved`, `NotInstalled`, `NotAFramework`, `VersionTooLow`. |
 
 See [manifest dependencies](manifest-dependencies.md) for the resolution rules and divergences.
 
-### Handlers — `MsixCore.PackageStore.Handlers`
-
-| Type | Kind | Description |
-|------|------|-------------|
-| `IPackageHandler` | interface | A pipeline step: `Name`, `IsApplicable(context)`, `ExecuteAddAsync(...)`, `ExecuteRemoveAsync(...)`. |
-| `PackageDeploymentContext` | sealed class | `Package`, `InstallLocation`, `Options`. |

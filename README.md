@@ -18,12 +18,12 @@ as a modern, memory-safe, **cross-platform** library and CLI.
   signature-envelope integrity (an integrity verdict, not an authenticity
   verdict) and returns a CI-friendly exit code, so a Linux build agent can gate
   MSIX packages before they ship.
-- **Loose (unpacked) registration.** Every reader and the deployment query
-  surface work equally on a `.msix`/`.appx` container **or** an unpacked
-  directory, enabling loose-layout inspection and registration.
-- **Idiomatic .NET.** The native `IPackage` / `IPackageManager` / `IMsixResponse`
-  interfaces are reshaped to properties, exceptions, `Task`-based async, and
-  records instead of `HRESULT`s and raw pointers.
+- **Loose (unpacked) layouts.** Every reader works equally on a `.msix`/`.appx`
+  container **or** an unpacked directory, enabling loose-layout inspection and
+  validation.
+- **Idiomatic .NET.** The native `IPackage` interface and its `HRESULT`/raw
+  pointer conventions are reshaped to properties, exceptions, `Task`-based async,
+  and records.
 
 ## Scope & non-goals
 
@@ -31,6 +31,11 @@ MSIX Core's intended signing pipeline is: **pack** (MSIX Core, cross-platform,
 deterministic, unsigned output) -> **sign** (Windows job, external SignTool or CI
 signing service) -> **validate** (MSIX Core, cross-platform integrity gate).
 
+- **Installing MSIX packages is a non-goal.** Windows installs MSIX natively;
+  this project is packaging and analysis tooling plus the decision logic a
+  deployment tool needs, not a competing deployment stack. An earlier
+  transactional install engine was removed for this reason — see
+  [architecture](docs/architecture.md#why-there-is-no-install-engine).
 - **Code signing / signature production is a non-goal.** MSIX Core does not
   produce signatures and will not implement cross-platform CMS/AX* signature
   production. Signing is intentionally delegated to Windows SignTool/signcode and
@@ -39,9 +44,6 @@ signing service) -> **validate** (MSIX Core, cross-platform integrity gate).
 - **Certificate trust-chain and revocation evaluation are non-goals.** Trust is
   environment- and policy-dependent, so chain, root, and revocation decisions are
   delegated to the platform/signing environment.
-- **Windows OS integration is a later phase, not a signing feature.** Shortcuts,
-  registry entries, and file-type/protocol associations remain guarded,
-  platform-specific deployment work.
 
 ## Components
 
@@ -51,25 +53,20 @@ signing service) -> **validate** (MSIX Core, cross-platform integrity gate).
   (`AppxManifestParser`), block-map and signature integrity (`BlockMapVerifier`,
   `PackageSignatureReader`), identity (`PackageFullName` /
   `PackageFamilyName`), and `MsixPackageBuilder`.
-- **`MsixCore.PackageStore`** — install/uninstall/query engine over an
-  `IPackageStore`, with cross-platform payload extraction (`PackageExtractor`) and a
-  *planned* handler pipeline (interfaces defined, not yet wired).
-  `PackageManager.AddPackage`/`RemovePackage` are implemented (transactional install
-  with rollback); OS integration (shortcuts, registry, file-type associations) is a
-  later phase.
-- **`msixkit`** — command-line tool. `inspect`, `validate`, `unpack`, and `pack` are
-  implemented. Deployment operations remain available through the
-  `MsixCore.PackageStore` library until dedicated CLI verbs are implemented.
+- **`MsixCore.PackageStore`** — cross-platform payload extraction
+  (`PackageExtractor`) and dependency resolution (`DependencyResolver`), which
+  answers whether a package's declared dependencies are satisfied by a given set
+  of installed packages.
+- **`msixkit`** — command-line tool: `inspect`, `validate`, `unpack`, `pack`,
+  and `bundle`.
 
 ## Status
 
 Under active, **phased** development. Each phase lands as its own reviewed PR
-with full test coverage (currently 370 passing tests). The reader
-(OPC → manifest → block map → signature → identity), the deployment **engine**
-(transactional add/remove driving `IMsixResponse`, cross-platform extraction,
-and query), package/bundle authoring, and the `unpack`/`pack`/`bundle` CLI verbs are
-implemented; Windows OS-integration handlers (shortcuts, registry,
-associations) are guarded and land in a later phase. Authoring intentionally
+with full test coverage. The reader
+(OPC → manifest → block map → signature → identity), package/bundle authoring,
+extraction, dependency resolution, and the `unpack`/`pack`/`bundle` CLI verbs are
+implemented. Authoring intentionally
 produces unsigned `.msix` packages with deterministic Stored output by default
 and opt-in MakeAppx-compatible 64 KiB block DEFLATE compression. It also
 produces deterministic `.msixbundle`/`.appxbundle` containers from completed
@@ -175,8 +172,7 @@ src/
     Opc/                      OpcPackage, DirectoryOpcPackage, OpcPartNames
     Manifest/                 AppxManifestParser, BundleManifestParser, models
     Integrity/                BlockMapVerifier, PackageSignatureReader
-  MsixCore.PackageStore/        Install/uninstall/query engine + IPackageStore
-    Handlers/                 IPackageHandler pipeline
+  MsixCore.PackageStore/        PackageExtractor + DependencyResolver
   msixkit/                    CLI (inspect, validate, ...)
 tests/
   MsixCore.Packaging.Tests/

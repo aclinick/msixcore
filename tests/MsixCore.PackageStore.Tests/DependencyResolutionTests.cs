@@ -4,22 +4,28 @@ using MsixCore.Packaging.Manifest;
 namespace MsixCore.PackageStore.Tests;
 
 /// <summary>
-/// Covers install-time resolution of the dependencies a package declares (TC-P1-3d): a package
-/// whose framework, main package, or host runtime is absent must not install.
+/// Covers resolution of the dependencies a package declares (TC-P1-3d) against a set of installed
+/// packages: which are satisfied, which are missing, and which of the missing actually block.
 /// </summary>
+/// <remarks>
+/// The installed packages are built as real loose folders and read back through
+/// <see cref="InstalledPackageInfo.ReadFromDirectory"/> rather than constructed as records, so the
+/// manifest fields resolution depends on — family name, architecture, version, the framework flag —
+/// are the ones a real package would actually produce.
+/// </remarks>
 public class DependencyResolutionTests : IDisposable
 {
     private const string Publisher = "CN=Contoso";
     private const string OtherPublisher = "CN=Fabrikam";
 
     private readonly string _root;
-    private readonly FileSystemPackageStore _store;
+    private readonly List<InstalledPackageInfo> _installed = [];
+    private int _next;
 
     public DependencyResolutionTests()
     {
         _root = Path.Combine(Path.GetTempPath(), "msixcore-deps-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
-        _store = new FileSystemPackageStore(Path.Combine(_root, "store"));
     }
 
     public void Dispose()
@@ -32,7 +38,7 @@ public class DependencyResolutionTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>Places a package directly into the store, as though it were already installed.</summary>
+    /// <summary>Adds a package to the installed set the resolver will be given.</summary>
     private void GivenInstalled(
         string name,
         string version = "1.0.0.0",
@@ -40,24 +46,26 @@ public class DependencyResolutionTests : IDisposable
         string publisher = Publisher,
         bool isFramework = false)
     {
-        string staging = _store.CreateStagingLocation();
-        File.WriteAllText(
-            Path.Combine(staging, "AppxManifest.xml"),
+        string directory = LoosePackageBuilder.Create(
+            _root,
+            $"installed{_next++}",
             LoosePackageBuilder.ManifestXml(
                 name,
                 publisher,
                 version,
                 architecture,
                 executable: null,
-                isFramework: isFramework));
-        _store.Commit(staging, InstalledPackageInfo.ReadFromDirectory(staging), DeploymentOptions.None);
+                isFramework: isFramework),
+            includeExecutable: false);
+
+        _installed.Add(InstalledPackageInfo.ReadFromDirectory(directory));
     }
 
-    private string GivenPackageDeclaring(string dependencies, string architecture = "x64")
+    /// <summary>Builds the manifest of a package declaring <paramref name="dependencies"/>.</summary>
+    private AppxManifest GivenPackageDeclaring(string? dependencies, string architecture = "x64")
     {
-        string source = Path.Combine(_root, "source");
-        return PackedMsixBuilder.Create(
-            source,
+        string path = PackedMsixBuilder.Create(
+            Path.Combine(_root, $"source{_next++}"),
             "app.msix",
             LoosePackageBuilder.ManifestXml(
                 "Contoso.MyApp",
@@ -65,129 +73,191 @@ public class DependencyResolutionTests : IDisposable
                 architecture: architecture,
                 executable: null,
                 dependencies: dependencies));
-    }
 
-    private static AppxManifest ManifestOf(string packagePath)
-    {
-        using MsixPackage package = MsixPackage.Open(packagePath);
+        using MsixPackage package = MsixPackage.Open(path);
         return package.Manifest;
     }
 
-    private async Task<Exception?> InstallAsync(string packagePath, DeploymentOptions options = DeploymentOptions.None)
-    {
-        var manager = new PackageManager(_store);
-        try
-        {
-            await manager.AddPackage(packagePath, options).Completion;
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
+    private DependencyResolutionResult Resolve(AppxManifest manifest) =>
+        DependencyResolver.Resolve(manifest, _installed);
 
     // TC-P1-3d
     [Fact]
-    public async Task AddPackage_WithAMissingFrameworkDependency_Fails()
+    public void Resolve_WithAMissingFramework_ReportsNotInstalled()
     {
-        string path = GivenPackageDeclaring(
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
-        Exception? error = await InstallAsync(path);
+        DependencyResolutionResult result = Resolve(manifest);
 
-        Assert.NotNull(error);
-        Assert.Equal(MsixErrorCode.DependencyNotSatisfied, MsixError.GetCode(error));
-        Assert.Contains("Contoso.Framework", error!.Message, StringComparison.Ordinal);
-        Assert.Contains("not installed", error.Message, StringComparison.Ordinal);
-        Assert.Empty(_store.EnumeratePackages());
+        DependencyResolution resolution = Assert.Single(result.Resolutions);
+        Assert.Equal(DependencyResolutionStatus.NotInstalled, resolution.Status);
+        Assert.False(result.CanDeploy);
+        Assert.Contains("Contoso.Framework", resolution.Describe(), StringComparison.Ordinal);
+        Assert.Contains("not installed", resolution.Describe(), StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task AddPackage_WithAnInstalledFrameworkDependency_Succeeds()
+    public void Resolve_WithAnInstalledFramework_IsSatisfied()
     {
         GivenInstalled("Contoso.Framework", "1.2.0.0", isFramework: true);
-        string path = GivenPackageDeclaring(
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
-        Exception? error = await InstallAsync(path);
+        DependencyResolutionResult result = Resolve(manifest);
 
-        Assert.Null(error);
-        Assert.Contains(_store.EnumeratePackages(), p => p.Identity.Name == "Contoso.MyApp");
+        Assert.True(result.IsSatisfied);
+        Assert.True(result.CanDeploy);
+        Assert.Empty(result.Unsatisfied);
+        Assert.Equal(
+            new Version(1, 2, 0, 0),
+            Assert.Single(result.Resolutions).ResolvedPackage!.Identity.Version);
     }
 
     [Fact]
-    public async Task AddPackage_WithANonFrameworkOfTheSameName_Fails()
+    public void Resolve_WithANonFrameworkOfTheSameName_IsNotSatisfied()
     {
         // A PackageDependency references a framework. An ordinary app package sharing the family
         // name is not loadable as one, so it must not satisfy the dependency.
         GivenInstalled("Contoso.Framework", "1.2.0.0", isFramework: false);
-        string path = GivenPackageDeclaring(
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
-        Exception? error = await InstallAsync(path);
+        DependencyResolution resolution = Assert.Single(Resolve(manifest).Resolutions);
 
-        Assert.NotNull(error);
-        Assert.Equal(MsixErrorCode.DependencyNotSatisfied, MsixError.GetCode(error));
-        Assert.Contains("is not a framework package", error!.Message, StringComparison.Ordinal);
+        Assert.Equal(DependencyResolutionStatus.NotAFramework, resolution.Status);
+        Assert.Contains("is not a framework package", resolution.Describe(), StringComparison.Ordinal);
+
+        // The near-miss is reported so a caller can explain what it found, not only what it wanted.
+        Assert.Equal("Contoso.Framework", resolution.ResolvedPackage!.Identity.Name);
     }
 
     [Fact]
-    public async Task AddPackage_WithAFrameworkOlderThanMinVersion_Fails()
+    public void Resolve_WithAFrameworkOlderThanMinVersion_IsNotSatisfied()
     {
         GivenInstalled("Contoso.Framework", "1.0.0.0", isFramework: true);
-        string path = GivenPackageDeclaring(
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Framework" MinVersion="2.0.0.0" Publisher="{Publisher}" />""");
 
-        Exception? error = await InstallAsync(path);
+        DependencyResolution resolution = Assert.Single(Resolve(manifest).Resolutions);
 
-        Assert.NotNull(error);
-        Assert.Equal(MsixErrorCode.DependencyNotSatisfied, MsixError.GetCode(error));
-        Assert.Contains("2.0.0.0 or later", error!.Message, StringComparison.Ordinal);
+        Assert.Equal(DependencyResolutionStatus.VersionTooLow, resolution.Status);
+        Assert.Contains("2.0.0.0 or later", resolution.Describe(), StringComparison.Ordinal);
+        Assert.Equal(new Version(1, 0, 0, 0), resolution.ResolvedPackage!.Identity.Version);
     }
 
     [Fact]
-    public async Task AddPackage_WithASkippedDependencyCheck_InstallsAnyway()
+    public void Resolve_WithAFrameworkNewerThanMinVersion_IsSatisfied()
     {
-        string path = GivenPackageDeclaring(
-            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
+        // MinVersion is a floor, not a pin.
+        GivenInstalled("Contoso.Framework", "9.0.0.0", isFramework: true);
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="2.0.0.0" Publisher="{Publisher}" />""");
 
-        Exception? error = await InstallAsync(path, DeploymentOptions.SkipDependencyCheck);
-
-        Assert.Null(error);
-        Assert.Contains(_store.EnumeratePackages(), p => p.Identity.Name == "Contoso.MyApp");
+        Assert.True(Resolve(manifest).IsSatisfied);
     }
 
     [Fact]
-    public async Task AddPackage_WithNoDependencies_DoesNotRequireAnything()
+    public void Resolve_WithNoDependencies_RequiresNothing()
     {
-        string path = PackedMsixBuilder.Create(Path.Combine(_root, "source"), "plain.msix");
+        AppxManifest manifest = GivenPackageDeclaring(dependencies: null);
 
-        Assert.Null(await InstallAsync(path));
+        DependencyResolutionResult result = Resolve(manifest);
+
+        Assert.Empty(result.Resolutions);
+        Assert.True(result.IsSatisfied);
+        Assert.True(result.CanDeploy);
     }
 
     [Fact]
-    public async Task AddPackage_WithAMissingMainPackage_Fails()
+    public void Resolve_WithNoDependencies_DoesNotEnumerateTheInstalledSet()
     {
-        string path = GivenPackageDeclaring(
+        // A caller whose inventory is expensive to produce should not pay for it when the package
+        // declares nothing. The sequence throws on enumeration, not on construction, so it fails only
+        // if Resolve actually touches it.
+        AppxManifest manifest = GivenPackageDeclaring(dependencies: null);
+        IEnumerable<InstalledPackageInfo> throwOnEnumeration = Enumerable.Range(0, 1)
+            .Select<int, InstalledPackageInfo>(
+                static _ => throw new InvalidOperationException("The installed set must not be enumerated."));
+
+        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, throwOnEnumeration);
+
+        Assert.True(result.IsSatisfied);
+    }
+
+    [Fact]
+    public void Resolve_EnumeratesTheInstalledSetOnlyOnce()
+    {
+        // Resolve accepts IEnumerable, so a caller may pass a lazy or single-pass sequence; it must
+        // be materialised rather than re-enumerated once per declared dependency.
+        GivenInstalled("Contoso.One", isFramework: true);
+        GivenInstalled("Contoso.Two", isFramework: true);
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""
+            <PackageDependency Name="Contoso.One" MinVersion="1.0.0.0" Publisher="{Publisher}" />
+                <PackageDependency Name="Contoso.Two" MinVersion="1.0.0.0" Publisher="{Publisher}" />
+            """);
+
+        int enumerations = 0;
+        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, Counted());
+
+        Assert.True(result.IsSatisfied);
+        Assert.Equal(1, enumerations);
+
+        IEnumerable<InstalledPackageInfo> Counted()
+        {
+            enumerations++;
+            foreach (InstalledPackageInfo package in _installed)
+            {
+                yield return package;
+            }
+        }
+    }
+
+    [Fact]
+    public void Resolve_WithAMissingMainPackage_IsNotSatisfied()
+    {
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<uap4:MainPackageDependency Name="Contoso.MainApp" Publisher="{Publisher}" />""");
 
-        Exception? error = await InstallAsync(path);
+        DependencyResolution resolution = Assert.Single(Resolve(manifest).Resolutions);
 
-        Assert.NotNull(error);
-        Assert.Contains("main package 'Contoso.MainApp' is not installed", error!.Message, StringComparison.Ordinal);
+        Assert.Equal(DependencyResolutionStatus.NotInstalled, resolution.Status);
+        Assert.Contains(
+            "main package 'Contoso.MainApp' is not installed",
+            resolution.Describe(),
+            StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task AddPackage_WithAMissingHostRuntime_Fails()
+    public void Resolve_WithAMissingHostRuntime_IsNotSatisfied()
     {
-        string path = GivenPackageDeclaring(
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<uap10:HostRuntimeDependency Name="Contoso.Host" Publisher="{Publisher}" MinVersion="1.0.0.0" />""");
 
-        Exception? error = await InstallAsync(path);
+        DependencyResolution resolution = Assert.Single(Resolve(manifest).Resolutions);
 
-        Assert.NotNull(error);
-        Assert.Contains("host runtime 'Contoso.Host' is not installed", error!.Message, StringComparison.Ordinal);
+        Assert.Equal(DependencyResolutionStatus.NotInstalled, resolution.Status);
+        Assert.Contains(
+            "host runtime 'Contoso.Host' is not installed",
+            resolution.Describe(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Resolve_MainPackageAndHostRuntime_NeedNotBeFrameworks()
+    {
+        // Only PackageDependency carries the framework constraint: the package a modification
+        // package modifies, and a host runtime, are both ordinary packages.
+        GivenInstalled("Contoso.MainApp", isFramework: false);
+        GivenInstalled("Contoso.Host", isFramework: false);
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""
+            <uap4:MainPackageDependency Name="Contoso.MainApp" Publisher="{Publisher}" />
+                <uap10:HostRuntimeDependency Name="Contoso.Host" Publisher="{Publisher}" MinVersion="1.0.0.0" />
+            """);
+
+        Assert.True(Resolve(manifest).IsSatisfied);
     }
 
     [Fact]
@@ -196,12 +266,23 @@ public class DependencyResolutionTests : IDisposable
         // The uap3 form has no Publisher attribute; a modification package always shares its
         // parent's publisher, so resolution must fall back to the dependent's.
         GivenInstalled("Contoso.MainApp");
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
-            """<uap4:MainPackageDependency Name="Contoso.MainApp" />"""));
+        AppxManifest manifest = GivenPackageDeclaring(
+            """<uap4:MainPackageDependency Name="Contoso.MainApp" />""");
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
+        Assert.True(Resolve(manifest).IsSatisfied);
+    }
 
-        Assert.True(result.IsSatisfied);
+    [Fact]
+    public void Resolve_MainPackageWithoutPublisher_DoesNotMatchAnotherPublisher()
+    {
+        // The fallback must narrow resolution to the dependent's own publisher, not widen it to any.
+        GivenInstalled("Contoso.MainApp", publisher: OtherPublisher);
+        AppxManifest manifest = GivenPackageDeclaring(
+            """<uap4:MainPackageDependency Name="Contoso.MainApp" />""");
+
+        Assert.Equal(
+            DependencyResolutionStatus.NotInstalled,
+            Assert.Single(Resolve(manifest).Resolutions).Status);
     }
 
     [Fact]
@@ -209,13 +290,12 @@ public class DependencyResolutionTests : IDisposable
     {
         // Same package name, different publisher, therefore a different family: it must not match.
         GivenInstalled("Contoso.Framework", publisher: OtherPublisher, isFramework: true);
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
-            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />"""));
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
-
-        DependencyResolution resolution = Assert.Single(result.Resolutions);
-        Assert.Equal(DependencyResolutionStatus.NotInstalled, resolution.Status);
+        Assert.Equal(
+            DependencyResolutionStatus.NotInstalled,
+            Assert.Single(Resolve(manifest).Resolutions).Status);
     }
 
     [Fact]
@@ -223,131 +303,77 @@ public class DependencyResolutionTests : IDisposable
     {
         // An x86 framework cannot load into an x64 app's process.
         GivenInstalled("Contoso.Framework", architecture: "x86", isFramework: true);
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
-            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />"""));
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
+        Assert.Equal(
+            DependencyResolutionStatus.NotInstalled,
+            Assert.Single(Resolve(manifest).Resolutions).Status);
+    }
 
-        DependencyResolution resolution = Assert.Single(result.Resolutions);
-        Assert.Equal(DependencyResolutionStatus.NotInstalled, resolution.Status);
+    [Fact]
+    public void Resolve_PrefersTheMatchingArchitectureOverAHigherVersion()
+    {
+        // Architecture filtering happens before the version comparison, so a newer but unloadable
+        // build must not shadow the older loadable one.
+        GivenInstalled("Contoso.Framework", "9.0.0.0", architecture: "x86", isFramework: true);
+        GivenInstalled("Contoso.Framework", "2.0.0.0", architecture: "x64", isFramework: true);
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
+
+        DependencyResolution resolution = Assert.Single(Resolve(manifest).Resolutions);
+
+        Assert.Equal(DependencyResolutionStatus.Resolved, resolution.Status);
+        Assert.Equal(new Version(2, 0, 0, 0), resolution.ResolvedPackage!.Identity.Version);
     }
 
     [Fact]
     public void Resolve_NeutralFramework_SatisfiesAnyArchitecture()
     {
         GivenInstalled("Contoso.Framework", architecture: "neutral", isFramework: true);
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
-            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />"""));
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
+        Assert.True(Resolve(manifest).IsSatisfied);
+    }
 
-        Assert.True(result.IsSatisfied);
+    [Fact]
+    public void Resolve_NeutralDependent_IsSatisfiedByAnyArchitecture()
+    {
+        GivenInstalled("Contoso.Framework", architecture: "x64", isFramework: true);
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""",
+            architecture: "neutral");
+
+        Assert.True(Resolve(manifest).IsSatisfied);
     }
 
     [Fact]
     public void Resolve_PrefersTheHighestInstalledVersion()
     {
-        // A store legitimately holds several versions of a framework family; the newest one decides
-        // whether the MinVersion constraint is met. Both must really still be present — if the store
-        // evicted the older one on commit this test would pass for the wrong reason.
+        // Several versions of a framework family are legitimately installed side by side; the newest
+        // compatible one decides whether the MinVersion constraint is met.
         GivenInstalled("Contoso.Framework", "1.0.0.0", isFramework: true);
         GivenInstalled("Contoso.Framework", "3.0.0.0", isFramework: true);
-        Assert.Equal(2, _store.EnumeratePackages().Count(p => p.Identity.Name == "Contoso.Framework"));
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="2.0.0.0" Publisher="{Publisher}" />""");
 
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
-            $"""<PackageDependency Name="Contoso.Framework" MinVersion="2.0.0.0" Publisher="{Publisher}" />"""));
+        DependencyResolution resolution = Assert.Single(Resolve(manifest).Resolutions);
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
-
-        DependencyResolution resolution = Assert.Single(result.Resolutions);
         Assert.Equal(DependencyResolutionStatus.Resolved, resolution.Status);
         Assert.Equal(new Version(3, 0, 0, 0), resolution.ResolvedPackage!.Identity.Version);
     }
 
     [Fact]
-    public void Store_KeepsFrameworkVersionsSideBySide()
-    {
-        // An app binds to the specific MinVersion it declared, so installing a newer framework must
-        // not evict the older one an already-installed app resolved against.
-        GivenInstalled("Contoso.Framework", "1.0.0.0", isFramework: true);
-        GivenInstalled("Contoso.Framework", "2.0.0.0", isFramework: true);
-
-        Assert.Equal(
-            [new Version(1, 0, 0, 0), new Version(2, 0, 0, 0)],
-            _store.EnumeratePackages().Select(p => p.Identity.Version).Order());
-    }
-
-    [Fact]
-    public void Store_KeepsArchitectureVariantsSideBySide()
-    {
-        // An x86 app and an x64 app on one machine each need their own build of the framework.
-        GivenInstalled("Contoso.Framework", architecture: "x64", isFramework: true);
-        GivenInstalled("Contoso.Framework", architecture: "x86", isFramework: true);
-
-        Assert.Equal(
-            [ProcessorArchitecture.X86, ProcessorArchitecture.X64],
-            _store.EnumeratePackages().Select(p => p.Identity.Architecture).Order());
-    }
-
-    [Fact]
-    public void Store_ReplacesAnOlderVersionOfANonFrameworkPackage()
-    {
-        // App packages keep the single-slot-per-family upgrade behaviour.
-        GivenInstalled("Contoso.App", "1.0.0.0");
-        GivenInstalled("Contoso.App", "2.0.0.0");
-
-        InstalledPackageInfo installed = Assert.Single(_store.EnumeratePackages());
-        Assert.Equal(new Version(2, 0, 0, 0), installed.Identity.Version);
-    }
-
-    [Fact]
-    public void Store_ReplacesAnAppOfADifferentArchitecture()
-    {
-        // An app family is a single slot: installing the x64 build replaces the x86 build.
-        // Architecture-based coexistence applies to frameworks, not to main packages.
-        GivenInstalled("Contoso.App", "1.0.0.0", architecture: "x86");
-        GivenInstalled("Contoso.App", "2.0.0.0", architecture: "x64");
-
-        InstalledPackageInfo installed = Assert.Single(_store.EnumeratePackages());
-        Assert.Equal(ProcessorArchitecture.X64, installed.Identity.Architecture);
-    }
-
-    [Fact]
-    public void Store_AppliesTheDowngradeGuardAcrossArchitectures()
-    {
-        // The cross-architecture case must not be an escape hatch from the downgrade policy.
-        GivenInstalled("Contoso.App", "2.0.0.0", architecture: "x86");
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => GivenInstalled("Contoso.App", "1.0.0.0", architecture: "x64"));
-
-        Assert.Contains("AllowDowngrade", error.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task AddPackage_WithAMissingOptionalDependency_StillInstalls()
-    {
-        // uap6:Optional marks a framework the package can run without, so its absence must not block
-        // deployment.
-        string path = GivenPackageDeclaring(
-            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />""");
-
-        Exception? error = await InstallAsync(path);
-
-        Assert.Null(error);
-        Assert.Contains(_store.EnumeratePackages(), p => p.Identity.Name == "Contoso.MyApp");
-    }
-
-    [Fact]
     public void Resolve_MissingOptionalDependency_IsReportedButNotBlocking()
     {
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""
             <PackageDependency Name="Contoso.Optional" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />
                 <PackageDependency Name="Contoso.Required" MinVersion="1.0.0.0" Publisher="{Publisher}" />
-            """));
+            """);
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
+        DependencyResolutionResult result = Resolve(manifest);
 
         // Both are unsatisfied and both are reported, but only the required one blocks.
         Assert.False(result.IsSatisfied);
@@ -357,30 +383,62 @@ public class DependencyResolutionTests : IDisposable
     }
 
     [Fact]
-    public async Task AddPackage_WithOnlyOptionalDependenciesMissing_ReportsCanDeploy()
+    public void Resolve_WithOnlyOptionalDependenciesMissing_CanDeploy()
     {
-        string path = GivenPackageDeclaring(
+        // uap6:Optional marks a framework the package can run without, so its absence must not block
+        // deployment even though it is still reported as unsatisfied.
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""<PackageDependency Name="Contoso.Optional" MinVersion="1.0.0.0" Publisher="{Publisher}" uap6:Optional="true" />""");
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(ManifestOf(path), _store);
+        DependencyResolutionResult result = Resolve(manifest);
 
         Assert.False(result.IsSatisfied);
         Assert.True(result.CanDeploy);
-        Assert.Null(await InstallAsync(path));
+        Assert.Empty(result.Blocking);
     }
 
     [Fact]
     public void Resolve_ReportsEveryUnsatisfiedDependency()
     {
-        AppxManifest manifest = ManifestOf(GivenPackageDeclaring(
+        // A caller should be able to report everything that is missing at once, not just the first.
+        AppxManifest manifest = GivenPackageDeclaring(
             $"""
             <PackageDependency Name="Contoso.One" MinVersion="1.0.0.0" Publisher="{Publisher}" />
                 <PackageDependency Name="Contoso.Two" MinVersion="1.0.0.0" Publisher="{Publisher}" />
-            """));
+            """);
 
-        DependencyResolutionResult result = DependencyResolver.Resolve(manifest, _store);
+        DependencyResolutionResult result = Resolve(manifest);
 
         Assert.False(result.IsSatisfied);
         Assert.Equal(["Contoso.One", "Contoso.Two"], result.Unsatisfied.Select(r => r.Dependency.Name));
+    }
+
+    [Fact]
+    public void Resolve_PreservesManifestOrder()
+    {
+        GivenInstalled("Contoso.Two", isFramework: true);
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""
+            <PackageDependency Name="Contoso.One" MinVersion="1.0.0.0" Publisher="{Publisher}" />
+                <PackageDependency Name="Contoso.Two" MinVersion="1.0.0.0" Publisher="{Publisher}" />
+                <PackageDependency Name="Contoso.Three" MinVersion="1.0.0.0" Publisher="{Publisher}" />
+            """);
+
+        DependencyResolutionResult result = Resolve(manifest);
+
+        Assert.Equal(
+            ["Contoso.One", "Contoso.Two", "Contoso.Three"],
+            result.Resolutions.Select(r => r.Dependency.Name));
+        Assert.Equal([false, true, false], result.Resolutions.Select(r => r.IsSatisfied));
+    }
+
+    [Fact]
+    public void Resolve_WithNullArguments_Throws()
+    {
+        AppxManifest manifest = GivenPackageDeclaring(
+            $"""<PackageDependency Name="Contoso.Framework" MinVersion="1.0.0.0" Publisher="{Publisher}" />""");
+
+        Assert.Throws<ArgumentNullException>(() => DependencyResolver.Resolve(null!, _installed));
+        Assert.Throws<ArgumentNullException>(() => DependencyResolver.Resolve(manifest, null!));
     }
 }

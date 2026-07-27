@@ -10,16 +10,17 @@ Prioritization rubric:
 - **P0** — correctness/security of what the port already claims to do (a wrong "valid" verdict is
   worse than an unsupported feature).
 - **P1** — high-value modern MSIX surface most packages actually use (bundles, extensions,
-  dependencies, install engine).
+  dependencies).
 - **P2** — completeness for less-common package kinds and advanced scenarios.
 
 Each test case lists a fixture (the package/manifest to synthesize) and the assertion. Fixtures
 should be minimal, generated deterministically, and committed under a `fixtures/` tree so they run in
 Linux CI (the whole reader is cross-platform).
 
-> **Status refresh (post signature-binding and read-path validation work):** P0-1 through P0-4 are
-> now **resolved** and retained as regression suites. The install engine (P1-5), OPC
-> percent-decoding, `CodeIntegrity.cat` footprint handling, and bundle parsing have also landed.
+> **Status refresh (post install-engine removal):** P0-1 through P0-4 are now **resolved** and
+> retained as regression suites. OPC percent-decoding, `CodeIntegrity.cat` footprint handling, and
+> bundle parsing have landed. The install engine (P1-5) was implemented and then removed as out of
+> scope.
 
 ---
 
@@ -213,33 +214,19 @@ and app-extension (add-in) categories. Ref:
 - **TC-P1-4f:** `desktop:Extension` shortcut / `windows.fullTrustProcess` → assert parsed.
 - **TC-P1-4g (round-trip):** Package with several extensions; `inspect --json` lists them all.
 
-### P1-5. Install engine — IMPLEMENTED; remaining: pluggable handlers and OS integration
-**Done:** `AddPackage`/`RemovePackage` now run a real extract → stage → commit pipeline
-(`PackageManager.RunAdd`/`RunRemove`) over `IPackageStore`. `FileSystemPackageStore` implements
-`CreateStagingLocation`/`Commit` (move-aside backup + atomic promote + rollback) and `Delete`; payloads
-are hashed while extracted and committed only after validation; progress is surfaced via `IMsixResponse`/`InstallationStep`;
-`PackageExtractor` provides containment-checked loose extraction. The test cases below are now
-**runnable regression tests**. Ref:
-[Managing MSIX deployment](https://learn.microsoft.com/en-us/windows/msix/desktop/managing-your-msix-deployment-overview).
+### P1-5. Install engine — **REMOVED (out of scope)**
+An install engine was implemented (extract → stage → atomic commit → rollback over a filesystem
+package store) and then **deliberately deleted**. Rationale: Windows installs MSIX natively through
+the deployment APIs, and this store registered nothing with the OS, so it had no consumer — shipping
+it meant supporting a public API with no scenario plus a transactional-filesystem attack surface.
 
-**Test cases (regression — should pass today):**
-- **TC-P1-5a:** `AddPackage` unpacks all block-map files to the store, hashes match, and the package
-  becomes discoverable via `FindPackage`.
-- **TC-P1-5b:** `AddPackage` verifies the block map **before** commit; a tampered package leaves the
-  store unchanged and the pre-existing install (if any) intact (rollback).
-- **TC-P1-5c:** `RemovePackage` deletes the install root; the package is no longer found; removing a
-  non-installed full name reports failure.
-- **TC-P1-5d:** Re-add an already-installed full name without `ForceReinstall` fails; with it, the
-  reinstall succeeds. `ForceApplicationShutdown` does not change version policy.
-- **TC-P1-5g:** Upgrades replace the installed family; downgrades fail unless `AllowDowngrade` is set.
-- **TC-P1-5h:** A cross-process lock file serializes commits sharing one store root.
-- **TC-P1-5e (cancellation):** Cancelling mid-extraction leaves no committed install and cleans up the
-  staging directory.
+What survives from that work, and is still tested:
+- `PackageExtractor` — containment-checked loose extraction (`Extract` / `ExtractAndVerify`).
+- `InstalledPackageInfo` — read a loose installed package's identity from a directory.
+- `DependencyResolver` — decide whether a manifest's declared dependencies are satisfied by a
+  caller-supplied installed set (see P1-3).
 
-**Remaining gaps (still open):**
-- **TC-P1-5f (pluggable handlers):** Extraction is inlined in `RunAdd`, not run through
-  `IPackageHandler` handlers ordered on add / reversed on remove. Assert (future) a fake handler's
-  call order once the pipeline is wired.
+There are no remaining gaps here; the feature is not planned.
 
 ### P1-6. Richer VisualElements / capability categorization — **IMPLEMENTED**
 **Gap (closed):** VisualElements omitted many logos/tiles; capabilities weren't categorized by
@@ -340,9 +327,9 @@ result). Negative fixtures assert the specific exception type/message.
   — **FIXED/merged**. `PackageSignature.MatchesPublisher` now compares decoded RDNs from the
   certificate's raw subject bytes (encoding- and order-faithful), eliminating the false-mismatch that
   wrongly flagged legitimately-signed packages. Retained above as regression test cases TC-P0-2a…e.
-- **Cross-process store coordination:** tracked as issue #14 (referenced in
-  `FileSystemPackageStore`); the in-process promotion lock does not coordinate separate processes over
-  a shared store root. See TC-P1-5h.
+- **Cross-process store coordination:** tracked as issue #14 — **moot**. The filesystem package store
+  it applied to was removed along with the install engine.
 
 This refresh records the resolved signature-binding, ZIP-size, and OPC content-type gaps alongside
-the earlier install engine, extractor, canonical part-name, catalog-footprint, and DN-matching work.
+the earlier extractor, canonical part-name, catalog-footprint, and DN-matching work, and the removal
+of the install engine.

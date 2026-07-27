@@ -92,10 +92,15 @@ public sealed record DependencyResolutionResult(IReadOnlyList<DependencyResoluti
 }
 
 /// <summary>
-/// Resolves the <c>Dependencies</c> a package declares against the packages already present in a
-/// store.
+/// Resolves the <c>Dependencies</c> a package declares against a set of installed packages.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The installed set is supplied by the caller rather than read from a store, because the authority
+/// on what is installed differs by host: on Windows it is the OS deployment stack, in a CI job it is
+/// a directory of staged packages, and in a deployment tool it is whatever inventory that tool
+/// keeps. Resolution itself is the same decision in every case.
+/// </para>
 /// <para>
 /// A dependency names a package by <c>Name</c> plus <c>Publisher</c>, which together determine the
 /// package family name — so resolution is a family lookup, not a full-name lookup. A
@@ -114,18 +119,32 @@ public static class DependencyResolver
 {
     /// <summary>Resolves every dependency declared by <paramref name="manifest"/>.</summary>
     /// <param name="manifest">The manifest of the package being deployed.</param>
-    /// <param name="store">The store whose installed packages can satisfy the dependencies.</param>
+    /// <param name="installedPackages">
+    /// The packages already installed on the target, which can satisfy the dependencies. Enumerated
+    /// once per declared dependency, so a caller with an expensive source should materialise it.
+    /// </param>
     /// <returns>One resolution per declared dependency, in manifest order.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static DependencyResolutionResult Resolve(AppxManifest manifest, IPackageStore store)
+    public static DependencyResolutionResult Resolve(
+        AppxManifest manifest,
+        IEnumerable<InstalledPackageInfo> installedPackages)
     {
         ArgumentNullException.ThrowIfNull(manifest);
-        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(installedPackages);
+
+        if (manifest.PackageDependencies.Count == 0)
+        {
+            return new DependencyResolutionResult([]);
+        }
+
+        // Materialise once: the caller's sequence may be lazy or non-repeatable, and every
+        // dependency scans the whole set.
+        List<InstalledPackageInfo> installed = [.. installedPackages];
 
         var resolutions = new List<DependencyResolution>(manifest.PackageDependencies.Count);
         foreach (PackageDependency dependency in manifest.PackageDependencies)
         {
-            resolutions.Add(ResolveOne(dependency, manifest.Identity, store));
+            resolutions.Add(ResolveOne(dependency, manifest.Identity, installed));
         }
 
         return new DependencyResolutionResult(resolutions);
@@ -134,17 +153,16 @@ public static class DependencyResolver
     private static DependencyResolution ResolveOne(
         PackageDependency dependency,
         PackageIdentity dependent,
-        IPackageStore store)
+        List<InstalledPackageInfo> installedPackages)
     {
         // MainPackageDependency may omit Publisher; a modification package always shares its
         // parent's publisher, so the dependent's own publisher is the correct fallback.
         string publisher = dependency.Publisher ?? dependent.Publisher;
         string familyName = PackageIdentity.ComputeFamilyName(dependency.Name, publisher);
 
-        // Enumerate rather than using FindByFamilyName so that a store holding several
-        // architecture-specific packages in one family (the normal shape for frameworks) can be
-        // filtered by architecture before the version comparison.
-        List<InstalledPackageInfo> candidates = store.EnumeratePackages()
+        // Filter by architecture before comparing versions: a family legitimately holds several
+        // architecture-specific packages, which is the normal shape for frameworks.
+        List<InstalledPackageInfo> candidates = installedPackages
             .Where(installed => string.Equals(
                 installed.Identity.PackageFamilyName,
                 familyName,

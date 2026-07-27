@@ -66,56 +66,59 @@ public sealed record InstalledPackageInfo
     /// <summary>Opens the installed package content on demand.</summary>
     public MsixPackage OpenPackage() => MsixPackage.OpenDirectory(InstalledLocation);
 
-    internal static string? FindManifest(string directory)
+    /// <summary>
+    /// Locates the manifest in an installed layout, or <see langword="null"/> when the directory
+    /// does not contain one or cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// A <em>directory</em> or reparse point named <c>AppxManifest.xml</c> is rejected rather than
+    /// reported as absent. It is not an accident, and answering "there is no manifest here" would
+    /// hide the attempt behind an ordinary-looking error.
+    /// </remarks>
+    private static string? FindManifest(string directory)
     {
+        string path;
+        FileAttributes attributes;
         try
         {
-            return FindManifestStrict(directory);
+            if (!File.GetAttributes(directory).HasFlag(FileAttributes.Directory))
+            {
+                return null;
+            }
+
+            path = Path.Combine(directory, OpcPartNames.AppxManifest);
+            try
+            {
+                attributes = File.GetAttributes(path);
+            }
+            catch (FileNotFoundException)
+            {
+                // Case-sensitive filesystems: the part name is canonical, the on-disk name may not
+                // match its casing.
+                string? found = Directory.EnumerateFiles(directory)
+                    .FirstOrDefault(file => string.Equals(
+                        Path.GetFileName(file),
+                        OpcPartNames.AppxManifest,
+                        StringComparison.OrdinalIgnoreCase));
+                if (found is null)
+                {
+                    return null;
+                }
+
+                path = found;
+                attributes = File.GetAttributes(path);
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return null;
         }
-    }
 
-    internal static string? FindManifestStrict(string directory)
-    {
-        FileAttributes directoryAttributes = File.GetAttributes(directory);
-        if (!directoryAttributes.HasFlag(FileAttributes.Directory))
-        {
-            return null;
-        }
-
-        string canonical = Path.Combine(directory, OpcPartNames.AppxManifest);
-        try
-        {
-            return ValidateManifestAttributes(canonical, File.GetAttributes(canonical));
-        }
-        catch (FileNotFoundException)
-        {
-        }
-        catch (DirectoryNotFoundException)
-        {
-            throw;
-        }
-
-        string? manifest = Directory.EnumerateFiles(directory)
-            .FirstOrDefault(file => string.Equals(
-                Path.GetFileName(file),
-                OpcPartNames.AppxManifest,
-                StringComparison.OrdinalIgnoreCase));
-        return manifest is null
-            ? null
-            : ValidateManifestAttributes(manifest, File.GetAttributes(manifest));
-    }
-
-    private static string ValidateManifestAttributes(string path, FileAttributes attributes)
-    {
-        if ((attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
-        {
-            throw MsixError.Format(MsixErrorCode.PackageStore, $"The installed package manifest '{path}' is not a regular file.");
-        }
-
-        return path;
+        // Deliberately outside the catch above: this rejection must reach the caller.
+        return (attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0
+            ? throw MsixError.Format(
+                MsixErrorCode.PackageStore,
+                $"The installed package manifest '{path}' is not a regular file.")
+            : path;
     }
 }
