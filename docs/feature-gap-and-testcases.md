@@ -312,7 +312,7 @@ fixtures/
   signature/      # good, tampered-blockmap, wrong-publisher, printable-vs-utf8 DN, multi-signer
   bundle/         # main+resource, multi-arch, applicability by lang/scale/dxfl, malformed
   kinds/          # framework, resource, optional, modification, sparse, hostruntime
-  deploy/         # add/remove/rollback, handler-order
+  deps/           # dependency resolution: satisfied, missing, too-old, wrong-arch, optional
 ```
 
 Each fixture pairs a generator (so bytes are reproducible in CI) with an `expected.json` capturing the

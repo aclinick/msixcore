@@ -15,8 +15,7 @@
 | `no_applicable_package` | Bundle carries nothing for the target | No application package runs on the requested architecture |
 | `signature_format` | Malformed package signature | Invalid P7X/CMS data or digest table |
 | `xml` | Unsafe or malformed XML | XML syntax error or prohibited DTD/DOCTYPE |
-| `package_store` | Invalid deployment store state | Corrupt commit journal or unsafe staged content |
-| `dependency_not_satisfied` | A declared dependency is absent or too old | Installing a package whose framework, main package, or host runtime is not in the store |
+| `package_store` | Invalid installed-package state | An installed package's manifest is missing or is not a regular file |
 | `unknown` | Reserved fallback | No more specific category is available |
 
 Category names are the stable contract. The enum deliberately has no assigned numeric values; callers

@@ -121,7 +121,8 @@ public static class DependencyResolver
     /// <param name="manifest">The manifest of the package being deployed.</param>
     /// <param name="installedPackages">
     /// The packages already installed on the target, which can satisfy the dependencies. Enumerated
-    /// once per declared dependency, so a caller with an expensive source should materialise it.
+    /// at most once: the sequence is materialised before matching, and is not enumerated at all when
+    /// the manifest declares no dependencies.
     /// </param>
     /// <returns>One resolution per declared dependency, in manifest order.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>

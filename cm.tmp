@@ -1,0 +1,23 @@
+Address review round 1
+
+- Restore case-insensitive manifest lookup coverage lost with the deleted
+  FileSystemPackageStoreTests: a new InstalledPackageInfoTests case writes a
+  lowercase appxmanifest.xml and reads it back, exercising the enumeration
+  fallback on case-sensitive filesystems.
+- Remove MsixErrorCode.DependencyNotSatisfied. It no longer has a throw site,
+  and error-codes.md documents the invariant that every category is emitted by
+  at least one code path. Nothing could ever observe it, so removing it keeps
+  the registry honest rather than advertising a category callers wait for
+  forever.
+- Fix stale doc claims: error-codes.md package_store description, the
+  "resolved at install time"/"against the store" phrasing in
+  msix-spec-coverage.md, the dangling architecture.md#layer-5 anchor in
+  cli.md, the Layer 6 heading (now Layer 5), and the deploy/ fixture bucket in
+  feature-gap-and-testcases.md.
+- Correct the DependencyResolver.Resolve param doc: the sequence is
+  materialised once in total, not enumerated once per dependency.
+
+784 passed, 0 failed, 0 warnings.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+Copilot-Session: 9b905d6d-08c2-4018-bdc5-19a11f0c66a0

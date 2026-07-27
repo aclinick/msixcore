@@ -188,7 +188,7 @@ CRC/sizes directly in deterministic local headers. The resulting payload offsets
 differ by those descriptor bytes but have the same meaning; MakeAppx successfully
 unbundles the authored container and reproduces every child byte-for-byte.
 
-## Layer 6 — CLI (`msixkit`)
+## Layer 5 — CLI (`msixkit`)
 
 `Program.Main` dispatches verbs. `PackageOpener` transparently opens a `.msix`
 file **or** a loose directory (`MsixPackage.Open` vs `MsixPackage.OpenDirectory`),

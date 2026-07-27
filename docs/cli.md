@@ -339,7 +339,7 @@ Usage: msixkit unpack <package-file-or-directory> -Destination <dir> [--json]
 Extraction is hardened against traversal: a part that would resolve outside the
 destination, or a symlink/junction anywhere on the destination path (including a
 dangling link, or the destination root itself), aborts extraction with exit code
-`1`. See [architecture.md](architecture.md#layer-5--package-store-msixcorepackagestore).
+`1`. See [architecture.md](architecture.md#layer-4--tooling-msixcorepackagestore).
 
 ## `pack`
 

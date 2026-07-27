@@ -91,6 +91,23 @@ public class InstalledPackageInfoTests : IDisposable
     }
 
     [Fact]
+    public void ReadFromDirectory_FindsTheManifestWhenItsCasingDiffers()
+    {
+        // OpcPartNames.AppxManifest is the canonical casing, but a loose layout produced on a
+        // case-sensitive filesystem may hold any casing. This exercises the enumeration fallback
+        // on Linux/macOS; on Windows the direct probe already succeeds.
+        string directory = Path.Combine(_root, "cased");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "appxmanifest.xml"),
+            LoosePackageBuilder.ManifestXml(name: "Contoso.Cased"));
+
+        InstalledPackageInfo info = InstalledPackageInfo.ReadFromDirectory(directory);
+
+        Assert.Equal("Contoso.Cased", info.Identity.Name);
+    }
+
+    [Fact]
     public void ReadFromDirectory_WithoutAManifest_Throws()
     {
         string directory = Path.Combine(_root, "empty");
