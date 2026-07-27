@@ -137,13 +137,12 @@ internal static class BlockMapWriter
         int degree)
     {
         // Three slots per worker keeps every worker fed across a batch boundary while capping
-        // the staging buffers at a few MB regardless of how large the payload is.
+        // the staging buffers at a few MB regardless of how large the payload is.  Slots are
+        // created lazily: a package is mostly small parts, and an entry of one or two blocks
+        // must not rent processor-count-scaled buffers it will never use.  Creating them inside
+        // the try block also means a failure part-way through disposes the slots already made.
         int slotCount = degree * 3;
-        var slots = new BlockSlot[slotCount];
-        for (int i = 0; i < slotCount; i++)
-        {
-            slots[i] = new BlockSlot();
-        }
+        var slots = new BlockSlot?[slotCount];
 
         try
         {
@@ -158,7 +157,7 @@ internal static class BlockMapWriter
                 int filled = 0;
                 while (filled < slotCount)
                 {
-                    BlockSlot slot = slots[filled];
+                    BlockSlot slot = slots[filled] ??= new BlockSlot();
                     int length = ReadBlock(source, slot.Input);
                     if (length == 0)
                     {
@@ -178,16 +177,16 @@ internal static class BlockMapWriter
 
                 if (filled == 1)
                 {
-                    slots[0].Process(compressionLevel);
+                    slots[0]!.Process(compressionLevel);
                 }
                 else
                 {
-                    Parallel.For(0, filled, parallelOptions, i => slots[i].Process(compressionLevel));
+                    Parallel.For(0, filled, parallelOptions, i => slots[i]!.Process(compressionLevel));
                 }
 
                 for (int i = 0; i < filled; i++)
                 {
-                    BlockSlot slot = slots[i];
+                    BlockSlot slot = slots[i]!;
                     destination.Write(slot.Output.AsSpan(0, slot.OutputLength));
                     blocks.Add(new BlockMapBlock
                     {
@@ -207,9 +206,9 @@ internal static class BlockMapWriter
         }
         finally
         {
-            foreach (BlockSlot slot in slots)
+            foreach (BlockSlot? slot in slots)
             {
-                slot.Dispose();
+                slot?.Dispose();
             }
         }
     }

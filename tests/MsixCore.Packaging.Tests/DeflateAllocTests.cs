@@ -66,7 +66,15 @@ public sealed class DeflateAllocTests : IDisposable
         }
 
         string output = Path.Combine(_root, "alloc-budget.msix");
-        var options = new PackOptions { CompressionLevel = CompressionLevel.Optimal };
+        // GC.GetAllocatedBytesForCurrentThread() only sees this thread, so the budget must be
+        // measured on the sequential path.  Left at the default, compression would run on worker
+        // threads and their allocations would be invisible here — the guard would silently pass
+        // through any regression.  Parallel-path allocation is covered process-wide below.
+        var options = new PackOptions
+        {
+            CompressionLevel = CompressionLevel.Optimal,
+            MaxDegreeOfParallelism = 1,
+        };
 
         // Warm up to JIT the code paths.
         MsixPackageBuilder.Build(source, output, options);
@@ -92,6 +100,47 @@ public sealed class DeflateAllocTests : IDisposable
         // Verify the package is still correct.
         using MsixPackage package = MsixPackage.Open(output);
         Assert.True(package.VerifyBlockMap().IsValid);
+    }
+
+    /// <summary>
+    /// Slots are created on the calling thread as blocks are read, so a per-thread allocation
+    /// measurement captures them.  A tiny entry must not rent processor-scaled staging buffers:
+    /// before slots were made lazy, a single-block entry at degree 64 rented 192 slots
+    /// (~25 MB) to compress 4 KB.
+    /// </summary>
+    [Fact]
+    public void CompressAndHash_SmallEntryAtHighDegree_DoesNotAllocateSlotsItCannotUse()
+    {
+        const long CeilingBytes = 4L * 1024 * 1024;
+        byte[] payload = new byte[4096];
+        new Random(7).NextBytes(payload);
+        long allocated = 0;
+
+        // Measure on a dedicated thread so unrelated tests cannot contribute, and warm up at
+        // degree 1 rather than degree 64: warming up at the measured degree would leave 192
+        // buffers in the array pool, so eager slot creation would rent them back for free and
+        // the test would pass regardless.
+        var thread = new Thread(() =>
+        {
+            BlockMapWriter.CompressAndHash(
+                "warmup.bin", new MemoryStream(payload), Stream.Null, CompressionLevel.Optimal, 1);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            BlockMapWriter.CompressAndHash(
+                "small.bin", new MemoryStream(payload), Stream.Null, CompressionLevel.Optimal, 64);
+            allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        });
+        thread.Start();
+        thread.Join();
+
+        Assert.True(
+            allocated < CeilingBytes,
+            $"Compressing a {payload.Length:N0}-byte entry at degree 64 allocated {allocated:N0} bytes, " +
+            $"exceeding the {CeilingBytes:N0}-byte budget. Staging slots are most likely being " +
+            $"created eagerly rather than as blocks are read.");
     }
 
     /// <summary>
