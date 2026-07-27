@@ -53,7 +53,8 @@ internal static class BlockMapWriter
         Stream source,
         Stream destination,
         CompressionLevel compressionLevel,
-        int maxDegreeOfParallelism = 0)
+        int maxDegreeOfParallelism = 0,
+        ArrayPool<byte>? bufferPool = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(source);
@@ -62,22 +63,24 @@ internal static class BlockMapWriter
         int degree = maxDegreeOfParallelism > 0
             ? maxDegreeOfParallelism
             : Environment.ProcessorCount;
+        ArrayPool<byte> pool = bufferPool ?? ArrayPool<byte>.Shared;
 
         // Both paths emit byte-identical output: every MSIX block is compressed independently
         // and sync-flushed, so block boundaries — and therefore the compressed bytes — do not
         // depend on whether neighbouring blocks were compressed concurrently.
         return degree <= 1
-            ? CompressAndHashSequential(name, source, destination, compressionLevel)
-            : CompressAndHashParallel(name, source, destination, compressionLevel, degree);
+            ? CompressAndHashSequential(name, source, destination, compressionLevel, pool)
+            : CompressAndHashParallel(name, source, destination, compressionLevel, degree, pool);
     }
 
     private static CompressedBlockMapFile CompressAndHashSequential(
         string name,
         Stream source,
         Stream destination,
-        CompressionLevel compressionLevel)
+        CompressionLevel compressionLevel,
+        ArrayPool<byte> pool)
     {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
+        byte[] buffer = pool.Rent(BlockMap.BlockSize);
         try
         {
             var blocks = new List<BlockMapBlock>();
@@ -119,7 +122,7 @@ internal static class BlockMapWriter
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            pool.Return(buffer);
         }
     }
 
@@ -134,7 +137,8 @@ internal static class BlockMapWriter
         Stream source,
         Stream destination,
         CompressionLevel compressionLevel,
-        int degree)
+        int degree,
+        ArrayPool<byte> pool)
     {
         // Three slots per worker keeps every worker fed across a batch boundary while capping
         // the staging buffers at a few MB regardless of how large the payload is.  Slots are
@@ -157,7 +161,7 @@ internal static class BlockMapWriter
                 int filled = 0;
                 while (filled < slotCount)
                 {
-                    BlockSlot slot = slots[filled] ??= new BlockSlot();
+                    BlockSlot slot = slots[filled] ??= new BlockSlot(pool);
                     int length = ReadBlock(source, slot.Input);
                     if (length == 0)
                     {
@@ -339,14 +343,16 @@ internal static class BlockMapWriter
         // 65535 bytes and the sync-flush marker adds a few more, so the output needs headroom.
         private const int OutputHeadroom = 1024;
 
+        private readonly ArrayPool<byte> _pool;
         private readonly MemoryStream _output;
         private readonly GatedCountingStream _gate;
         private bool _disposed;
 
-        public BlockSlot()
+        public BlockSlot(ArrayPool<byte> pool)
         {
-            Input = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
-            Output = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize + OutputHeadroom);
+            _pool = pool;
+            Input = pool.Rent(BlockMap.BlockSize);
+            Output = pool.Rent(BlockMap.BlockSize + OutputHeadroom);
             _output = new MemoryStream(Output, 0, Output.Length, writable: true, publiclyVisible: false);
             _gate = new GatedCountingStream(_output);
         }
@@ -383,8 +389,8 @@ internal static class BlockMapWriter
 
             _disposed = true;
             _output.Dispose();
-            ArrayPool<byte>.Shared.Return(Input);
-            ArrayPool<byte>.Shared.Return(Output);
+            _pool.Return(Input);
+            _pool.Return(Output);
         }
     }
 

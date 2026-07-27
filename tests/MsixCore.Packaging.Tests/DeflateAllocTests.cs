@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO.Compression;
 using MsixCore.Packaging.Authoring;
 using MsixCore.Packaging.Integrity;
@@ -103,44 +104,79 @@ public sealed class DeflateAllocTests : IDisposable
     }
 
     /// <summary>
-    /// Slots are created on the calling thread as blocks are read, so a per-thread allocation
-    /// measurement captures them.  A tiny entry must not rent processor-scaled staging buffers:
-    /// before slots were made lazy, a single-block entry at degree 64 rented 192 slots
-    /// (~25 MB) to compress 4 KB.
+    /// A tiny entry must not rent processor-scaled staging buffers: before slots were made lazy,
+    /// a single-block entry at degree 64 rented 192 slots (~37 MB) to compress 4 KB.  This counts
+    /// pool rentals rather than bytes allocated, because <see cref="ArrayPool{T}.Shared"/> is
+    /// process-wide: an allocation-based assertion false-passes whenever another test has already
+    /// populated the pool, since the eager implementation then rents its slots without allocating.
     /// </summary>
     [Fact]
-    public void CompressAndHash_SmallEntryAtHighDegree_DoesNotAllocateSlotsItCannotUse()
+    public void CompressAndHash_SmallEntryAtHighDegree_DoesNotRentSlotsItCannotUse()
     {
-        const long CeilingBytes = 4L * 1024 * 1024;
         byte[] payload = new byte[4096];
         new Random(7).NextBytes(payload);
-        long allocated = 0;
+        var pool = new CountingArrayPool();
 
-        // Measure on a dedicated thread so unrelated tests cannot contribute, and warm up at
-        // degree 1 rather than degree 64: warming up at the measured degree would leave 192
-        // buffers in the array pool, so eager slot creation would rent them back for free and
-        // the test would pass regardless.
-        var thread = new Thread(() =>
-        {
-            BlockMapWriter.CompressAndHash(
-                "warmup.bin", new MemoryStream(payload), Stream.Null, CompressionLevel.Optimal, 1);
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+        BlockMapWriter.CompressAndHash(
+            "small.bin",
+            new MemoryStream(payload),
+            Stream.Null,
+            CompressionLevel.Optimal,
+            maxDegreeOfParallelism: 64,
+            bufferPool: pool);
 
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            BlockMapWriter.CompressAndHash(
-                "small.bin", new MemoryStream(payload), Stream.Null, CompressionLevel.Optimal, 64);
-            allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        });
-        thread.Start();
-        thread.Join();
-
+        // One block plus the read that discovers EOF, so at most two slots — two buffers each.
+        // The bound that matters is that rentals track the entry size, not the degree: the eager
+        // implementation rented 192 slots (384 buffers) for this same 4 KB payload.
         Assert.True(
-            allocated < CeilingBytes,
-            $"Compressing a {payload.Length:N0}-byte entry at degree 64 allocated {allocated:N0} bytes, " +
-            $"exceeding the {CeilingBytes:N0}-byte budget. Staging slots are most likely being " +
-            $"created eagerly rather than as blocks are read.");
+            pool.RentCount <= 4,
+            $"Compressing a {payload.Length:N0}-byte entry at degree 64 rented {pool.RentCount} buffers. " +
+            $"Staging slots are most likely being created eagerly rather than as blocks are read.");
+        Assert.Equal(pool.RentCount, pool.ReturnCount);
+    }
+
+    /// <summary>
+    /// Rentals must stay bounded by the batch size rather than growing with the payload, which is
+    /// what keeps peak memory flat for very large entries.
+    /// </summary>
+    [Fact]
+    public void CompressAndHash_ManyBlocks_RentsAtMostOneSlotPerBatchEntry()
+    {
+        const int Degree = 4;
+        byte[] payload = new byte[BlockMap.BlockSize * 40];
+        new Random(11).NextBytes(payload);
+        var pool = new CountingArrayPool();
+
+        BlockMapWriter.CompressAndHash(
+            "large.bin",
+            new MemoryStream(payload),
+            Stream.Null,
+            CompressionLevel.Optimal,
+            maxDegreeOfParallelism: Degree,
+            bufferPool: pool);
+
+        // 40 blocks through a 12-slot batch must still only ever rent the 12 slots, twice each.
+        Assert.Equal(Degree * 3 * 2, pool.RentCount);
+        Assert.Equal(pool.RentCount, pool.ReturnCount);
+    }
+
+    private sealed class CountingArrayPool : ArrayPool<byte>
+    {
+        private int _rentCount;
+        private int _returnCount;
+
+        public int RentCount => _rentCount;
+
+        public int ReturnCount => _returnCount;
+
+        public override byte[] Rent(int minimumLength)
+        {
+            Interlocked.Increment(ref _rentCount);
+            return new byte[minimumLength];
+        }
+
+        public override void Return(byte[] array, bool clearArray = false) =>
+            Interlocked.Increment(ref _returnCount);
     }
 
     /// <summary>
