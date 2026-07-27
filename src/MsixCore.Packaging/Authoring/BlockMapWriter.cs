@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
 using MsixCore.Packaging.Integrity;
 
@@ -51,13 +52,35 @@ internal static class BlockMapWriter
         string name,
         Stream source,
         Stream destination,
-        CompressionLevel compressionLevel)
+        CompressionLevel compressionLevel,
+        int maxDegreeOfParallelism = 0,
+        ArrayPool<byte>? bufferPool = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(destination);
 
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(BlockMap.BlockSize);
+        int degree = maxDegreeOfParallelism > 0
+            ? maxDegreeOfParallelism
+            : Environment.ProcessorCount;
+        ArrayPool<byte> pool = bufferPool ?? ArrayPool<byte>.Shared;
+
+        // Both paths emit byte-identical output: every MSIX block is compressed independently
+        // and sync-flushed, so block boundaries — and therefore the compressed bytes — do not
+        // depend on whether neighbouring blocks were compressed concurrently.
+        return degree <= 1
+            ? CompressAndHashSequential(name, source, destination, compressionLevel, pool)
+            : CompressAndHashParallel(name, source, destination, compressionLevel, degree, pool);
+    }
+
+    private static CompressedBlockMapFile CompressAndHashSequential(
+        string name,
+        Stream source,
+        Stream destination,
+        CompressionLevel compressionLevel,
+        ArrayPool<byte> pool)
+    {
+        byte[] buffer = pool.Rent(BlockMap.BlockSize);
         try
         {
             var blocks = new List<BlockMapBlock>();
@@ -95,21 +118,123 @@ internal static class BlockMapWriter
                 compressedSize += compressedLength;
             }
 
-            // MakeAppx terminates the single ZIP deflate stream after its independently restartable,
-            // full-flushed blocks. The two-byte terminator is entry overhead and is not a Block Size.
-            destination.Write([0x03, 0x00]);
-            compressedSize += 2;
-
-            return new CompressedBlockMapFile(
-                new BlockMapFile { Name = name, Size = uncompressedSize, Blocks = blocks },
-                crc32.Value,
-                compressedSize,
-                uncompressedSize);
+            return Finish(name, destination, blocks, crc32, uncompressedSize, compressedSize);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            pool.Return(buffer);
         }
+    }
+
+    /// <summary>
+    /// Compresses and hashes blocks on a bounded worker pool.  A single reader thread walks the
+    /// source in order (so the CRC32 stays sequential), a batch of blocks is compressed and
+    /// hashed in parallel, and the results are appended to the destination in index order.
+    /// Peak additional memory is bounded by the slot count, not by the payload size.
+    /// </summary>
+    private static CompressedBlockMapFile CompressAndHashParallel(
+        string name,
+        Stream source,
+        Stream destination,
+        CompressionLevel compressionLevel,
+        int degree,
+        ArrayPool<byte> pool)
+    {
+        // Three slots per worker keeps every worker fed across a batch boundary while capping
+        // the staging buffers at a few MB regardless of how large the payload is.  Slots are
+        // created lazily: a package is mostly small parts, and an entry of one or two blocks
+        // must not rent processor-count-scaled buffers it will never use.  Creating them inside
+        // the try block also means a failure part-way through disposes the slots already made.
+        int slotCount = degree * 3;
+        var slots = new BlockSlot?[slotCount];
+
+        try
+        {
+            var blocks = new List<BlockMapBlock>();
+            var crc32 = new Crc32Calculator();
+            long uncompressedSize = 0;
+            long compressedSize = 0;
+            var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = degree };
+
+            while (true)
+            {
+                int filled = 0;
+                while (filled < slotCount)
+                {
+                    BlockSlot slot = slots[filled] ??= new BlockSlot(pool);
+                    int length = ReadBlock(source, slot.Input);
+                    if (length == 0)
+                    {
+                        break;
+                    }
+
+                    slot.InputLength = length;
+                    crc32.Append(slot.Input.AsSpan(0, length));
+                    uncompressedSize += length;
+                    filled++;
+                }
+
+                if (filled == 0)
+                {
+                    break;
+                }
+
+                if (filled == 1)
+                {
+                    slots[0]!.Process(compressionLevel);
+                }
+                else
+                {
+                    Parallel.For(0, filled, parallelOptions, i => slots[i]!.Process(compressionLevel));
+                }
+
+                for (int i = 0; i < filled; i++)
+                {
+                    BlockSlot slot = slots[i]!;
+                    destination.Write(slot.Output.AsSpan(0, slot.OutputLength));
+                    blocks.Add(new BlockMapBlock
+                    {
+                        Hash = slot.Hash!,
+                        CompressedSize = slot.OutputLength,
+                    });
+                    compressedSize += slot.OutputLength;
+                }
+
+                if (filled < slotCount)
+                {
+                    break;
+                }
+            }
+
+            return Finish(name, destination, blocks, crc32, uncompressedSize, compressedSize);
+        }
+        finally
+        {
+            foreach (BlockSlot? slot in slots)
+            {
+                slot?.Dispose();
+            }
+        }
+    }
+
+    private static CompressedBlockMapFile Finish(
+        string name,
+        Stream destination,
+        List<BlockMapBlock> blocks,
+        Crc32Calculator crc32,
+        long uncompressedSize,
+        long compressedSize)
+    {
+        // MakeAppx terminates the single ZIP deflate stream after its independently restartable,
+        // full-flushed blocks. The two-byte terminator is entry overhead and is not a Block Size.
+        destination.Write([0x03, 0x00]);
+        compressedSize += 2;
+
+        return new CompressedBlockMapFile(
+            new BlockMapFile { Name = name, Size = uncompressedSize, Blocks = blocks },
+            crc32.Value,
+            compressedSize,
+            uncompressedSize);
     }
 
     public static byte[] Write(IReadOnlyList<AuthoredBlockMapFile> files)
@@ -205,6 +330,68 @@ internal static class BlockMapWriter
         Span<byte> hash = stackalloc byte[32];
         SHA256.HashData(block, hash);
         return Convert.ToBase64String(hash);
+    }
+
+    /// <summary>
+    /// A reusable staging slot for a single MSIX block: the uncompressed input, the compressed
+    /// output, and the gate that suppresses deflate finalization.  Slots are pooled by the
+    /// parallel path so its extra memory is a function of the worker count, never of the payload.
+    /// </summary>
+    private sealed class BlockSlot : IDisposable
+    {
+        // Deflate can expand incompressible input: stored blocks add a five-byte header per
+        // 65535 bytes and the sync-flush marker adds a few more, so the output needs headroom.
+        private const int OutputHeadroom = 1024;
+
+        private readonly ArrayPool<byte> _pool;
+        private readonly MemoryStream _output;
+        private readonly GatedCountingStream _gate;
+        private bool _disposed;
+
+        public BlockSlot(ArrayPool<byte> pool)
+        {
+            _pool = pool;
+            Input = pool.Rent(BlockMap.BlockSize);
+            Output = pool.Rent(BlockMap.BlockSize + OutputHeadroom);
+            _output = new MemoryStream(Output, 0, Output.Length, writable: true, publiclyVisible: false);
+            _gate = new GatedCountingStream(_output);
+        }
+
+        public byte[] Input { get; }
+
+        public byte[] Output { get; }
+
+        public int InputLength { get; set; }
+
+        public int OutputLength { get; private set; }
+
+        public string? Hash { get; private set; }
+
+        /// <summary>
+        /// Hashes and compresses this slot's block.  Runs on a worker thread; it touches only
+        /// slot-local state, so slots never contend with one another.
+        /// </summary>
+        public void Process(CompressionLevel compressionLevel)
+        {
+            ReadOnlySpan<byte> block = Input.AsSpan(0, InputLength);
+            Hash = HashToBase64(block);
+            _output.Position = 0;
+            _gate.Reset();
+            OutputLength = CompressBlockDirect(block, compressionLevel, _gate);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _output.Dispose();
+            _pool.Return(Input);
+            _pool.Return(Output);
+        }
     }
 
     private static XmlWriterSettings CreateSettings() => new()
