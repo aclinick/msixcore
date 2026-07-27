@@ -14,4 +14,11 @@ public sealed record PackOptions
     /// independently restartable raw-DEFLATE blocks.
     /// </summary>
     public CompressionLevel CompressionLevel { get; init; } = CompressionLevel.NoCompression;
+
+    /// <summary>
+    /// The maximum number of blocks compressed concurrently. <c>0</c> (the default) uses
+    /// <see cref="Environment.ProcessorCount"/>; <c>1</c> forces the sequential path. Output is
+    /// byte-identical at every setting because MSIX blocks are compressed independently.
+    /// </summary>
+    public int MaxDegreeOfParallelism { get; init; }
 }

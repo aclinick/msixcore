@@ -158,6 +158,14 @@ public sealed class MsixPackageBuilder
                 "MSIX authoring supports CompressionLevel.NoCompression or CompressionLevel.Optimal.");
         }
 
+        if (options.MaxDegreeOfParallelism < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.MaxDegreeOfParallelism,
+                "MaxDegreeOfParallelism must be zero (automatic) or positive.");
+        }
+
         string? outputDirectory = Path.GetDirectoryName(outputPath);
         if (string.IsNullOrEmpty(outputDirectory))
         {
@@ -179,7 +187,8 @@ public sealed class MsixPackageBuilder
             List<AuthoredBlockMapFile> files = WritePackage(
                 temporaryPath,
                 inputs,
-                options.CompressionLevel);
+                options.CompressionLevel,
+                options.MaxDegreeOfParallelism);
             PackageIdentity identity;
             using (MsixPackage package = MsixPackage.Open(temporaryPath))
             {
@@ -210,7 +219,8 @@ public sealed class MsixPackageBuilder
     private static List<AuthoredBlockMapFile> WritePackage(
         string path,
         IReadOnlyCollection<PackageInput> inputs,
-        CompressionLevel compressionLevel)
+        CompressionLevel compressionLevel,
+        int maxDegreeOfParallelism)
     {
         PackageInput[] orderedInputs = inputs
             .OrderBy(static input => input.SortKey, StringComparer.Ordinal)
@@ -235,7 +245,8 @@ public sealed class MsixPackageBuilder
                                 input.PartName,
                                 source,
                                 destination,
-                                compressionLevel);
+                                compressionLevel,
+                                maxDegreeOfParallelism);
                             file = compressed.File;
                             return new DeflatedZipEntryContent(
                                 compressed.Crc32,
@@ -260,12 +271,14 @@ public sealed class MsixPackageBuilder
                 archive,
                 OpcPartNames.ContentTypes,
                 ContentTypesWriter.Write(orderedInputs.Select(static input => input.PartName)),
-                compressionLevel);
+                compressionLevel,
+                maxDegreeOfParallelism);
             WriteGeneratedEntry(
                 archive,
                 OpcPartNames.AppxBlockMap,
                 BlockMapWriter.Write(blockMapFiles),
-                compressionLevel);
+                compressionLevel,
+                maxDegreeOfParallelism);
         }
 
         return blockMapFiles;
@@ -275,7 +288,8 @@ public sealed class MsixPackageBuilder
         StoredZipWriter archive,
         string name,
         byte[] content,
-        CompressionLevel compressionLevel)
+        CompressionLevel compressionLevel,
+        int maxDegreeOfParallelism)
     {
         if (compressionLevel == CompressionLevel.NoCompression)
         {
@@ -291,7 +305,8 @@ public sealed class MsixPackageBuilder
                     name,
                     new MemoryStream(content, writable: false),
                     destination,
-                    compressionLevel);
+                    compressionLevel,
+                    maxDegreeOfParallelism);
                 return new DeflatedZipEntryContent(
                     compressed.Crc32,
                     compressed.CompressedSize,
